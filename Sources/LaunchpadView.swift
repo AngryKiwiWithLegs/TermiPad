@@ -209,9 +209,11 @@ struct LaunchpadView: View {
         if let script = NSAppleScript(source: scriptText) {
             var error: NSDictionary?
             script.executeAndReturnError(&error)
-            if let error = error {
-                print("启动终端失败: \\(error)")
+            if let error {
+                print("启动终端失败: \(error)")
             }
+        } else {
+            print("无法创建 Terminal AppleScript。")
         }
     }
 }

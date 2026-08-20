@@ -1,41 +1,189 @@
 import Foundation
 
-/// AI 服务类：负责利用大模型解析 README 并提炼启动命令模板
-class AIService {
-    
-    struct ToolIntelligence {
+/// 负责调用兼容 OpenAI Chat Completions 的服务，并将 README 提炼为可启动的工具信息。
+///
+/// 配置方式：在应用的 UserDefaults 中写入以下值（后续会在设置页中提供图形化配置）。
+/// - `TermiPad.aiAPIKey`：服务 API Key
+/// - `TermiPad.aiBaseURL`：可选，默认 `https://api.openai.com/v1`
+/// - `TermiPad.aiModel`：可选，默认 `gpt-4o-mini`
+enum AIService {
+    struct ToolIntelligence: Codable, Sendable {
         let commandTemplate: String
         let description: String
         let suggestedCategory: String
+
+        enum CodingKeys: String, CodingKey {
+            case commandTemplate = "command_template"
+            case description
+            case suggestedCategory = "category"
+        }
     }
-    
-    /// 调用 AI 解析 README
-    /// 注意：在 macOS 原生应用中，通常通过后端 API 转发或让用户输入自己的 OpenAI API Key
+
+    private static let apiKeyDefaultsKey = "TermiPad.aiAPIKey"
+    private static let baseURLDefaultsKey = "TermiPad.aiBaseURL"
+    private static let modelDefaultsKey = "TermiPad.aiModel"
+
+    /// 解析 README：如已配置 API Key，则调用大语言模型；否则返回明确标注的本地回退结果。
     static func analyzeTool(name: String, readme: String) async throws -> ToolIntelligence {
-        // 这里的逻辑在实际交付中，我会为您提供一套可以直接对接 OpenAI/Manus 代理的 Swift 代码
-        // 为了演示核心逻辑，我们构建一个针对 LLM 的 Prompt
-        
-        let prompt = """
-        你是一个终端工具专家。请阅读以下工具 '\(name)' 的 GitHub README 内容，并提炼出它的核心启动方式。
-        
-        README 内容摘要:
-        \(readme.prefix(3000)) // 截取前3000字符避免 Token 过长
-        
-        请输出以下 JSON 格式：
+        guard let apiKey = UserDefaults.standard.string(forKey: apiKeyDefaultsKey), !apiKey.isEmpty else {
+            return localFallback(name: name, readme: readme)
+        }
+
+        let baseURL = UserDefaults.standard.string(forKey: baseURLDefaultsKey) ?? "https://api.openai.com/v1"
+        let model = UserDefaults.standard.string(forKey: modelDefaultsKey) ?? "gpt-4o-mini"
+        let endpoint = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/chat/completions"
+
+        guard let url = URL(string: endpoint) else {
+            throw AIServiceError.invalidEndpoint
+        }
+
+        let payload = ChatCompletionRequest(
+            model: model,
+            messages: [
+                ChatMessage(role: "system", content: "你是严谨的终端工具文档解析助手。仅根据 README 输出 JSON，不要猜测未出现的命令。"),
+                ChatMessage(role: "user", content: buildPrompt(name: name, readme: readme))
+            ],
+            temperature: 0.1,
+            responseFormat: ResponseFormat(type: "json_object")
+        )
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(payload)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AIServiceError.invalidResponse
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw AIServiceError.httpStatus(httpResponse.statusCode)
+        }
+
+        let completion = try JSONDecoder().decode(ChatCompletionResponse.self, from: data)
+        guard let content = completion.choices.first?.message.content else {
+            throw AIServiceError.missingContent
+        }
+
+        return try decodeIntelligence(from: content, fallbackName: name)
+    }
+
+    private static func buildPrompt(name: String, readme: String) -> String {
+        let excerpt = String(readme.prefix(8_000))
+        return """
+        请阅读以下 CLI 工具 README，并只返回一个 JSON 对象；不要添加 Markdown 代码围栏或解释。
+
+        工具名称：\(name)
+        README：
+        \(excerpt)
+
+        JSON 必须严格符合：
         {
-          "command_template": "工具的标准启动命令，如果是交互式工具直接写工具名，如果需要必填参数请用 {{variable}} 占位",
-          "description": "一句话描述这个工具的功能",
-          "category": "从以下分类中选一个: AI/智能体, 开发工具, 效率工具, 媒体处理, 网络与系统"
+          "command_template": "官方推荐的交互式启动命令。没有明确必填参数时只写工具名；将每个用户必须填写的值写为 {{variable_name}}。不得编造参数。",
+          "description": "不超过 60 个中文字符的用途说明。",
+          "category": "仅可取：AI/智能体、开发工具、效率工具、媒体处理、网络与系统、其他/未分类。"
         }
         """
-        
-        // 模拟 AI 响应（在实际代码中，这里将是一个 URLSession POST 请求）
-        // 我将为您在 README 中说明如何配置您的 API Key 来激活此功能
-        
+    }
+
+    private static func decodeIntelligence(from content: String, fallbackName: String) throws -> ToolIntelligence {
+        let cleanedContent = content
+            .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let decoded = try JSONDecoder().decode(ToolIntelligence.self, from: Data(cleanedContent.utf8))
+        let safeCommand = decoded.commandTemplate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? fallbackName
+            : decoded.commandTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
+        let safeDescription = decoded.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "已由 AI 解析，但 README 未提供简要描述。"
+            : decoded.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        let safeCategory = ToolCategory(rawValue: decoded.suggestedCategory)?.rawValue
+            ?? ToolScanner.guessCategory(for: fallbackName).rawValue
+
         return ToolIntelligence(
-            commandTemplate: "\(name)", // 默认回退
-            description: "正在通过 AI 深度解析中...",
-            suggestedCategory: "开发工具"
+            commandTemplate: safeCommand,
+            description: safeDescription,
+            suggestedCategory: safeCategory
         )
+    }
+
+    private static func localFallback(name: String, readme: String) -> ToolIntelligence {
+        let summary = firstReadableLine(in: readme) ?? "已发现本地工具；配置 AI 服务后可自动提炼命令说明。"
+        return ToolIntelligence(
+            commandTemplate: name,
+            description: summary,
+            suggestedCategory: ToolScanner.guessCategory(for: name).rawValue
+        )
+    }
+
+    private static func firstReadableLine(in readme: String) -> String? {
+        for rawLine in readme.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard line.count >= 16,
+                  !line.hasPrefix("#"),
+                  !line.hasPrefix("!"),
+                  !line.hasPrefix("["),
+                  !line.hasPrefix("```"),
+                  !line.contains("badge") else {
+                continue
+            }
+            return String(line.prefix(120))
+        }
+        return nil
+    }
+}
+
+private enum AIServiceError: LocalizedError {
+    case invalidEndpoint
+    case invalidResponse
+    case httpStatus(Int)
+    case missingContent
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidEndpoint:
+            return "AI 服务地址无效。"
+        case .invalidResponse:
+            return "AI 服务返回了无效响应。"
+        case .httpStatus(let status):
+            return "AI 服务请求失败，HTTP 状态码：\(status)。"
+        case .missingContent:
+            return "AI 服务响应中没有可解析的内容。"
+        }
+    }
+}
+
+private struct ChatCompletionRequest: Encodable {
+    let model: String
+    let messages: [ChatMessage]
+    let temperature: Double
+    let responseFormat: ResponseFormat
+
+    enum CodingKeys: String, CodingKey {
+        case model
+        case messages
+        case temperature
+        case responseFormat = "response_format"
+    }
+}
+
+private struct ChatMessage: Codable {
+    let role: String
+    let content: String
+}
+
+private struct ResponseFormat: Encodable {
+    let type: String
+}
+
+private struct ChatCompletionResponse: Decodable {
+    let choices: [Choice]
+
+    struct Choice: Decodable {
+        let message: ChatMessage
     }
 }
