@@ -34,7 +34,7 @@ final class TerminalTool {
     var toolDescription: String       // 工具描述（从 README 提取）
     var categoryRawValue: String      // 分类原始值
     var iconSymbol: String            // SwiftUI 图标名或自定义图标路径
-    var isUserCustomized: bool        // 是否经过用户手动修改
+    var isUserCustomized: Bool        // 是否经过用户手动修改
     var createdAt: Date
     
     var category: ToolCategory {
