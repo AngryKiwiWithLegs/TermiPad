@@ -1,0 +1,85 @@
+name: macOS Xcode Build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+# 新的提交会取消同一分支上尚未完成的旧构建，避免浪费 macOS 构建时间。
+concurrency:
+  group: macos-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build TermiPad on macOS
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Record toolchain information
+        shell: bash
+        run: |
+          mkdir -p ci-logs
+          {
+            echo "Commit: $GITHUB_SHA"
+            echo "Runner: $RUNNER_OS / $RUNNER_ARCH"
+            echo
+            echo "=== Xcode ==="
+            xcodebuild -version
+            echo
+            echo "=== Swift ==="
+            swift --version
+          } | tee ci-logs/toolchain.txt
+
+      - name: Validate Swift package manifest
+        shell: bash
+        run: |
+          set -o pipefail
+          swift package dump-package | tee ci-logs/package-manifest.json
+
+      - name: Build with xcodebuild
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -scheme TermiPad \
+            -destination "platform=macOS" \
+            -derivedDataPath "$RUNNER_TEMP/TermiPadDerivedData" \
+            clean build 2>&1 | tee ci-logs/xcodebuild.log
+
+      - name: Extract actionable diagnostics
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# TermiPad macOS build diagnostics"
+            echo
+            echo "## Error and warning lines"
+            echo '```text'
+            if [ -f ci-logs/xcodebuild.log ]; then
+              grep -E -i '(^|[[:space:]])(error|warning|fatal error):|BUILD FAILED|SwiftCompile|CompileSwift' ci-logs/xcodebuild.log || true
+            else
+              echo "xcodebuild did not create a log file. See the workflow step output."
+            fi
+            echo '```'
+          } | tee ci-logs/diagnostic-summary.md
+
+          cat ci-logs/diagnostic-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: termipad-macos-build-${{ github.run_id }}
+          path: ci-logs/
+          if-no-files-found: warn
+          retention-days: 14
