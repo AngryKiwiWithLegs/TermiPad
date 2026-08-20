@@ -167,11 +167,24 @@ struct LaunchpadView: View {
                             name: item.name,
                             executablePath: item.path,
                             commandTemplate: item.name,
-                            toolDescription: "自动发现的本地工具",
+                            toolDescription: "正在尝试 AI 增强...",
                             category: guessedCategory,
                             iconSymbol: guessedCategory.iconName
                         )
                         modelContext.insert(newTool)
+                        
+                        // 异步触发 AI 增强
+                        Task {
+                            if let repoInfo = try? await GitHubService.findRepository(for: item.name) {
+                                if let intelligence = try? await AIService.analyzeTool(name: item.name, readme: repoInfo.readmeContent) {
+                                    await MainActor.run {
+                                        newTool.commandTemplate = intelligence.commandTemplate
+                                        newTool.toolDescription = intelligence.description
+                                        newTool.category = ToolCategory(rawValue: intelligence.suggestedCategory) ?? guessedCategory
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 
