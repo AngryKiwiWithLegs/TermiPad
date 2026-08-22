@@ -18,7 +18,8 @@ permissions:
 jobs:
   build:
     name: Build TermiPad on macOS
-    runs-on: macos-15
+    # TermiPad 的最低支持版本为 macOS 14；使用该稳定映像避免 macOS 15 预发布运行器的基础设施波动。
+    runs-on: macos-14
     timeout-minutes: 20
 
     steps:
