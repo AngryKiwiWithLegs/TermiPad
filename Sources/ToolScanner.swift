@@ -66,7 +66,9 @@ enum ToolScanner {
             (.development, ["gh", "rustc", "gcc", "make", "cmake", "kubectl", "terraform", "vagrant", "vercel", "netlify"])
         ]
         let lowercaseName = toolName.lowercased()
-        return keywordGroups.first(where: { _, keywords in keywords.contains(where: lowercaseName.contains) })?.0 ?? .other
+        return keywordGroups.first(where: { group in
+            group.1.contains(where: lowercaseName.contains)
+        })?.0 ?? .other
     }
 
     private static func orderedUnique(_ paths: [String]) -> [String] {
