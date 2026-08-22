@@ -10,3 +10,8 @@ xcuserdata/
 # Swift Package build products
 .build/
 .swiftpm/
+
+# Private planning and local CI diagnostics
+github_actions_*.md
+termipad_development_backlog.md
+design-ci-failed.log

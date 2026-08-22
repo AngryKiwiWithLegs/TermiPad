@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// 终端工具分类
+/// 终端工具分类。
 enum ToolCategory: String, Codable, CaseIterable, Identifiable {
     case ai = "AI/智能体"
     case development = "开发工具"
@@ -9,9 +9,9 @@ enum ToolCategory: String, Codable, CaseIterable, Identifiable {
     case media = "媒体处理"
     case system = "网络与系统"
     case other = "其他/未分类"
-    
-    var id: String { self.rawValue }
-    
+
+    var id: String { rawValue }
+
     var iconName: String {
         switch self {
         case .ai: return "sparkles"
@@ -24,26 +24,36 @@ enum ToolCategory: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-/// 终端工具数据模型
+/// 发现候选的处理状态。候选不再自动进入工具墙，用户必须明确收录。
+enum CandidateStatus: String, Codable, CaseIterable {
+    case pending
+    case accepted
+    case ignored
+}
+
+/// 用户已收录的可交互终端工具。
 @Model
 final class TerminalTool {
     var id: UUID
-    var name: String                  // 工具名称，如 claude, gh, ffmpeg
-    var executablePath: String        // 二进制绝对路径，如 /opt/homebrew/bin/claude
-    var commandTemplate: String       // 启动命令模板，如 claude --model=sonnet {{prompt}}
-    var toolDescription: String       // 工具描述（从 README 提取）
-    var categoryRawValue: String      // 分类原始值
-    var iconSymbol: String            // 内置 SF Symbol 回退图标
-    var iconURLString: String?        // GitHub/官方仓库提供的品牌头像或 Logo URL
-    var repositoryFullName: String?   // 已识别的 GitHub 仓库名
-    var isUserCustomized: Bool        // 是否经过用户手动修改
+    var name: String
+    var executablePath: String
+    var commandTemplate: String
+    var toolDescription: String
+    var categoryRawValue: String
+    var iconSymbol: String
+    var iconURLString: String?
+    var repositoryFullName: String?
+    var isUserCustomized: Bool
+    var isHidden: Bool = false
+    var variableValuesJSON: String?
+    var lastLaunchedAt: Date?
     var createdAt: Date
-    
+
     var category: ToolCategory {
         get { ToolCategory(rawValue: categoryRawValue) ?? .other }
         set { categoryRawValue = newValue.rawValue }
     }
-    
+
     init(
         name: String,
         executablePath: String,
@@ -53,16 +63,54 @@ final class TerminalTool {
         iconSymbol: String = "terminal",
         isUserCustomized: Bool = false
     ) {
-        self.id = UUID()
+        id = UUID()
         self.name = name
         self.executablePath = executablePath
-        self.commandTemplate = commandTemplate.isEmpty ? "\(name)" : commandTemplate
+        self.commandTemplate = commandTemplate.isEmpty ? name : commandTemplate
         self.toolDescription = toolDescription
-        self.categoryRawValue = category.rawValue
+        categoryRawValue = category.rawValue
         self.iconSymbol = iconSymbol
-        self.iconURLString = nil
-        self.repositoryFullName = nil
+        iconURLString = nil
+        repositoryFullName = nil
         self.isUserCustomized = isUserCustomized
-        self.createdAt = Date()
+        isHidden = false
+        variableValuesJSON = nil
+        lastLaunchedAt = nil
+        createdAt = Date()
+    }
+}
+
+/// 扫描到但尚未由用户确认收录的命令。
+@Model
+final class CandidateTool {
+    var id: UUID
+    var name: String
+    var executablePath: String
+    var categoryRawValue: String
+    var statusRawValue: String
+    var discoveredAt: Date
+
+    var category: ToolCategory {
+        get { ToolCategory(rawValue: categoryRawValue) ?? .other }
+        set { categoryRawValue = newValue.rawValue }
+    }
+
+    var status: CandidateStatus {
+        get { CandidateStatus(rawValue: statusRawValue) ?? .pending }
+        set { statusRawValue = newValue.rawValue }
+    }
+
+    init(
+        name: String,
+        executablePath: String,
+        category: ToolCategory,
+        status: CandidateStatus = .pending
+    ) {
+        id = UUID()
+        self.name = name
+        self.executablePath = executablePath
+        categoryRawValue = category.rawValue
+        statusRawValue = status.rawValue
+        discoveredAt = Date()
     }
 }

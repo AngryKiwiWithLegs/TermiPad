@@ -1,49 +1,107 @@
-# TermiPad — 终端工具图标化启动器 (macOS 专用)
+# TermiPad
 
-**TermiPad** 是一个专为 macOS 打造的终端命令行工具图标化启动器（仿经典 macOS Launchpad 效果）。它旨在解决开发者“记不住装过什么”和“记不住启动命令”两大核心痛点。
+**TermiPad** 是一款原生 macOS 终端工具启动器：它把主动安装、需要直接交互使用的 CLI 工具整理为可搜索、可分类、可一键启动的工具库。
 
----
+> 当前仓库为私有开发版。项目仍在公开发布前的完善阶段；请勿将 API Key 写入源码或提交到仓库。
 
-## 一、 核心功能特性
+## 当前可用能力
 
-1. **一键自动发现**：自动扫描 `$PATH` 环境变量以及常见二进制目录（如 `/opt/homebrew/bin`, `~/.local/bin` 等），智能过滤系统自带命令与包管理器，一键收录所有已安装的 CLI 工具。
-2. **仿 Launchpad 宫格界面**：采用现代 SwiftUI 毛玻璃（Glassmorphism）与响应式网格布局，支持按分类标签（AI/智能体、开发工具、效率工具、媒体处理、网络与系统等）筛选。
-3. **一键终端唤起**：点击工具图标，自动调用 macOS 系统终端（Terminal.app / iTerm2）并执行预设的启动命令。
-4. **个性化命令模板**：支持右键编辑每个工具的启动命令模板与分类。
-5. **本地持久化**：基于 SwiftData 实现流畅的本地数据存储与状态管理。
+| 能力 | 当前行为 |
+|---|---|
+| 候选发现 | 扫描 `$PATH` 和常见第三方安装目录；新命令先进入**候选收件箱**，不会自动污染工具墙。 |
+| 人工整理 | 可收录、忽略、恢复候选；支持手动添加、编辑、隐藏、恢复和删除已收录工具。 |
+| 命令模板 | 支持 `{{variable_name}}` 占位符；首次启动时会要求填写变量、展示命令预览并保存本机默认值。 |
+| 终端启动 | 可在设置中选择 Terminal.app、iTerm、Warp 或“仅复制命令”。Warp 采用打开应用并复制命令的保守方式。 |
+| 信息补充 | 可选 GitHub README 搜索与 AI 提炼；失败时保留本地命令和手动编辑能力。 |
+| 图标 | 常用工具有差异化语义图标；已识别 GitHub 仓库时优先显示组织头像，未知工具使用稳定的渐变回退图标。 |
+| 本地存储 | 工具、候选、分类、隐藏状态、命令模板和变量值保存在本机 SwiftData 容器中。 |
 
----
+## 本地运行
 
-## 二、 如何在 macOS 中运行本项目
+### 前置条件
 
-如果您在本地 Mac 上已经拥有该项目的文件夹（或通过 Manus 桌面端绑定同步），请按以下步骤在 Xcode 中运行：
+- macOS 14 或更高版本。
+- Xcode 15 或更高版本。
+- 使用 **macOS / My Mac** 作为运行目标；请勿选择 iPhone 或 iPad 模拟器。
 
-### 1. 创建 Xcode 项目
-由于本项目为纯 Swift + SwiftUI 编写，您可以在 Xcode 中新建一个 **macOS App** 项目：
-- **Product Name**: `TermiPad`
-- **Team**: 您的开发者账号（或 None）
-- **Organization Identifier**: `com.termpad`
-- **Interface**: SwiftUI
-- **Language**: Swift
-- **Storage**: SwiftData
+### 推荐方式：使用项目定义生成 Xcode 工程
 
-### 2. 导入源码
-将本目录下的 `Sources/` 文件夹中的所有文件（`TermiPadApp.swift`, `TerminalTool.swift`, `ToolScanner.swift`, `LaunchpadView.swift`）拖入 Xcode 项目中，替换或合并默认文件。
+项目包含 `project.yml`，用于生成带单元测试和 macOS UI 测试的原生工程。
 
-### 3. 配置权限与编译
-- 确保 Deployment Target 设置为 **macOS 14.0+**（因为使用了 SwiftData 与现代 SwiftUI 特性）。
-- 点击 Xcode 左上角的 **Run**（▶ 按钮），即可编译并启动 **TermiPad**！
-
----
-
-## 三、 代码架构
-
+```bash
+brew install xcodegen
+cd TermiPad
+xcodegen generate
+open TermiPad.xcodeproj
 ```
+
+在 Xcode 顶部选择 **TermiPad > My Mac**，然后按 `Command + R`。首轮扫描后，请进入左侧 **候选收件箱**确认要收录的工具。
+
+### Swift Package 方式
+
+也可直接打开包定义：
+
+```bash
+cd TermiPad
+open Package.swift
+```
+
+同样必须在 Xcode 中选择 **My Mac**。包方式适合源码浏览与基础构建；完整 UI 自动化测试以生成的 `.xcodeproj` 为准。
+
+## 使用流程
+
+```text
+发现工具 → 候选收件箱确认收录 → （可选）GitHub / AI 补充 → 点击图标
+→ 若模板含变量则填写表单 → 在偏好终端执行或复制命令
+```
+
+## 终端偏好
+
+从 macOS 菜单栏打开 **TermiPad → Settings…**：
+
+- **Terminal.app**：通过 AppleScript 在新标签或窗口中执行命令。
+- **iTerm**：将命令写入当前会话；未打开窗口时会创建默认窗口。
+- **Warp**：打开 Warp 并复制完整命令，用户可检查后粘贴执行。
+- **仅复制命令**：不打开任何终端，只将最终命令复制到剪贴板。
+
+## 命令模板
+
+将必须由用户填写的内容写为 `{{variable_name}}`，例如：
+
+```text
+claude --model {{model}} {{prompt}}
+```
+
+TermiPad 会在启动前显示表单。变量值会使用 POSIX 单引号方式进行 shell 转义，以避免空格或引号意外改变命令结构；但用户仍应在执行前确认最终命令及其影响。
+
+## 自动化验证
+
+GitHub Actions 工作流包含：
+
+1. Swift 单元测试：扫描过滤、分类、命令变量与图标回退。
+2. `xcodebuild` macOS 构建。
+3. macOS UI Smoke Test：启动应用、检查主要控件、归档 `.xcresult` 和截图。
+
+当前 GitHub Actions 的云端运行受账户级账单/额度限制拦截；恢复后，工作流会自动继续执行上述验证。
+
+## 项目结构
+
+```text
 TermiPad/
 ├── Sources/
-│   ├── TermiPadApp.swift      # 应用程序入口与 SwiftData 容器配置
-│   ├── TerminalTool.swift     # 数据模型与分类定义
-│   ├── ToolScanner.swift      # $PATH 扫描、过滤与智能分类引擎
-│   └── LaunchpadView.swift    # 仿 Launchpad 界面、网格布局、搜索与终端唤起
-└── README.md                  # 说明文档
+│   ├── TerminalTool.swift       # SwiftData 工具与候选模型
+│   ├── ToolScanner.swift        # PATH 与常见生态路径扫描
+│   ├── CommandTemplate.swift    # {{variable}} 解析、渲染与转义
+│   ├── TerminalLauncher.swift   # Terminal / iTerm / Warp / 剪贴板启动适配
+│   ├── LaunchpadView.swift      # 原生侧边栏、候选收件箱、工具墙与表单
+│   ├── PreferencesView.swift    # 应用偏好设置
+│   └── ToolIconView.swift       # 差异化图标系统
+├── Tests/                       # 核心逻辑单元测试
+├── UITests/                     # macOS UI 自动化测试
+├── project.yml                  # XcodeGen 原生工程定义
+└── .github/workflows/           # 云端构建与截图归档
 ```
+
+## 公开版前的开发路线
+
+公开前仍需完成更可靠的 GitHub 匹配、Keychain 凭据存储、品牌图标缓存/替换、备份导出与更深的 UI 测试。详细优先级见私有开发文档 `termipad_development_backlog.md`。
