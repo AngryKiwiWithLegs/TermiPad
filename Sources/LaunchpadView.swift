@@ -1,346 +1,295 @@
 import SwiftUI
 import SwiftData
 
-/// 仿 macOS Launchpad 风格的终端工具启动器主界面
+/// macOS 原生风格的终端工具启动器主界面。
 struct LaunchpadView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \TerminalTool.name) private var tools: [TerminalTool]
-    
-    @State private var searchText: String = ""
-    @State private var selectedCategory: ToolCategory? = nil
-    @State private var isScanning: Bool = false
-    @State private var selectedToolForEdit: TerminalTool? = nil
-    
-    // 网格布局：自适应列宽，图标宫格展示
-    let columns = [
-        GridItem(.adaptive(minimum: 110, maximum: 140), spacing: 24)
-    ]
-    
-    var filteredTools: [TerminalTool] {
+
+    @State private var searchText = ""
+    @State private var selectedSidebarItem = SidebarItem.all.rawValue
+    @State private var isScanning = false
+    @State private var selectedToolForEdit: TerminalTool?
+    @State private var scanMessage: String?
+
+    private let columns = [GridItem(.adaptive(minimum: 142, maximum: 180), spacing: 18)]
+
+    private var selectedCategory: ToolCategory? {
+        ToolCategory(rawValue: selectedSidebarItem)
+    }
+
+    private var filteredTools: [TerminalTool] {
         tools.filter { tool in
-            let matchesSearch = searchText.isEmpty || tool.name.localizedCaseInsensitiveContains(searchText) || tool.toolDescription.localizedCaseInsensitiveContains(searchText)
-            let matchesCategory = selectedCategory == nil || tool.category == selectedCategory
-            return matchesSearch && matchesCategory
+            let searchMatches = searchText.isEmpty
+                || tool.name.localizedCaseInsensitiveContains(searchText)
+                || tool.toolDescription.localizedCaseInsensitiveContains(searchText)
+            let categoryMatches = selectedCategory == nil || tool.category == selectedCategory
+            return searchMatches && categoryMatches
         }
     }
-    
+
+    private var contentTitle: String {
+        selectedCategory?.rawValue ?? "所有工具"
+    }
+
     var body: some View {
-        ZStack {
-            // 背景毛玻璃效果
-            Color(.windowBackgroundColor)
-                .ignoresSafeArea()
-            
-            VStack(spacing: 20) {
-                // 顶部标题栏与搜索、扫描按钮
-                headerBar
-                
-                // 分类横向标签页
-                categoryTabs
-                
-                // 主体宫格区域
-                ScrollView {
-                    if filteredTools.isEmpty {
-                        emptyStateView
-                    } else {
-                        LazyVGrid(columns: columns, spacing: 30) {
-                            ForEach(filteredTools) { tool in
-                                ToolCellView(tool: tool) {
-                                    launchTool(tool)
-                                } onEdit: {
-                                    selectedToolForEdit = tool
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 40)
-                        .padding(.top, 20)
-                    }
+        NavigationSplitView {
+            sidebar
+        } detail: {
+            toolLibrary
+        }
+        .navigationSplitViewStyle(.balanced)
+        .searchable(text: $searchText, placement: .toolbar, prompt: "搜索工具")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: performScan) {
+                    Label(isScanning ? "正在发现" : "发现工具", systemImage: isScanning ? "arrow.triangle.2.circlepath" : "plus.viewfinder")
+                }
+                .disabled(isScanning)
+                .accessibilityIdentifier("discover-tools-button")
+            }
+        }
+        .alert("工具发现完成", isPresented: Binding(
+            get: { scanMessage != nil },
+            set: { if !$0 { scanMessage = nil } }
+        )) {
+            Button("好", role: .cancel) { scanMessage = nil }
+        } message: {
+            Text(scanMessage ?? "")
+        }
+    }
+
+    private var sidebar: some View {
+        List(selection: $selectedSidebarItem) {
+            Section("工具库") {
+                Label("所有工具", systemImage: "square.grid.2x2")
+                    .tag(SidebarItem.all.rawValue)
+            }
+
+            Section("分类") {
+                ForEach(ToolCategory.allCases) { category in
+                    Label(category.rawValue, systemImage: category.iconName)
+                        .tag(category.rawValue)
                 }
             }
-            .padding(.vertical, 30)
+        }
+        .listStyle(.sidebar)
+        .navigationTitle("TermiPad")
+        .navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 270)
+    }
+
+    private var toolLibrary: some View {
+        Group {
+            if filteredTools.isEmpty {
+                ContentUnavailableView {
+                    Label(searchText.isEmpty ? "尚未收录工具" : "未找到匹配工具", systemImage: searchText.isEmpty ? "terminal" : "magnifyingglass")
+                } description: {
+                    Text(searchText.isEmpty
+                         ? "使用“发现工具”扫描 PATH 中的交互式命令行工具。"
+                         : "尝试修改搜索关键词或切换分类。")
+                } actions: {
+                    if searchText.isEmpty {
+                        Button("发现工具", action: performScan)
+                            .buttonStyle(.borderedProminent)
+                    } else {
+                        Button("清除搜索") { searchText = "" }
+                    }
+                }
+                .accessibilityIdentifier("empty-state-title")
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 18) {
+                        ForEach(filteredTools) { tool in
+                            ToolTile(tool: tool) {
+                                launchTool(tool)
+                            } onEdit: {
+                                selectedToolForEdit = tool
+                            }
+                        }
+                    }
+                    .padding(24)
+                }
+            }
+        }
+        .navigationTitle(contentTitle)
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Text("\(filteredTools.count) 个工具")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+            }
         }
         .sheet(item: $selectedToolForEdit) { tool in
             ToolEditView(tool: tool)
         }
+        .accessibilityIdentifier("tool-library")
     }
-    
-    // 顶部标题栏
-    private var headerBar: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("TermiPad")
-                    .font(.system(size: 28, weight: .bold))
-                    .accessibilityIdentifier("app-title")
-                Text("终端工具图标化启动台")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-            
-            Spacer()
-            
-            // 搜索框
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
-                TextField("搜索终端工具...", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .frame(width: 200)
-                if !searchText.isEmpty {
-                    Button(action: { searchText = "" }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(8)
-            .background(Color(.controlBackgroundColor))
-            .cornerRadius(10)
-            
-            // 扫描按钮
-            Button(action: performScan) {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.clockwise")
-                        .rotationEffect(.degrees(isScanning ? 360 : 0))
-                        .animation(isScanning ? Animation.linear(duration: 1).repeatForever(autoreverses: false) : .default, value: isScanning)
-                    Text(isScanning ? "扫描中..." : "发现工具")
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.accentColor)
-                .foregroundColor(.white)
-                .cornerRadius(8)
-            }
-            .buttonStyle(.plain)
-            .disabled(isScanning)
-            .accessibilityIdentifier("discover-tools-button")
-        }
-        .padding(.horizontal, 40)
-    }
-    
-    // 分类标签页
-    private var categoryTabs: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                CategoryChip(title: "全部", icon: "square.grid.2x2", isSelected: selectedCategory == nil) {
-                    selectedCategory = nil
-                }
-                
-                ForEach(ToolCategory.allCases) { category in
-                    CategoryChip(title: category.rawValue, icon: category.iconName, isSelected: selectedCategory == category) {
-                        selectedCategory = category
-                    }
-                }
-            }
-            .padding(.horizontal, 40)
-        }
-    }
-    
-    // 空状态视图
-    private var emptyStateView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "terminal.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.secondary)
-            Text("没有找到相关的终端工具")
-                .font(.headline)
-                .accessibilityIdentifier("empty-state-title")
-                .foregroundColor(.primary)
-            Text("点击右上角的“发现工具”按钮，自动扫描您电脑上的命令行工具。")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(100)
-    }
-    
-    // 扫描逻辑
+
     private func performScan() {
+        guard !isScanning else { return }
         isScanning = true
+
         DispatchQueue.global(qos: .userInitiated).async {
             let discovered = ToolScanner.scanInstalledTools()
-            
+
             DispatchQueue.main.async {
-                let existingNames = Set(tools.map { $0.name })
-                
-                for item in discovered {
-                    if !existingNames.contains(item.name) {
-                        let guessedCategory = ToolScanner.guessCategory(for: item.name)
-                        let newTool = TerminalTool(
-                            name: item.name,
-                            executablePath: item.path,
-                            commandTemplate: item.name,
-                            toolDescription: "正在尝试 AI 增强...",
-                            category: guessedCategory,
-                            iconSymbol: guessedCategory.iconName
-                        )
-                        modelContext.insert(newTool)
-                        
-                        // 异步触发 AI 增强
-                        Task {
-                            if let repoInfo = try? await GitHubService.findRepository(for: item.name) {
-                                if let intelligence = try? await AIService.analyzeTool(name: item.name, readme: repoInfo.readmeContent) {
-                                    await MainActor.run {
-                                        newTool.commandTemplate = intelligence.commandTemplate
-                                        newTool.toolDescription = intelligence.description
-                                        newTool.category = ToolCategory(rawValue: intelligence.suggestedCategory) ?? guessedCategory
-                                    }
-                                }
-                            }
-                        }
+                let existingNames = Set(tools.map(\.name))
+                var addedCount = 0
+
+                for item in discovered where !existingNames.contains(item.name) {
+                    let category = ToolScanner.guessCategory(for: item.name)
+                    let tool = TerminalTool(
+                        name: item.name,
+                        executablePath: item.path,
+                        commandTemplate: item.name,
+                        toolDescription: "本地发现的终端工具",
+                        category: category,
+                        iconSymbol: ToolIconCatalog.definition(for: item.name, category: category).symbol
+                    )
+                    modelContext.insert(tool)
+                    addedCount += 1
+
+                    Task {
+                        await enrich(tool: tool, toolName: item.name, fallbackCategory: category)
                     }
                 }
-                
+
                 try? modelContext.save()
                 isScanning = false
+                scanMessage = addedCount == 0
+                    ? "没有发现新的可收录工具。"
+                    : "已收录 \(addedCount) 个工具；其余信息会在后台补充。"
             }
         }
     }
-    
-    // 点击图标启动终端
+
+    @MainActor
+    private func enrich(tool: TerminalTool, toolName: String, fallbackCategory: ToolCategory) async {
+        guard let repository = try? await GitHubService.findRepository(for: toolName) else { return }
+
+        tool.repositoryFullName = repository.repoFullName
+        tool.iconURLString = repository.ownerAvatarURLString
+
+        if let intelligence = try? await AIService.analyzeTool(name: toolName, readme: repository.readmeContent) {
+            tool.commandTemplate = intelligence.commandTemplate
+            tool.toolDescription = intelligence.description
+            tool.category = ToolCategory(rawValue: intelligence.suggestedCategory) ?? fallbackCategory
+        }
+
+        try? modelContext.save()
+    }
+
     private func launchTool(_ tool: TerminalTool) {
-        let command = tool.commandTemplate
-        
-        // 使用 AppleScript 唤起默认终端（如 Terminal.app 或 iTerm2）并执行命令
+        let command = tool.commandTemplate.replacingOccurrences(of: "\"", with: "\\\"")
         let scriptText = """
         tell application "Terminal"
             activate
             do script "\(command)"
         end tell
         """
-        
-        if let script = NSAppleScript(source: scriptText) {
-            var error: NSDictionary?
-            script.executeAndReturnError(&error)
-            if let error {
-                print("启动终端失败: \(error)")
-            }
-        } else {
+
+        guard let script = NSAppleScript(source: scriptText) else {
             print("无法创建 Terminal AppleScript。")
+            return
+        }
+
+        var error: NSDictionary?
+        script.executeAndReturnError(&error)
+        if let error {
+            print("启动终端失败: \(error)")
         }
     }
 }
 
-/// 分类标签组件
-struct CategoryChip: View {
-    let title: String
-    let icon: String
-    let isSelected: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                Text(title)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(isSelected ? Color.accentColor : Color(.controlBackgroundColor))
-            .foregroundColor(isSelected ? .white : .primary)
-            .cornerRadius(16)
-        }
-        .buttonStyle(.plain)
-    }
+private enum SidebarItem: String {
+    case all = "__all_tools__"
 }
 
-/// 单个工具图标网格格子
-struct ToolCellView: View {
+/// 单个工具卡片：保持 macOS 控件的克制密度，并允许右键编辑。
+struct ToolTile: View {
     let tool: TerminalTool
     let action: () -> Void
     let onEdit: () -> Void
-    
+
     var body: some View {
-        VStack(spacing: 10) {
-            // 图标主体
-            ZStack {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(LinearGradient(colors: [Color.accentColor.opacity(0.8), Color.accentColor.opacity(0.4)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 72, height: 72)
-                    .shadow(color: Color.black.opacity(0.15), radius: 6, x: 0, y: 4)
-                
-                Image(systemName: tool.iconSymbol)
-                    .font(.system(size: 32))
-                    .foregroundColor(.white)
+        Button(action: action) {
+            VStack(spacing: 10) {
+                ToolIconView(tool: tool, size: 64)
+
+                Text(tool.name)
+                    .font(.system(size: 14, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: .infinity)
+
+                Text(tool.category.rawValue)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-            .contextMenu {
-                Button(action: onEdit) {
-                    Label("编辑命令与分类", systemImage: "pencil")
-                }
+            .padding(.vertical, 16)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 142)
+            .background(.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(.quaternary, lineWidth: 1)
             }
-            
-            // 工具名称
-            Text(tool.name)
-                .font(.system(size: 13, weight: .medium))
-                .lineLimit(1)
-                .foregroundColor(.primary)
-            
-            // 分类标签
-            Text(tool.category.rawValue)
-                .font(.system(size: 10))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Color(.controlBackgroundColor))
-                .foregroundColor(.secondary)
-                .cornerRadius(4)
         }
-        .frame(width: 110)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: action)
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button(action: action) {
+                Label("在终端中启动", systemImage: "play")
+            }
+            Divider()
+            Button(action: onEdit) {
+                Label("编辑工具", systemImage: "slider.horizontal.3")
+            }
+        }
+        .accessibilityIdentifier("tool-tile-\(tool.name)")
+        .help(tool.toolDescription.isEmpty ? tool.commandTemplate : tool.toolDescription)
     }
 }
 
-/// 工具编辑弹窗视图
 struct ToolEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var tool: TerminalTool
-    
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("编辑工具：\\(tool.name)")
-                .font(.headline)
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("启动命令模板")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                TextField("例如: claude --model=sonnet", text: $tool.commandTemplate)
-                    .textFieldStyle(.roundedBorder)
+        NavigationStack {
+            Form {
+                Section("启动方式") {
+                    TextField("启动命令", text: $tool.commandTemplate)
+                    Text(tool.executablePath)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
+                Section("整理") {
+                    Picker("分类", selection: $tool.category) {
+                        ForEach(ToolCategory.allCases) { category in
+                            Text(category.rawValue).tag(category)
+                        }
+                    }
+                    TextField("工具描述", text: $tool.toolDescription, axis: .vertical)
+                        .lineLimit(2...4)
+                }
             }
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("分类")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                Picker("分类", selection: $tool.category) {
-                    ForEach(ToolCategory.allCases) { cat in
-                        Text(cat.rawValue).tag(cat)
+            .formStyle(.grouped)
+            .navigationTitle(tool.name)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") {
+                        tool.isUserCustomized = true
+                        dismiss()
                     }
                 }
-                .pickerStyle(.segmented)
-            }
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("工具描述")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                TextField("简要说明工具用途...", text: $tool.toolDescription)
-                    .textFieldStyle(.roundedBorder)
-            }
-            
-            HStack {
-                Spacer()
-                Button("取消") {
-                    dismiss()
-                }
-                Button("保存") {
-                    tool.isUserCustomized = true
-                    dismiss()
-                }
-                .buttonStyle(.borderedProminent)
             }
         }
-        .padding(24)
-        .frame(width: 400)
+        .frame(minWidth: 460, minHeight: 300)
     }
 }

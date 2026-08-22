@@ -33,7 +33,9 @@ final class TerminalTool {
     var commandTemplate: String       // 启动命令模板，如 claude --model=sonnet {{prompt}}
     var toolDescription: String       // 工具描述（从 README 提取）
     var categoryRawValue: String      // 分类原始值
-    var iconSymbol: String            // SwiftUI 图标名或自定义图标路径
+    var iconSymbol: String            // 内置 SF Symbol 回退图标
+    var iconURLString: String?        // GitHub/官方仓库提供的品牌头像或 Logo URL
+    var repositoryFullName: String?   // 已识别的 GitHub 仓库名
     var isUserCustomized: Bool        // 是否经过用户手动修改
     var createdAt: Date
     
@@ -58,6 +60,8 @@ final class TerminalTool {
         self.toolDescription = toolDescription
         self.categoryRawValue = category.rawValue
         self.iconSymbol = iconSymbol
+        self.iconURLString = nil
+        self.repositoryFullName = nil
         self.isUserCustomized = isUserCustomized
         self.createdAt = Date()
     }

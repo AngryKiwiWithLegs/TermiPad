@@ -1,0 +1,12 @@
+# Local cloud-CI downloads and generated Xcode project output
+ci-artifact-*/
+TermiPad.xcodeproj/
+
+# Xcode user state and build products
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Swift Package build products
+.build/
+.swiftpm/

@@ -35,3 +35,22 @@ final class ToolScannerTests: XCTestCase {
         XCTAssertEqual(ToolScanner.guessCategory(for: "my-custom-cli"), .other)
     }
 }
+
+final class ToolIconCatalogTests: XCTestCase {
+    func testKnownToolsHaveDistinctiveVisualSymbols() {
+        let claude = ToolIconCatalog.definition(for: "claude", category: .ai)
+        let ffmpeg = ToolIconCatalog.definition(for: "ffmpeg", category: .media)
+        let fzf = ToolIconCatalog.definition(for: "fzf", category: .efficiency)
+
+        XCTAssertNotEqual(claude.symbol, ffmpeg.symbol)
+        XCTAssertNotEqual(ffmpeg.symbol, fzf.symbol)
+        XCTAssertNotEqual(claude.symbol, fzf.symbol)
+    }
+
+    func testUnknownToolsReceiveStableFallbackIcon() {
+        let first = ToolIconCatalog.definition(for: "my-private-cli", category: .other)
+        let second = ToolIconCatalog.definition(for: "my-private-cli", category: .other)
+
+        XCTAssertEqual(first.symbol, second.symbol)
+    }
+}
