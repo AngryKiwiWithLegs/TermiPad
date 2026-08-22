@@ -52,15 +52,52 @@ jobs:
           set -o pipefail
           swift test 2>&1 | tee ci-logs/swift-test.log
 
+      - name: Install Xcode project generator
+        shell: bash
+        run: brew install xcodegen
+
+      - name: Generate macOS Xcode project
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodegen generate 2>&1 | tee ci-logs/xcodegen.log
+
       - name: Build with xcodebuild
         shell: bash
         run: |
           set -o pipefail
           xcodebuild \
+            -project TermiPad.xcodeproj \
             -scheme TermiPad \
             -destination "platform=macOS" \
             -derivedDataPath "$RUNNER_TEMP/TermiPadDerivedData" \
             clean build 2>&1 | tee ci-logs/xcodebuild.log
+
+      - name: Run macOS UI smoke test and capture interface evidence
+        shell: bash
+        run: |
+          set -o pipefail
+          DERIVED_DATA="$RUNNER_TEMP/TermiPadUITestDerivedData"
+          RESULT_BUNDLE="ci-logs/TermiPadUITests.xcresult"
+          set +e
+          xcodebuild \
+            -project TermiPad.xcodeproj \
+            -scheme TermiPad \
+            -destination "platform=macOS" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -resultBundlePath "$RESULT_BUNDLE" \
+            test 2>&1 | tee ci-logs/xcode-ui-test.log
+          TEST_STATUS=${PIPESTATUS[0]}
+          set -e
+
+          mkdir -p ci-logs/ui-attachments
+          if [ -d "$RESULT_BUNDLE" ]; then
+            xcrun xcresulttool export attachments \
+              --path "$RESULT_BUNDLE" \
+              --output-path ci-logs/ui-attachments || true
+          fi
+
+          exit "$TEST_STATUS"
 
       - name: Extract actionable diagnostics
         if: always()
@@ -74,7 +111,12 @@ jobs:
             if [ -f ci-logs/xcodebuild.log ]; then
               grep -E -i '(^|[[:space:]])(error|warning|fatal error):|BUILD FAILED|SwiftCompile|CompileSwift' ci-logs/xcodebuild.log || true
             else
-              echo "xcodebuild did not create a log file. See the workflow step output."
+              echo "xcodebuild did not create a build log file. See the workflow step output."
+            fi
+            if [ -f ci-logs/xcode-ui-test.log ]; then
+              grep -E -i '(^|[[:space:]])(error|warning|fatal error):|TEST FAILED|Test Case|Assertion' ci-logs/xcode-ui-test.log || true
+            else
+              echo "UI-test log was not created."
             fi
             echo
             echo "## Unit-test summary"
@@ -85,6 +127,13 @@ jobs:
               echo "Unit-test log was not created."
             fi
             echo '```'
+            echo
+            echo "## UI 验收产物"
+            if [ -d ci-logs/ui-attachments ] && [ "$(find ci-logs/ui-attachments -type f | wc -l)" -gt 0 ]; then
+              echo "已导出 UI 测试截图附件；请从本次构建的 artifacts 下载查看。"
+            else
+              echo "未导出截图附件；请查看 UI 测试日志与 .xcresult 结果包。"
+            fi
           } | tee ci-logs/diagnostic-summary.md
 
           cat ci-logs/diagnostic-summary.md >> "$GITHUB_STEP_SUMMARY"

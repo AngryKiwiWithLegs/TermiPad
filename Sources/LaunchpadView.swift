@@ -69,6 +69,7 @@ struct LaunchpadView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("TermiPad")
                     .font(.system(size: 28, weight: .bold))
+                    .accessibilityIdentifier("app-title")
                 Text("终端工具图标化启动台")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
@@ -111,6 +112,7 @@ struct LaunchpadView: View {
             }
             .buttonStyle(.plain)
             .disabled(isScanning)
+            .accessibilityIdentifier("discover-tools-button")
         }
         .padding(.horizontal, 40)
     }
@@ -141,6 +143,7 @@ struct LaunchpadView: View {
                 .foregroundColor(.secondary)
             Text("没有找到相关的终端工具")
                 .font(.headline)
+                .accessibilityIdentifier("empty-state-title")
                 .foregroundColor(.primary)
             Text("点击右上角的“发现工具”按钮，自动扫描您电脑上的命令行工具。")
                 .font(.subheadline)
