@@ -90,7 +90,7 @@ enum TerminalLauncher {
             throw TerminalLauncherError.applicationUnavailable(TerminalTarget.warp.rawValue)
         }
         copy(command)
-        NSWorkspace.shared.openApplication(at: url, configuration: .init())
+        NSWorkspace.shared.openApplication(at: url, configuration: .init(), completionHandler: nil)
     }
 
     private static func execute(_ source: String) throws {
