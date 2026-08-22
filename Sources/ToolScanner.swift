@@ -50,7 +50,7 @@ class ToolScanner {
                 let fullPath = (dirPath as NSString).appendingPathComponent(fileName)
                 
                 // 检查是否在黑名单中
-                if blacklistedCommands.contains(fileName) { continue }
+                if shouldExclude(commandName: fileName) { continue }
                 
                 // 检查是否可执行
                 if fileManager.isExecutableFile(atPath: fullPath) {
@@ -71,6 +71,12 @@ class ToolScanner {
         return uniqueDict.map { (name: $0.key, path: $0.value) }.sorted { $0.name < $1.name }
     }
     
+    /// 判断命令是否应从图标化启动器中排除。
+    /// 包含系统基础命令、包管理器、守护进程和脚本运行时。
+    static func shouldExclude(commandName: String) -> Bool {
+        blacklistedCommands.contains(commandName.lowercased())
+    }
+
     /// 智能初筛：根据名称或特征分配合适的默认分类
     static func guessCategory(for toolName: String) -> ToolCategory {
         let aiKeywords = ["claude", "gpt", "gemini", "ollama", "openai", "llama", "chat", "agent", "ai"]

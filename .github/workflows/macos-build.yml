@@ -46,6 +46,12 @@ jobs:
           set -o pipefail
           swift package dump-package | tee ci-logs/package-manifest.json
 
+      - name: Run core logic unit tests
+        shell: bash
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee ci-logs/swift-test.log
+
       - name: Build with xcodebuild
         shell: bash
         run: |
@@ -69,6 +75,14 @@ jobs:
               grep -E -i '(^|[[:space:]])(error|warning|fatal error):|BUILD FAILED|SwiftCompile|CompileSwift' ci-logs/xcodebuild.log || true
             else
               echo "xcodebuild did not create a log file. See the workflow step output."
+            fi
+            echo
+            echo "## Unit-test summary"
+            echo '```text'
+            if [ -f ci-logs/swift-test.log ]; then
+              grep -E 'Test Suite|Test Case|Executed|error:|fatal error:' ci-logs/swift-test.log || true
+            else
+              echo "Unit-test log was not created."
             fi
             echo '```'
           } | tee ci-logs/diagnostic-summary.md
