@@ -115,3 +115,15 @@ The appearance button in the main toolbar, and **Settings → Appearance**, offe
 ### 柔和 macOS 外观
 
 浅色模式采用轻微蓝灰的窗口背景和近白内容表面，而非大面积纯白；深色模式采用石墨灰和分层卡片表面，而非纯黑。侧边栏、内容区和工具卡片使用统一的语义层级。切换“跟随系统 / 浅色 / 深色”时会以约 0.30 秒的缓入缓出过渡完成；若 macOS 启用了“减少动态效果”，应用会尊重该辅助功能并取消动画。
+
+### 原生控件与初始窗口位置
+
+工具卡片使用更紧凑的 `7pt` 连续圆角、轻描边和短阴影，以接近 macOS 内容表面的几何比例；候选操作与工具栏继续使用系统的 bordered / borderedProminent 控件样式。
+
+首次启动时，TermiPad 会把主窗口放置到**主显示器可用区域的左半边**（会避开菜单栏和 Dock）。之后应用会尊重您手动调整的位置和尺寸，不会再次抢占窗口。若要重新体验首次定位，可执行：
+
+```bash
+defaults delete com.termipad.app TermiPad.hasPlacedInitialMainWindow
+```
+
+工程定义已更新 Xcode 升级检查标记。拉取更新后请务必重新运行 `xcodegen generate`，不要继续使用旧的 `.xcodeproj`。

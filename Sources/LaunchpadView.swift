@@ -449,7 +449,7 @@ struct ToolTile: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 10) {
+            VStack(spacing: 8) {
                 ToolIconView(tool: tool, size: 64)
                 Text(tool.name)
                     .font(.system(size: 14, weight: .medium))
@@ -461,15 +461,15 @@ struct ToolTile: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            .padding(.vertical, 16)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, minHeight: 142)
-            .background(SoftMacTheme(colorScheme: colorScheme).cardSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.vertical, 14)
+            .padding(.horizontal, 11)
+            .frame(maxWidth: .infinity, minHeight: 132)
+            .background(SoftMacTheme(colorScheme: colorScheme).cardSurface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .strokeBorder(SoftMacTheme(colorScheme: colorScheme).cardStroke, lineWidth: 1)
             }
-            .shadow(color: SoftMacTheme(colorScheme: colorScheme).cardShadow, radius: 9, y: 4)
+            .shadow(color: SoftMacTheme(colorScheme: colorScheme).cardShadow, radius: 4, y: 2)
         }
         .buttonStyle(.plain)
         .contextMenu {
