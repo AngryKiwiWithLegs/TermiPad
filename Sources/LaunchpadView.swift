@@ -463,8 +463,6 @@ struct CandidateInboxView: View {
 /// 单个工具卡片：保持 macOS 控件的克制密度，并允许右键管理。
 struct ToolTile: View {
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isHovering = false
     let tool: TerminalTool
     let language: AppLanguage
     let action: () -> Void
@@ -476,14 +474,6 @@ struct ToolTile: View {
     }
 
 
-    private var hoverGettingStartedLabel: String {
-        language == .simplifiedChinese ? "如何开始" : "Getting started"
-    }
-
-    private var hoverPurposeLabel: String {
-        language == .simplifiedChinese ? "用途" : "Purpose"
-    }
-
     var body: some View {
         Button(action: action) {
             VStack(spacing: 8) {
@@ -493,33 +483,15 @@ struct ToolTile: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity)
-                Group {
-                    if isHovering {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(hoverPurposeLabel)：\(hoverContent.purpose)")
-                                .lineLimit(2)
-                            Text("\(hoverGettingStartedLabel)：\(hoverContent.gettingStarted)")
-                                .lineLimit(2)
-                        }
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
-                        .transition(.opacity)
-                    } else {
-                        Text(tool.category.displayName(language))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, minHeight: 54)
-                            .transition(.opacity)
-                    }
-                }
-                .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: isHovering)
+                Text(tool.category.displayName(language))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, minHeight: 28)
             }
             .padding(.vertical, 14)
             .padding(.horizontal, 11)
-            .frame(maxWidth: .infinity, minHeight: 160)
+            .frame(maxWidth: .infinity, minHeight: 132)
             .background(SoftMacTheme(colorScheme: colorScheme).cardSurface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -528,15 +500,6 @@ struct ToolTile: View {
             .shadow(color: SoftMacTheme(colorScheme: colorScheme).cardShadow, radius: 4, y: 2)
         }
         .buttonStyle(.plain)
-        .onHover { hovering in
-            if reduceMotion {
-                isHovering = hovering
-            } else {
-                withAnimation(.easeInOut(duration: 0.16)) {
-                    isHovering = hovering
-                }
-            }
-        }
         .contextMenu {
             Button(action: action) { Label(AppCopy.text("launchByTemplate", language: language), systemImage: "play") }
             Divider()
