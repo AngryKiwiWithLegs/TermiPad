@@ -36,6 +36,10 @@ struct LaunchpadView: View {
 
     private var theme: SoftMacTheme { SoftMacTheme(colorScheme: colorScheme) }
 
+    private var appearance: AppAppearance {
+        AppAppearance(rawValue: appearanceRawValue) ?? .system
+    }
+
     private var appearanceSelection: Binding<String> {
         Binding(
             get: { appearanceRawValue },
@@ -103,27 +107,26 @@ struct LaunchpadView: View {
                 }
             }
             ToolbarItemGroup(placement: .automatic) {
-                Menu {
-                    Picker(AppCopy.text("settingsLanguage", language: language), selection: $languageRawValue) {
-                        ForEach(AppLanguage.allCases) { option in
-                            Text(option.displayName).tag(option.rawValue)
-                        }
-                    }
-                } label: {
-                    Label(language.compactName, systemImage: "character")
+                Picker(AppCopy.text("settingsLanguage", language: language), selection: $languageRawValue) {
+                    Text("中").tag(AppLanguage.simplifiedChinese.rawValue)
+                    Text("EN").tag(AppLanguage.english.rawValue)
                 }
-                .accessibilityIdentifier("language-menu")
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 70)
+                .help(AppCopy.text("settingsLanguage", language: language))
+                .accessibilityIdentifier("language-segmented-control")
 
-                Menu {
-                    Picker(AppCopy.text("settingsAppearance", language: language), selection: appearanceSelection) {
-                        ForEach(AppAppearance.allCases) { option in
-                            Label(option.displayName(language), systemImage: option.symbol).tag(option.rawValue)
-                        }
+                Picker(AppCopy.text("settingsAppearance", language: language), selection: appearanceSelection) {
+                    ForEach(AppAppearance.allCases) { option in
+                        Image(systemName: option.symbol).tag(option.rawValue)
                     }
-                } label: {
-                    Image(systemName: (AppAppearance(rawValue: appearanceRawValue) ?? .system).symbol)
                 }
-                .accessibilityIdentifier("appearance-menu")
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 102)
+                .help("\(AppCopy.text("settingsAppearance", language: language)): \(appearance.displayName(language))")
+                .accessibilityIdentifier("appearance-segmented-control")
             }
         }
         .alert(AppCopy.text("scanComplete", language: language), isPresented: Binding(

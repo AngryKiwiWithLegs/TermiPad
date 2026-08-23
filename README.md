@@ -108,9 +108,9 @@ TermiPad/
 
 ## Language and appearance
 
-TermiPad supports an immediate in-app language switch between **简体中文** and **English**. Use the character button in the main toolbar or open **TermiPad → Settings… → Language**. Tool names, commands, paths, and README-derived descriptions are deliberately left unchanged.
+TermiPad supports an immediate in-app language switch between **简体中文** and **English**. Use the compact **中 / EN** segmented control in the main toolbar, or open **TermiPad → Settings… → Language**. Tool names, commands, paths, and README-derived descriptions are deliberately left unchanged.
 
-The appearance button in the main toolbar, and **Settings → Appearance**, offers the native macOS choices **System**, **Light**, and **Dark**. The preference is stored locally and applied to both the main window and the Settings window.
+The compact three-segment appearance control in the main toolbar, and **Settings → Appearance**, provides one-click access to **System**, **Light**, and **Dark**. The preference is stored locally and applied to both the main window and the Settings window.
 
 ### 柔和 macOS 外观
 

@@ -23,6 +23,15 @@ final class TermiPadUITests: XCTestCase {
             "TermiPad 应显示“发现工具”按钮。"
         )
 
+        XCTAssertTrue(
+            app.segmentedControls["language-segmented-control"].exists,
+            "TermiPad 应显示中英文分段切换控件。"
+        )
+        XCTAssertTrue(
+            app.segmentedControls["appearance-segmented-control"].exists,
+            "TermiPad 应显示三档外观分段切换控件。"
+        )
+
         attachScreenshot(named: "termipad-launch")
     }
 
