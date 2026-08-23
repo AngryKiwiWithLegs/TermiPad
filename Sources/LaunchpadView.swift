@@ -463,6 +463,8 @@ struct CandidateInboxView: View {
 /// 单个工具卡片：保持 macOS 控件的克制密度，并允许右键管理。
 struct ToolTile: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
     let tool: TerminalTool
     let language: AppLanguage
     let action: () -> Void
@@ -495,6 +497,24 @@ struct ToolTile: View {
             .shadow(color: SoftMacTheme(colorScheme: colorScheme).cardShadow, radius: 4, y: 2)
         }
         .buttonStyle(.plain)
+        .overlay(alignment: .bottomLeading) {
+            if isHovering {
+                ToolHoverTooltip(content: hoverContent, language: language)
+                    .offset(x: -6, y: 174)
+                    .allowsHitTesting(false)
+                    .transition(reduceMotion ? .identity : .opacity.combined(with: .scale(scale: 0.98, anchor: .topLeading)))
+            }
+        }
+        .zIndex(isHovering ? 1 : 0)
+        .onHover { hovering in
+            if reduceMotion {
+                isHovering = hovering
+            } else {
+                withAnimation(.easeInOut(duration: 0.14)) {
+                    isHovering = hovering
+                }
+            }
+        }
         .contextMenu {
             Button(action: action) { Label(AppCopy.text("launchByTemplate", language: language), systemImage: "play") }
             Divider()
@@ -506,7 +526,48 @@ struct ToolTile: View {
         .accessibilityIdentifier("tool-tile-\(tool.name)")
         .accessibilityLabel("\(tool.name), \(hoverContent.accessibilitySummary(language: language))")
         .accessibilityHint(AppCopy.text("launchByTemplate", language: language))
-        .help(hoverContent.accessibilitySummary(language: language))
+    }
+}
+
+/// 使用中性浅灰连续圆角，避免系统默认黑色 Help 气泡与应用配色脱节。
+private struct ToolHoverTooltip: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let content: ToolHoverContent
+    let language: AppLanguage
+
+    private var theme: SoftMacTheme { SoftMacTheme(colorScheme: colorScheme) }
+    private var purposeTitle: String { language == .simplifiedChinese ? "用途" : "Purpose" }
+    private var gettingStartedTitle: String { language == .simplifiedChinese ? "如何开始" : "Getting started" }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            tooltipSection(title: purposeTitle, symbol: "lightbulb", text: content.purpose)
+            Divider().overlay(theme.hoverStroke)
+            tooltipSection(title: gettingStartedTitle, symbol: "play.circle", text: content.gettingStarted)
+        }
+        .padding(12)
+        .frame(width: 292, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .background(theme.hoverSurface.opacity(0.78), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .strokeBorder(theme.hoverStroke, lineWidth: 1)
+        }
+        .shadow(color: theme.hoverShadow, radius: 12, y: 5)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func tooltipSection(title: String, symbol: String, text: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Label(title, systemImage: symbol)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
+        }
     }
 }
 

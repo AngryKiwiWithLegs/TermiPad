@@ -39,6 +39,25 @@ struct SoftMacTheme {
             ? Color.white.opacity(0.035)
             : Color.white.opacity(0.58)
     }
+
+    /// 悬浮提示采用 macOS 式中性灰材质；在深色界面中保留足够层次而非反差刺目的浅色块。
+    var hoverSurface: Color {
+        colorScheme == .dark
+            ? Color(red: 0.285, green: 0.295, blue: 0.325).opacity(0.92)
+            : Color(red: 0.900, green: 0.908, blue: 0.925).opacity(0.94)
+    }
+
+    var hoverStroke: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.16)
+            : Color.black.opacity(0.12)
+    }
+
+    var hoverShadow: Color {
+        colorScheme == .dark
+            ? Color.black.opacity(0.40)
+            : Color.black.opacity(0.18)
+    }
 }
 
 struct SoftMacWindowModifier: ViewModifier {

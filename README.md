@@ -136,6 +136,6 @@ defaults delete com.termipad.app TermiPad.hasPlacedInitialMainWindow
 
 ### 工具格子提示与工具栏控件
 
-主窗口的语言和外观分段控件使用常规 macOS 控件尺寸，并在两组控件之间保留额外留白。工具格始终只显示图标与工具名称，保持紧凑一致；分类继续用于左侧边栏筛选、内部整理及说明回退，但不会占用格子空间。将鼠标停留在任一工具格子上时，macOS 原生悬浮提示会显示两段简洁说明：**用途**说明它能帮助完成什么，**如何开始**说明应在何处启动、需要做什么准备或如何继续操作。常见 CLI（如 Claude、GitHub CLI、Lazygit、FFmpeg、fzf 与 Terraform）使用更具体的本地说明；已有 README / AI 可靠摘要时会优先作为用途。旧版“正在尝试 AI 增强”等后台状态不会再作为悬浮提示或辅助功能文本展示。
+主窗口的语言和外观分段控件使用常规 macOS 控件尺寸，并在两组控件之间保留额外留白。工具格始终只显示图标与工具名称，保持紧凑一致；分类继续用于左侧边栏筛选、内部整理及说明回退，但不会占用格子空间。将鼠标停留在任一工具格子上时，应用内的原生风格悬浮窗会显示两段简洁说明：**用途**说明它能帮助完成什么，**如何开始**说明应在何处启动、需要做什么准备或如何继续操作。悬浮窗使用连续圆角、macOS 中性浅灰材质、细描边与柔和阴影，并会随浅色和深色外观调整表面对比度。常见 CLI（如 Claude、GitHub CLI、Lazygit、FFmpeg、fzf 与 Terraform）使用更具体的本地说明；已有 README / AI 可靠摘要时会优先作为用途。旧版“正在尝试 AI 增强”等后台状态不会再作为悬浮提示或辅助功能文本展示。
 
 `project.yml` 已显式启用 Xcode 推荐的 Dead Code Stripping、User Script Sandboxing、String Catalog Symbol Generation 与 Asset Symbol Extensions。重新生成工程后，项目级“Update to recommended settings”清单应不再要求这些设置。
