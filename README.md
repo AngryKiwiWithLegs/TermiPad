@@ -111,3 +111,7 @@ TermiPad/
 TermiPad supports an immediate in-app language switch between **简体中文** and **English**. Use the character button in the main toolbar or open **TermiPad → Settings… → Language**. Tool names, commands, paths, and README-derived descriptions are deliberately left unchanged.
 
 The appearance button in the main toolbar, and **Settings → Appearance**, offers the native macOS choices **System**, **Light**, and **Dark**. The preference is stored locally and applied to both the main window and the Settings window.
+
+### 柔和 macOS 外观
+
+浅色模式采用轻微蓝灰的窗口背景和近白内容表面，而非大面积纯白；深色模式采用石墨灰和分层卡片表面，而非纯黑。侧边栏、内容区和工具卡片使用统一的语义层级。切换“跟随系统 / 浅色 / 深色”时会以约 0.30 秒的缓入缓出过渡完成；若 macOS 启用了“减少动态效果”，应用会尊重该辅助功能并取消动画。

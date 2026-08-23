@@ -14,12 +14,14 @@ struct TermiPadApp: App {
             LaunchpadView()
                 .frame(minWidth: 900, minHeight: 620)
                 .preferredColorScheme(appearance.colorScheme)
+                .softMacWindow(appearanceKey: appearanceRawValue)
         }
         .modelContainer(for: [TerminalTool.self, CandidateTool.self])
 
         Settings {
             PreferencesView()
                 .preferredColorScheme(appearance.colorScheme)
+                .softMacWindow(appearanceKey: appearanceRawValue)
         }
     }
 }

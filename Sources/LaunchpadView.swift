@@ -4,6 +4,8 @@ import SwiftData
 /// macOS 原生风格的终端工具启动器主界面。
 struct LaunchpadView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(sort: \TerminalTool.name) private var tools: [TerminalTool]
     @Query(sort: \CandidateTool.discoveredAt, order: .reverse) private var candidates: [CandidateTool]
 
@@ -30,6 +32,23 @@ struct LaunchpadView: View {
 
     private var terminalTarget: TerminalTarget {
         TerminalTarget(rawValue: terminalTargetRawValue) ?? .systemTerminal
+    }
+
+    private var theme: SoftMacTheme { SoftMacTheme(colorScheme: colorScheme) }
+
+    private var appearanceSelection: Binding<String> {
+        Binding(
+            get: { appearanceRawValue },
+            set: { newValue in
+                if reduceMotion {
+                    appearanceRawValue = newValue
+                } else {
+                    withAnimation(.easeInOut(duration: 0.30)) {
+                        appearanceRawValue = newValue
+                    }
+                }
+            }
+        )
     }
 
     private var isInbox: Bool { selectedSidebarItem == SidebarItem.inbox.rawValue }
@@ -96,7 +115,7 @@ struct LaunchpadView: View {
                 .accessibilityIdentifier("language-menu")
 
                 Menu {
-                    Picker(AppCopy.text("settingsAppearance", language: language), selection: $appearanceRawValue) {
+                    Picker(AppCopy.text("settingsAppearance", language: language), selection: appearanceSelection) {
                         ForEach(AppAppearance.allCases) { option in
                             Label(option.displayName(language), systemImage: option.symbol).tag(option.rawValue)
                         }
@@ -159,6 +178,8 @@ struct LaunchpadView: View {
             }
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background(theme.sidebarTint)
         .navigationTitle("TermiPad")
         .navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 270)
     }
@@ -218,6 +239,7 @@ struct LaunchpadView: View {
                     }
                     .padding(24)
                 }
+                .background(theme.contentSurface)
             }
         }
         .navigationTitle(contentTitle)
@@ -363,6 +385,7 @@ private struct LaunchNotice {
 }
 
 struct CandidateInboxView: View {
+    @Environment(\.colorScheme) private var colorScheme
     let candidates: [CandidateTool]
     let language: AppLanguage
     let onAccept: (CandidateTool) -> Void
@@ -407,6 +430,8 @@ struct CandidateInboxView: View {
                     }
                     .padding(.vertical, 4)
                 }
+                .scrollContentBackground(.hidden)
+                .background(SoftMacTheme(colorScheme: colorScheme).contentSurface)
             }
         }
         .accessibilityIdentifier("candidate-inbox")
@@ -415,6 +440,7 @@ struct CandidateInboxView: View {
 
 /// 单个工具卡片：保持 macOS 控件的克制密度，并允许右键管理。
 struct ToolTile: View {
+    @Environment(\.colorScheme) private var colorScheme
     let tool: TerminalTool
     let language: AppLanguage
     let action: () -> Void
@@ -438,11 +464,12 @@ struct ToolTile: View {
             .padding(.vertical, 16)
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, minHeight: 142)
-            .background(.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(SoftMacTheme(colorScheme: colorScheme).cardSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(.quaternary, lineWidth: 1)
+                    .strokeBorder(SoftMacTheme(colorScheme: colorScheme).cardStroke, lineWidth: 1)
             }
+            .shadow(color: SoftMacTheme(colorScheme: colorScheme).cardShadow, radius: 9, y: 4)
         }
         .buttonStyle(.plain)
         .contextMenu {

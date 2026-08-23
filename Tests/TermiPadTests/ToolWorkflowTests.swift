@@ -52,4 +52,10 @@ final class ToolWorkflowTests: XCTestCase {
         XCTAssertEqual(ToolCategory.development.displayName(.english), "Development")
         XCTAssertEqual(TerminalTarget.copyOnly.displayName(.english), "Copy Command Only")
     }
+
+    func testAppearanceOptionsExposeNativeLabelsAndSymbols() {
+        XCTAssertEqual(AppAppearance.system.displayName(.english), "System")
+        XCTAssertEqual(AppAppearance.light.displayName(.simplifiedChinese), "浅色")
+        XCTAssertEqual(AppAppearance.dark.symbol, "moon.stars")
+    }
 }

@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct PreferencesView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.simplifiedChinese.rawValue
     @AppStorage("TermiPad.appearance") private var appearanceRawValue = AppAppearance.system.rawValue
     @AppStorage("TermiPad.terminalTarget") private var terminalTargetRawValue = TerminalTarget.systemTerminal.rawValue
@@ -14,7 +16,15 @@ struct PreferencesView: View {
     private var appearance: Binding<AppAppearance> {
         Binding(
             get: { AppAppearance(rawValue: appearanceRawValue) ?? .system },
-            set: { appearanceRawValue = $0.rawValue }
+            set: { newValue in
+                if reduceMotion {
+                    appearanceRawValue = newValue.rawValue
+                } else {
+                    withAnimation(.easeInOut(duration: 0.30)) {
+                        appearanceRawValue = newValue.rawValue
+                    }
+                }
+            }
         )
     }
 
@@ -24,6 +34,8 @@ struct PreferencesView: View {
             set: { terminalTargetRawValue = $0.rawValue }
         )
     }
+
+    private var theme: SoftMacTheme { SoftMacTheme(colorScheme: colorScheme) }
 
     var body: some View {
         Form {
@@ -76,6 +88,8 @@ struct PreferencesView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(theme.contentSurface)
         .padding(20)
         .frame(width: 560)
     }
