@@ -124,7 +124,7 @@ struct LaunchpadView: View {
             Text(launchNotice?.message ?? "")
         }
         .sheet(item: $selectedToolForEdit) { tool in
-            ToolEditView(tool: tool, language: language, onDeleted: { selectedToolForEdit = nil })
+            ToolEditView(language: language, tool: tool, onDeleted: { selectedToolForEdit = nil })
         }
         .sheet(item: $toolForVariables) { tool in
             VariableInputSheet(tool: tool, language: language) { command in
