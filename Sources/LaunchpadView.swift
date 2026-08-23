@@ -113,7 +113,9 @@ struct LaunchpadView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: 70)
+                .controlSize(.regular)
+                .frame(width: 82)
+                .padding(.trailing, 8)
                 .help(AppCopy.text("settingsLanguage", language: language))
                 .accessibilityIdentifier("language-segmented-control")
 
@@ -124,7 +126,8 @@ struct LaunchpadView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: 102)
+                .controlSize(.regular)
+                .frame(width: 126)
                 .help("\(AppCopy.text("settingsAppearance", language: language)): \(appearance.displayName(language))")
                 .accessibilityIdentifier("appearance-segmented-control")
             }
@@ -444,11 +447,17 @@ struct CandidateInboxView: View {
 /// 单个工具卡片：保持 macOS 控件的克制密度，并允许右键管理。
 struct ToolTile: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
     let tool: TerminalTool
     let language: AppLanguage
     let action: () -> Void
     let onEdit: () -> Void
     let onToggleVisibility: () -> Void
+
+    private var hoverDescription: String {
+        tool.toolDescription.isEmpty ? tool.commandTemplate : tool.toolDescription
+    }
 
     var body: some View {
         Button(action: action) {
@@ -459,10 +468,25 @@ struct ToolTile: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity)
-                Text(tool.category.displayName(language))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                Group {
+                    if isHovering {
+                        Label(hoverDescription, systemImage: "info.circle")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity, minHeight: 28)
+                            .transition(.opacity)
+                    } else {
+                        Text(tool.category.displayName(language))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, minHeight: 28)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: isHovering)
             }
             .padding(.vertical, 14)
             .padding(.horizontal, 11)
@@ -475,6 +499,15 @@ struct ToolTile: View {
             .shadow(color: SoftMacTheme(colorScheme: colorScheme).cardShadow, radius: 4, y: 2)
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            if reduceMotion {
+                isHovering = hovering
+            } else {
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    isHovering = hovering
+                }
+            }
+        }
         .contextMenu {
             Button(action: action) { Label(AppCopy.text("launchByTemplate", language: language), systemImage: "play") }
             Divider()
@@ -484,7 +517,9 @@ struct ToolTile: View {
             }
         }
         .accessibilityIdentifier("tool-tile-\(tool.name)")
-        .help(tool.toolDescription.isEmpty ? tool.commandTemplate : tool.toolDescription)
+        .accessibilityLabel("\(tool.name), \(hoverDescription)")
+        .accessibilityHint(AppCopy.text("launchByTemplate", language: language))
+        .help(hoverDescription)
     }
 }
 

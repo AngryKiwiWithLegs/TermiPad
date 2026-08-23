@@ -14,6 +14,11 @@ settings:
     CODE_SIGNING_ALLOWED: "NO"
     CODE_SIGNING_REQUIRED: "NO"
     ENABLE_HARDENED_RUNTIME: "NO"
+    DEAD_CODE_STRIPPING: "YES"
+    ENABLE_USER_SCRIPT_SANDBOXING: "YES"
+    STRING_CATALOG_GENERATE_SYMBOLS: "YES"
+    ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS: "YES"
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: "YES"
 targets:
   TermiPad:
     type: application
@@ -27,6 +32,7 @@ targets:
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_CFBundleDisplayName: TermiPad
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        DEAD_CODE_STRIPPING: "YES"
     scheme:
       testTargets:
         - TermiPadTests
@@ -45,6 +51,7 @@ targets:
         GENERATE_INFOPLIST_FILE: "YES"
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/TermiPad.app/Contents/MacOS/TermiPad"
         BUNDLE_LOADER: "$(TEST_HOST)"
+        DEAD_CODE_STRIPPING: "YES"
 
   TermiPadUITests:
     type: bundle.ui-testing
@@ -58,3 +65,4 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.termipad.uitests
         GENERATE_INFOPLIST_FILE: "YES"
         TEST_TARGET_NAME: TermiPad
+        DEAD_CODE_STRIPPING: "YES"

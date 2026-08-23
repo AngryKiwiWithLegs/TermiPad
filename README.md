@@ -127,3 +127,9 @@ defaults delete com.termipad.app TermiPad.hasPlacedInitialMainWindow
 ```
 
 工程定义已更新 Xcode 升级检查标记。拉取更新后请务必重新运行 `xcodegen generate`，不要继续使用旧的 `.xcodeproj`。
+
+### 工具格子提示与工具栏控件
+
+主窗口的语言和外观分段控件使用常规 macOS 控件尺寸，并在两组控件之间保留额外留白。将鼠标停留在任一工具格子上，分类标签会切换为该工具的用途说明；如果说明尚未补充，则显示启动命令模板。键盘辅助功能会读取同一段用途说明。
+
+`project.yml` 已显式启用 Xcode 推荐的 Dead Code Stripping、User Script Sandboxing、String Catalog Symbol Generation 与 Asset Symbol Extensions。重新生成工程后，项目级“Update to recommended settings”清单应不再要求这些设置。
