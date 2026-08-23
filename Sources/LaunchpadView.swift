@@ -559,21 +559,18 @@ struct ToolTile: View {
             GeometryReader { proxy in
                 Color.clear
                     .contentShape(Rectangle())
-                    .onContinuousHover { phase in
-                        switch phase {
-                        case .active(let location):
-                            let frame = proxy.frame(in: .named(ToolHoverCoordinateSpace.name))
-                            let anchor = ToolHoverAnchor(
-                                id: tool.id,
-                                content: hoverContent,
-                                location: CGPoint(x: frame.minX + location.x, y: frame.minY + location.y)
-                            )
-                            onHoverChanged(tool.id, anchor)
-                        case .ended:
+                    .onHover { hovering in
+                        guard hovering else {
                             onHoverChanged(tool.id, nil)
-                        @unknown default:
-                            onHoverChanged(tool.id, nil)
+                            return
                         }
+                        let frame = proxy.frame(in: .named(ToolHoverCoordinateSpace.name))
+                        let anchor = ToolHoverAnchor(
+                            id: tool.id,
+                            content: hoverContent,
+                            location: CGPoint(x: frame.midX, y: frame.maxY)
+                        )
+                        onHoverChanged(tool.id, anchor)
                     }
             }
         }
