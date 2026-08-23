@@ -48,6 +48,44 @@ enum CandidateStatus: String, Codable, CaseIterable {
     case ignored
 }
 
+/// 在界面中展示工具用途时使用的安全回退策略。
+///
+/// AI 或 GitHub 补充是异步操作；其进度文本不应被写成用户看到的工具功能说明。
+enum ToolDescriptionPresentation {
+    private static let placeholderDescriptions: Set<String> = [
+        "正在尝试 ai 增强",
+        "正在通过 ai 深度解析中",
+        "由本机扫描发现，等待补充说明",
+        "本地发现的终端工具",
+        "discovered locally; details are pending enrichment",
+        "attempting ai enrichment",
+        "ai enrichment in progress",
+        "local terminal tool"
+    ]
+
+    static func displayDescription(for tool: TerminalTool, language: AppLanguage) -> String {
+        let savedDescription = tool.toolDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !isPlaceholder(savedDescription) {
+            return savedDescription
+        }
+
+        let categoryName = tool.category.displayName(language)
+        switch language {
+        case .simplifiedChinese:
+            return "本机发现的\(categoryName)命令行工具。启动命令：\(tool.commandTemplate)"
+        case .english:
+            return "A locally discovered \(categoryName.lowercased()) command-line tool. Launch command: \(tool.commandTemplate)"
+        }
+    }
+
+    static func isPlaceholder(_ description: String) -> Bool {
+        let normalized = description
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        return normalized.isEmpty || placeholderDescriptions.contains(normalized)
+    }
+}
+
 /// 用户已收录的可交互终端工具。
 @Model
 final class TerminalTool {

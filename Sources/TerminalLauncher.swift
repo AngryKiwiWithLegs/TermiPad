@@ -45,17 +45,28 @@ enum TerminalTarget: String, CaseIterable, Identifiable {
 enum TerminalLaunchResult: Equatable {
     case launched(TerminalTarget)
     case copied(TerminalTarget)
+    case copiedAfterAutomationPermissionDenied(TerminalTarget)
 }
 
 enum TerminalLauncher {
     static func launch(command: String, target: TerminalTarget) throws -> TerminalLaunchResult {
         switch target {
         case .systemTerminal:
-            try launchInTerminal(command)
-            return .launched(.systemTerminal)
+            do {
+                try launchInTerminal(command)
+                return .launched(.systemTerminal)
+            } catch TerminalLauncherError.automationPermissionDenied(_) {
+                copy(command)
+                return .copiedAfterAutomationPermissionDenied(.systemTerminal)
+            }
         case .iTerm:
-            try launchInITerm(command)
-            return .launched(.iTerm)
+            do {
+                try launchInITerm(command)
+                return .launched(.iTerm)
+            } catch TerminalLauncherError.automationPermissionDenied(_) {
+                copy(command)
+                return .copiedAfterAutomationPermissionDenied(.iTerm)
+            }
         case .warp:
             try launchInWarp(command)
             return .copied(.warp)
@@ -76,7 +87,7 @@ enum TerminalLauncher {
             do script "\(appleScriptEscape(command))"
         end tell
         """
-        try execute(script)
+        try execute(script, target: .systemTerminal)
     }
 
     private static func launchInITerm(_ command: String) throws {
@@ -96,7 +107,7 @@ enum TerminalLauncher {
             end tell
         end tell
         """
-        try execute(script)
+        try execute(script, target: .iTerm)
     }
 
     private static func launchInWarp(_ command: String) throws {
@@ -107,14 +118,21 @@ enum TerminalLauncher {
         NSWorkspace.shared.openApplication(at: url, configuration: .init(), completionHandler: nil)
     }
 
-    private static func execute(_ source: String) throws {
+    private static func execute(_ source: String, target: TerminalTarget) throws {
         guard let script = NSAppleScript(source: source) else {
             throw TerminalLauncherError.scriptCreationFailed
         }
         var error: NSDictionary?
         script.executeAndReturnError(&error)
         if let error {
-            throw TerminalLauncherError.appleScriptFailed(error.description)
+            let number = (error[NSAppleScript.errorNumber] as? NSNumber)?.intValue
+            if number == -1743 {
+                throw TerminalLauncherError.automationPermissionDenied(target)
+            }
+            let detail = (error[NSAppleScript.errorBriefMessage] as? String)
+                ?? (error[NSAppleScript.errorMessage] as? String)
+                ?? "未知 AppleScript 错误"
+            throw TerminalLauncherError.appleScriptFailed(detail)
         }
     }
 
@@ -135,6 +153,7 @@ enum TerminalLauncher {
 enum TerminalLauncherError: LocalizedError {
     case applicationUnavailable(String)
     case scriptCreationFailed
+    case automationPermissionDenied(TerminalTarget)
     case appleScriptFailed(String)
 
     func message(language: AppLanguage) -> String {
@@ -143,12 +162,16 @@ enum TerminalLauncherError: LocalizedError {
             return "未检测到 \(name)。请在设置中选择其他终端，或改为仅复制命令。"
         case (.scriptCreationFailed, .simplifiedChinese):
             return "无法创建终端启动脚本。"
+        case (.automationPermissionDenied(let target), .simplifiedChinese):
+            return "TermiPad 尚未获准控制 \(target.displayName(.simplifiedChinese))。请前往“系统设置 → 隐私与安全性 → 自动化”，开启 TermiPad 对该终端的权限后重试。"
         case (.appleScriptFailed(let message), .simplifiedChinese):
             return "终端未能接收命令：\(message)"
         case (.applicationUnavailable(let name), .english):
             return "\(name) was not found. Choose another terminal in Settings or copy the command only."
         case (.scriptCreationFailed, .english):
             return "The terminal launch script could not be created."
+        case (.automationPermissionDenied(let target), .english):
+            return "TermiPad is not allowed to control \(target.displayName(.english)). Go to System Settings → Privacy & Security → Automation, enable TermiPad for this terminal, then try again."
         case (.appleScriptFailed(let message), .english):
             return "The terminal could not accept the command: \(message)"
         }

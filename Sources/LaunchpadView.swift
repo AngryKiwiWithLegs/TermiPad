@@ -73,7 +73,8 @@ struct LaunchpadView: View {
             let visibilityMatches = isHiddenLibrary ? tool.isHidden : !tool.isHidden
             let searchMatches = searchText.isEmpty
                 || tool.name.localizedCaseInsensitiveContains(searchText)
-                || tool.toolDescription.localizedCaseInsensitiveContains(searchText)
+                || ToolDescriptionPresentation.displayDescription(for: tool, language: language)
+                    .localizedCaseInsensitiveContains(searchText)
             let categoryMatches = selectedCategory == nil || tool.category == selectedCategory
             return visibilityMatches && searchMatches && categoryMatches
         }
@@ -304,7 +305,7 @@ struct LaunchpadView: View {
             name: candidate.name,
             executablePath: candidate.executablePath,
             commandTemplate: candidate.name,
-            toolDescription: language == .simplifiedChinese ? "由本机扫描发现，等待补充说明。" : "Discovered locally; details are pending enrichment.",
+            toolDescription: "",
             category: category,
             iconSymbol: ToolIconCatalog.definition(for: candidate.name, category: category).symbol
         )
@@ -358,10 +359,10 @@ struct LaunchpadView: View {
     private func execute(command: String, for tool: TerminalTool) {
         do {
             let result = try TerminalLauncher.launch(command: command, target: terminalTarget)
-            tool.lastLaunchedAt = Date()
-            try? modelContext.save()
             switch result {
             case .launched(let target):
+                tool.lastLaunchedAt = Date()
+                try? modelContext.save()
                 let message = target == .iTerm
                     ? AppCopy.text("itermLaunched", language: language)
                     : AppCopy.text("terminalLaunched", language: language)
@@ -371,10 +372,25 @@ struct LaunchpadView: View {
                     ? AppCopy.text("warpCopied", language: language)
                     : AppCopy.text("copied", language: language)
                 launchNotice = LaunchNotice(title: AppCopy.text("operationComplete", language: language), message: message)
+            case .copiedAfterAutomationPermissionDenied(let target):
+                launchNotice = LaunchNotice(
+                    title: AppCopy.text("automationPermissionNeeded", language: language),
+                    message: automationPermissionCopiedMessage(for: target)
+                )
             }
         } catch {
             let message = (error as? TerminalLauncherError)?.message(language: language) ?? error.localizedDescription
             launchNotice = LaunchNotice(title: "\(AppCopy.text("cannotLaunch", language: language)) \(tool.name)", message: message)
+        }
+    }
+
+    private func automationPermissionCopiedMessage(for target: TerminalTarget) -> String {
+        let targetName = target.displayName(language)
+        switch language {
+        case .simplifiedChinese:
+            return "命令已复制到剪贴板。要启用一键启动，请前往“系统设置 → 隐私与安全性 → 自动化”，允许 TermiPad 控制 \(targetName)，然后再次点击此工具。"
+        case .english:
+            return "The command was copied to the clipboard. To enable one-click launch, go to System Settings → Privacy & Security → Automation, allow TermiPad to control \(targetName), then select this tool again."
         }
     }
 }
@@ -456,7 +472,7 @@ struct ToolTile: View {
     let onToggleVisibility: () -> Void
 
     private var hoverDescription: String {
-        tool.toolDescription.isEmpty ? tool.commandTemplate : tool.toolDescription
+        ToolDescriptionPresentation.displayDescription(for: tool, language: language)
     }
 
     var body: some View {

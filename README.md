@@ -64,6 +64,12 @@ open Package.swift
 - **Warp**：打开 Warp 并复制完整命令，用户可检查后粘贴执行。
 - **仅复制命令**：不打开任何终端，只将最终命令复制到剪贴板。
 
+### macOS 自动化权限
+
+首次使用 **Terminal.app** 或 **iTerm** 一键启动时，macOS 可能会请求允许 TermiPad 控制所选终端。这是系统隐私保护机制，应用无法自行绕过。请在弹窗中选择允许；若此前已拒绝，请前往 **系统设置 → 隐私与安全性 → 自动化**，在 TermiPad 下启用对应的 Terminal.app 或 iTerm。
+
+如果权限尚未授予，TermiPad 不会丢弃已填写或渲染好的命令：它会自动复制命令到剪贴板，并显示上述明确的授权路径。授权后再次点击工具即可继续一键启动。
+
 ## 命令模板
 
 将必须由用户填写的内容写为 `{{variable_name}}`，例如：
@@ -130,6 +136,6 @@ defaults delete com.termipad.app TermiPad.hasPlacedInitialMainWindow
 
 ### 工具格子提示与工具栏控件
 
-主窗口的语言和外观分段控件使用常规 macOS 控件尺寸，并在两组控件之间保留额外留白。将鼠标停留在任一工具格子上，分类标签会切换为该工具的用途说明；如果说明尚未补充，则显示启动命令模板。键盘辅助功能会读取同一段用途说明。
+主窗口的语言和外观分段控件使用常规 macOS 控件尺寸，并在两组控件之间保留额外留白。将鼠标停留在任一工具格子上，分类标签会切换为该工具的用途说明；若尚未取得可靠详情，则显示工具分类与启动命令。旧版“正在尝试 AI 增强”等后台状态不会再作为悬停说明或辅助功能文本展示。
 
 `project.yml` 已显式启用 Xcode 推荐的 Dead Code Stripping、User Script Sandboxing、String Catalog Symbol Generation 与 Asset Symbol Extensions。重新生成工程后，项目级“Update to recommended settings”清单应不再要求这些设置。

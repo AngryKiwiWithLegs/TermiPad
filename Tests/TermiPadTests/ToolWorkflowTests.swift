@@ -58,4 +58,33 @@ final class ToolWorkflowTests: XCTestCase {
         XCTAssertEqual(AppAppearance.light.displayName(.simplifiedChinese), "浅色")
         XCTAssertEqual(AppAppearance.dark.symbol, "moon.stars")
     }
+
+    func testPlaceholderDescriptionsNeverBecomeHoverCopy() {
+        let tool = TerminalTool(
+            name: "example-cli",
+            executablePath: "/usr/local/bin/example-cli",
+            commandTemplate: "example-cli",
+            toolDescription: "正在尝试 AI 增强…",
+            category: .development
+        )
+
+        let description = ToolDescriptionPresentation.displayDescription(for: tool, language: .simplifiedChinese)
+        XCTAssertFalse(description.contains("正在尝试 AI 增强"))
+        XCTAssertTrue(description.contains("开发工具"))
+        XCTAssertTrue(description.contains("example-cli"))
+    }
+
+    func testEmptyDescriptionGetsUsefulLocalizedFallback() {
+        let tool = TerminalTool(
+            name: "example-cli",
+            executablePath: "/usr/local/bin/example-cli",
+            commandTemplate: "example-cli --interactive",
+            toolDescription: "",
+            category: .development
+        )
+
+        let description = ToolDescriptionPresentation.displayDescription(for: tool, language: .english)
+        XCTAssertTrue(description.contains("Launch command: example-cli --interactive"))
+        XCTAssertFalse(ToolDescriptionPresentation.isPlaceholder("A compiler for source code."))
+    }
 }
