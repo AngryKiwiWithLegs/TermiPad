@@ -223,7 +223,7 @@ struct LaunchpadView: View {
         .navigationTitle(contentTitle)
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                Text("\(filteredTools.count) \(AppCopy.text(\"tools\", language: language))")
+                Text("\(filteredTools.count) \(AppCopy.text("tools", language: language))")
                     .foregroundStyle(.secondary)
                     .font(.caption)
             }
@@ -346,7 +346,7 @@ struct LaunchpadView: View {
             }
         } catch {
             let message = (error as? TerminalLauncherError)?.message(language: language) ?? error.localizedDescription
-            launchNotice = LaunchNotice(title: "\(AppCopy.text(\"cannotLaunch\", language: language)) \(tool.name)", message: message)
+            launchNotice = LaunchNotice(title: "\(AppCopy.text("cannotLaunch", language: language)) \(tool.name)", message: message)
         }
     }
 }
@@ -497,7 +497,7 @@ struct VariableInputSheet: View {
                     .foregroundStyle(.secondary)
             }
             .formStyle(.grouped)
-            .navigationTitle("\(AppCopy.text(\"launch\", language: language)) \(tool.name)")
+            .navigationTitle("\(AppCopy.text("launch", language: language)) \(tool.name)")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(AppCopy.text("cancel", language: language)) { dismiss() }
