@@ -483,15 +483,10 @@ struct ToolTile: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity)
-                Text(tool.category.displayName(language))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, minHeight: 28)
             }
             .padding(.vertical, 14)
             .padding(.horizontal, 11)
-            .frame(maxWidth: .infinity, minHeight: 132)
+            .frame(maxWidth: .infinity, minHeight: 116)
             .background(SoftMacTheme(colorScheme: colorScheme).cardSurface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
