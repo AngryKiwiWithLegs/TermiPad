@@ -136,6 +136,6 @@ defaults delete com.termipad.app TermiPad.hasPlacedInitialMainWindow
 
 ### 工具格子提示与工具栏控件
 
-主窗口的语言和外观分段控件使用常规 macOS 控件尺寸，并在两组控件之间保留额外留白。将鼠标停留在任一工具格子上，分类标签会切换为该工具的用途说明；若尚未取得可靠详情，则显示工具分类与启动命令。旧版“正在尝试 AI 增强”等后台状态不会再作为悬停说明或辅助功能文本展示。
+主窗口的语言和外观分段控件使用常规 macOS 控件尺寸，并在两组控件之间保留额外留白。将鼠标停留在任一工具格子上，分类标签会切换为两段简洁说明：**用途**说明它能帮助完成什么，**如何开始**说明应在何处启动、需要做什么准备或如何继续操作。常见 CLI（如 Claude、GitHub CLI、Lazygit、FFmpeg、fzf 与 Terraform）使用更具体的本地说明；已有 README / AI 可靠摘要时会优先作为用途。旧版“正在尝试 AI 增强”等后台状态不会再作为悬停说明或辅助功能文本展示。
 
 `project.yml` 已显式启用 Xcode 推荐的 Dead Code Stripping、User Script Sandboxing、String Catalog Symbol Generation 与 Asset Symbol Extensions。重新生成工程后，项目级“Update to recommended settings”清单应不再要求这些设置。

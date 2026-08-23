@@ -68,23 +68,39 @@ final class ToolWorkflowTests: XCTestCase {
             category: .development
         )
 
-        let description = ToolDescriptionPresentation.displayDescription(for: tool, language: .simplifiedChinese)
-        XCTAssertFalse(description.contains("正在尝试 AI 增强"))
-        XCTAssertTrue(description.contains("开发工具"))
-        XCTAssertTrue(description.contains("example-cli"))
+        let content = ToolDescriptionPresentation.hoverContent(for: tool, language: .simplifiedChinese)
+        XCTAssertFalse(content.purpose.contains("正在尝试 AI 增强"))
+        XCTAssertTrue(content.purpose.contains("开发"))
+        XCTAssertTrue(content.gettingStarted.contains("编辑工具"))
     }
 
-    func testEmptyDescriptionGetsUsefulLocalizedFallback() {
+    func testKnownToolGetsFriendlyPurposeAndGettingStartedCopy() {
+        let tool = TerminalTool(
+            name: "claude",
+            executablePath: "/usr/local/bin/claude",
+            commandTemplate: "claude",
+            toolDescription: "",
+            category: .ai
+        )
+
+        let content = ToolDescriptionPresentation.hoverContent(for: tool, language: .simplifiedChinese)
+        XCTAssertTrue(content.purpose.contains("Claude"))
+        XCTAssertTrue(content.gettingStarted.contains("描述"))
+        XCTAssertTrue(content.accessibilitySummary(language: .simplifiedChinese).contains("如何开始"))
+    }
+
+    func testSavedDescriptionIsThePurposeAndUsesFriendlyGettingStartedCopy() {
         let tool = TerminalTool(
             name: "example-cli",
             executablePath: "/usr/local/bin/example-cli",
             commandTemplate: "example-cli --interactive",
-            toolDescription: "",
+            toolDescription: "A compiler for source code.",
             category: .development
         )
 
-        let description = ToolDescriptionPresentation.displayDescription(for: tool, language: .english)
-        XCTAssertTrue(description.contains("Launch command: example-cli --interactive"))
+        let content = ToolDescriptionPresentation.hoverContent(for: tool, language: .english)
+        XCTAssertEqual(content.purpose, "A compiler for source code.")
+        XCTAssertTrue(content.gettingStarted.contains("Edit Tool"))
         XCTAssertFalse(ToolDescriptionPresentation.isPlaceholder("A compiler for source code."))
     }
 }

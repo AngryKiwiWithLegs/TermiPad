@@ -471,8 +471,17 @@ struct ToolTile: View {
     let onEdit: () -> Void
     let onToggleVisibility: () -> Void
 
-    private var hoverDescription: String {
-        ToolDescriptionPresentation.displayDescription(for: tool, language: language)
+    private var hoverContent: ToolHoverContent {
+        ToolDescriptionPresentation.hoverContent(for: tool, language: language)
+    }
+
+
+    private var hoverGettingStartedLabel: String {
+        language == .simplifiedChinese ? "如何开始" : "Getting started"
+    }
+
+    private var hoverPurposeLabel: String {
+        language == .simplifiedChinese ? "用途" : "Purpose"
     }
 
     var body: some View {
@@ -486,19 +495,23 @@ struct ToolTile: View {
                     .frame(maxWidth: .infinity)
                 Group {
                     if isHovering {
-                        Label(hoverDescription, systemImage: "info.circle")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity, minHeight: 28)
-                            .transition(.opacity)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(hoverPurposeLabel)：\(hoverContent.purpose)")
+                                .lineLimit(2)
+                            Text("\(hoverGettingStartedLabel)：\(hoverContent.gettingStarted)")
+                                .lineLimit(2)
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
+                        .transition(.opacity)
                     } else {
                         Text(tool.category.displayName(language))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
-                            .frame(maxWidth: .infinity, minHeight: 28)
+                            .frame(maxWidth: .infinity, minHeight: 54)
                             .transition(.opacity)
                     }
                 }
@@ -506,7 +519,7 @@ struct ToolTile: View {
             }
             .padding(.vertical, 14)
             .padding(.horizontal, 11)
-            .frame(maxWidth: .infinity, minHeight: 132)
+            .frame(maxWidth: .infinity, minHeight: 160)
             .background(SoftMacTheme(colorScheme: colorScheme).cardSurface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -533,9 +546,9 @@ struct ToolTile: View {
             }
         }
         .accessibilityIdentifier("tool-tile-\(tool.name)")
-        .accessibilityLabel("\(tool.name), \(hoverDescription)")
+        .accessibilityLabel("\(tool.name), \(hoverContent.accessibilitySummary(language: language))")
         .accessibilityHint(AppCopy.text("launchByTemplate", language: language))
-        .help(hoverDescription)
+        .help(hoverContent.accessibilitySummary(language: language))
     }
 }
 
