@@ -18,19 +18,33 @@ enum TerminalTarget: String, CaseIterable, Identifiable {
         }
     }
 
-    var helpText: String {
-        switch self {
-        case .systemTerminal: return "在 macOS Terminal 的新标签或窗口中执行命令。"
-        case .iTerm: return "在 iTerm 的当前窗口或新窗口中输入命令。"
-        case .warp: return "打开 Warp 并将命令复制到剪贴板，您可自行粘贴并检查后执行。"
-        case .copyOnly: return "只将完整命令复制到剪贴板，不启动任何终端。"
+    func displayName(_ language: AppLanguage) -> String {
+        switch (self, language) {
+        case (.systemTerminal, _): return "Terminal.app"
+        case (.iTerm, _): return "iTerm"
+        case (.warp, _): return "Warp"
+        case (.copyOnly, .simplifiedChinese): return "仅复制命令"
+        case (.copyOnly, .english): return "Copy Command Only"
+        }
+    }
+
+    func helpText(_ language: AppLanguage) -> String {
+        switch (self, language) {
+        case (.systemTerminal, .simplifiedChinese): return "在 macOS Terminal 的新标签或窗口中执行命令。"
+        case (.iTerm, .simplifiedChinese): return "在 iTerm 的当前窗口或新窗口中输入命令。"
+        case (.warp, .simplifiedChinese): return "打开 Warp 并将命令复制到剪贴板，您可自行粘贴并检查后执行。"
+        case (.copyOnly, .simplifiedChinese): return "只将完整命令复制到剪贴板，不启动任何终端。"
+        case (.systemTerminal, .english): return "Runs the command in a new Terminal tab or window."
+        case (.iTerm, .english): return "Types the command into the current or a new iTerm window."
+        case (.warp, .english): return "Opens Warp and copies the command so you can review and paste it."
+        case (.copyOnly, .english): return "Copies the completed command without opening a terminal."
         }
     }
 }
 
 enum TerminalLaunchResult: Equatable {
-    case launched(message: String)
-    case copied(message: String)
+    case launched(TerminalTarget)
+    case copied(TerminalTarget)
 }
 
 enum TerminalLauncher {
@@ -38,16 +52,16 @@ enum TerminalLauncher {
         switch target {
         case .systemTerminal:
             try launchInTerminal(command)
-            return .launched(message: "已在 Terminal 中执行命令。")
+            return .launched(.systemTerminal)
         case .iTerm:
             try launchInITerm(command)
-            return .launched(message: "已在 iTerm 中输入命令。")
+            return .launched(.iTerm)
         case .warp:
             try launchInWarp(command)
-            return .copied(message: "已打开 Warp，并将命令复制到剪贴板。")
+            return .copied(.warp)
         case .copyOnly:
             copy(command)
-            return .copied(message: "完整命令已复制到剪贴板。")
+            return .copied(.copyOnly)
         }
     }
 
@@ -123,14 +137,24 @@ enum TerminalLauncherError: LocalizedError {
     case scriptCreationFailed
     case appleScriptFailed(String)
 
-    var errorDescription: String? {
-        switch self {
-        case .applicationUnavailable(let name):
+    func message(language: AppLanguage) -> String {
+        switch (self, language) {
+        case (.applicationUnavailable(let name), .simplifiedChinese):
             return "未检测到 \(name)。请在设置中选择其他终端，或改为仅复制命令。"
-        case .scriptCreationFailed:
+        case (.scriptCreationFailed, .simplifiedChinese):
             return "无法创建终端启动脚本。"
-        case .appleScriptFailed(let message):
+        case (.appleScriptFailed(let message), .simplifiedChinese):
             return "终端未能接收命令：\(message)"
+        case (.applicationUnavailable(let name), .english):
+            return "\(name) was not found. Choose another terminal in Settings or copy the command only."
+        case (.scriptCreationFailed, .english):
+            return "The terminal launch script could not be created."
+        case (.appleScriptFailed(let message), .english):
+            return "The terminal could not accept the command: \(message)"
         }
+    }
+
+    var errorDescription: String? {
+        message(language: .simplifiedChinese)
     }
 }

@@ -22,6 +22,23 @@ enum ToolCategory: String, Codable, CaseIterable, Identifiable {
         case .other: return "square.grid.2x2"
         }
     }
+
+    func displayName(_ language: AppLanguage) -> String {
+        switch (self, language) {
+        case (.ai, .simplifiedChinese): return "AI/智能体"
+        case (.development, .simplifiedChinese): return "开发工具"
+        case (.efficiency, .simplifiedChinese): return "效率工具"
+        case (.media, .simplifiedChinese): return "媒体处理"
+        case (.system, .simplifiedChinese): return "网络与系统"
+        case (.other, .simplifiedChinese): return "其他/未分类"
+        case (.ai, .english): return "AI & Agents"
+        case (.development, .english): return "Development"
+        case (.efficiency, .english): return "Productivity"
+        case (.media, .english): return "Media"
+        case (.system, .english): return "Network & System"
+        case (.other, .english): return "Other"
+        }
+    }
 }
 
 /// 发现候选的处理状态。候选不再自动进入工具墙，用户必须明确收录。

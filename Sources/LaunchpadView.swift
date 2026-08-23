@@ -7,6 +7,8 @@ struct LaunchpadView: View {
     @Query(sort: \TerminalTool.name) private var tools: [TerminalTool]
     @Query(sort: \CandidateTool.discoveredAt, order: .reverse) private var candidates: [CandidateTool]
 
+    @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.simplifiedChinese.rawValue
+    @AppStorage("TermiPad.appearance") private var appearanceRawValue = AppAppearance.system.rawValue
     @AppStorage("TermiPad.terminalTarget") private var terminalTargetRawValue = TerminalTarget.systemTerminal.rawValue
     @AppStorage("TermiPad.autoEnrich") private var autoEnrich = true
     @AppStorage("TermiPad.showIgnoredCandidates") private var showIgnoredCandidates = false
@@ -21,6 +23,10 @@ struct LaunchpadView: View {
     @State private var launchNotice: LaunchNotice?
 
     private let columns = [GridItem(.adaptive(minimum: 142, maximum: 180), spacing: 18)]
+
+    private var language: AppLanguage {
+        AppLanguage(rawValue: languageRawValue) ?? .simplifiedChinese
+    }
 
     private var terminalTarget: TerminalTarget {
         TerminalTarget(rawValue: terminalTargetRawValue) ?? .systemTerminal
@@ -51,9 +57,9 @@ struct LaunchpadView: View {
     }
 
     private var contentTitle: String {
-        if isInbox { return "候选收件箱" }
-        if isHiddenLibrary { return "已隐藏工具" }
-        return selectedCategory?.rawValue ?? "所有工具"
+        if isInbox { return AppCopy.text("inbox", language: language) }
+        if isHiddenLibrary { return AppCopy.text("hidden", language: language) }
+        return selectedCategory?.displayName(language) ?? AppCopy.text("allTools", language: language)
     }
 
     var body: some View {
@@ -63,49 +69,70 @@ struct LaunchpadView: View {
             detailContent
         }
         .navigationSplitViewStyle(.balanced)
-        .searchable(text: $searchText, placement: .toolbar, prompt: isInbox ? "筛选候选工具" : "搜索已收录工具")
+        .searchable(text: $searchText, placement: .toolbar, prompt: isInbox ? AppCopy.text("searchCandidates", language: language) : AppCopy.text("searchTools", language: language))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: performScan) {
-                    Label(isScanning ? "正在发现" : "发现工具", systemImage: isScanning ? "arrow.triangle.2.circlepath" : "plus.viewfinder")
+                    Label(isScanning ? AppCopy.text("discovering", language: language) : AppCopy.text("discover", language: language), systemImage: isScanning ? "arrow.triangle.2.circlepath" : "plus.viewfinder")
                 }
                 .disabled(isScanning)
                 .accessibilityIdentifier("discover-tools-button")
             }
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    isPresentingManualTool = true
-                } label: {
-                    Label("手动添加", systemImage: "plus")
+                Button { isPresentingManualTool = true } label: {
+                    Label(AppCopy.text("addTool", language: language), systemImage: "plus")
                 }
             }
+            ToolbarItemGroup(placement: .automatic) {
+                Menu {
+                    Picker(AppCopy.text("settingsLanguage", language: language), selection: $languageRawValue) {
+                        ForEach(AppLanguage.allCases) { option in
+                            Text(option.displayName).tag(option.rawValue)
+                        }
+                    }
+                } label: {
+                    Label(language.compactName, systemImage: "character")
+                }
+                .accessibilityIdentifier("language-menu")
+
+                Menu {
+                    Picker(AppCopy.text("settingsAppearance", language: language), selection: $appearanceRawValue) {
+                        ForEach(AppAppearance.allCases) { option in
+                            Label(option.displayName(language), systemImage: option.symbol).tag(option.rawValue)
+                        }
+                    }
+                } label: {
+                    Image(systemName: (AppAppearance(rawValue: appearanceRawValue) ?? .system).symbol)
+                }
+                .accessibilityIdentifier("appearance-menu")
+            }
         }
-        .alert("工具发现完成", isPresented: Binding(
+        .alert(AppCopy.text("scanComplete", language: language), isPresented: Binding(
             get: { scanMessage != nil },
             set: { if !$0 { scanMessage = nil } }
         )) {
-            Button("好", role: .cancel) { scanMessage = nil }
+            Button(AppCopy.text("ok", language: language), role: .cancel) { scanMessage = nil }
         } message: {
             Text(scanMessage ?? "")
         }
-        .alert(launchNotice?.title ?? "操作结果", isPresented: Binding(
+        .alert(launchNotice?.title ?? AppCopy.text("operationResult", language: language), isPresented: Binding(
             get: { launchNotice != nil },
             set: { if !$0 { launchNotice = nil } }
         )) {
-            Button("好", role: .cancel) { launchNotice = nil }
+            Button(AppCopy.text("ok", language: language), role: .cancel) { launchNotice = nil }
         } message: {
             Text(launchNotice?.message ?? "")
         }
         .sheet(item: $selectedToolForEdit) { tool in
-            ToolEditView(tool: tool, onDeleted: { selectedToolForEdit = nil })
+            ToolEditView(tool: tool, language: language, onDeleted: { selectedToolForEdit = nil })
         }
         .sheet(item: $toolForVariables) { tool in
-            VariableInputSheet(tool: tool) { command in
+            VariableInputSheet(tool: tool, language: language) { command in
                 execute(command: command, for: tool)
             }
         }
         .sheet(isPresented: $isPresentingManualTool) {
-            ManualToolSheet { tool in
+            ManualToolSheet(language: language) { tool in
                 modelContext.insert(tool)
                 try? modelContext.save()
             }
@@ -114,19 +141,19 @@ struct LaunchpadView: View {
 
     private var sidebar: some View {
         List(selection: $selectedSidebarItem) {
-            Section("工具库") {
-                Label("所有工具", systemImage: "square.grid.2x2")
+            Section(AppCopy.text("toolLibrary", language: language)) {
+                Label(AppCopy.text("allTools", language: language), systemImage: "square.grid.2x2")
                     .tag(SidebarItem.all.rawValue)
-                Label("候选收件箱", systemImage: "tray.full")
+                Label(AppCopy.text("inbox", language: language), systemImage: "tray.full")
                     .badge(pendingCandidates.filter { $0.status == .pending }.count)
                     .tag(SidebarItem.inbox.rawValue)
-                Label("已隐藏", systemImage: "eye.slash")
+                Label(AppCopy.text("hidden", language: language), systemImage: "eye.slash")
                     .tag(SidebarItem.hidden.rawValue)
             }
 
-            Section("分类") {
+            Section(AppCopy.text("categories", language: language)) {
                 ForEach(ToolCategory.allCases) { category in
-                    Label(category.rawValue, systemImage: category.iconName)
+                    Label(category.displayName(language), systemImage: category.iconName)
                         .tag(category.rawValue)
                 }
             }
@@ -141,6 +168,7 @@ struct LaunchpadView: View {
         if isInbox {
             CandidateInboxView(
                 candidates: filteredCandidates,
+                language: language,
                 onAccept: accept,
                 onIgnore: ignore,
                 onRestore: restoreCandidate
@@ -168,9 +196,9 @@ struct LaunchpadView: View {
                     Text(emptyLibraryDescription)
                 } actions: {
                     if isHiddenLibrary {
-                        Button("前往工具库") { selectedSidebarItem = SidebarItem.all.rawValue }
+                        Button(AppCopy.text("goToLibrary", language: language)) { selectedSidebarItem = SidebarItem.all.rawValue }
                     } else {
-                        Button("发现工具", action: performScan)
+                        Button(AppCopy.text("discover", language: language), action: performScan)
                             .buttonStyle(.borderedProminent)
                     }
                 }
@@ -181,6 +209,7 @@ struct LaunchpadView: View {
                         ForEach(filteredTools) { tool in
                             ToolTile(
                                 tool: tool,
+                                language: language,
                                 action: { requestLaunch(for: tool) },
                                 onEdit: { selectedToolForEdit = tool },
                                 onToggleVisibility: { toggleVisibility(for: tool) }
@@ -194,7 +223,7 @@ struct LaunchpadView: View {
         .navigationTitle(contentTitle)
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                Text("\(filteredTools.count) 个工具")
+                Text("\(filteredTools.count) \(AppCopy.text(\"tools\", language: language))")
                     .foregroundStyle(.secondary)
                     .font(.caption)
             }
@@ -203,7 +232,8 @@ struct LaunchpadView: View {
     }
 
     private var emptyLibraryTitle: String {
-        isHiddenLibrary ? "没有已隐藏工具" : "尚未收录工具"
+        if isHiddenLibrary { return AppCopy.text("noHidden", language: language) }
+        return searchText.isEmpty ? AppCopy.text("noTools", language: language) : AppCopy.text("noMatches", language: language)
     }
 
     private var emptyLibrarySymbol: String {
@@ -211,8 +241,8 @@ struct LaunchpadView: View {
     }
 
     private var emptyLibraryDescription: String {
-        if isHiddenLibrary { return "在工具卡片的右键菜单中选择“隐藏”后，它会出现在这里。" }
-        return "使用“发现工具”扫描 PATH 中的交互式命令行工具；扫描结果会先进入候选收件箱。"
+        if isHiddenLibrary { return AppCopy.text("hiddenDescription", language: language) }
+        return AppCopy.text("scanDescription", language: language)
     }
 
     private func performScan() {
@@ -233,8 +263,8 @@ struct LaunchpadView: View {
                 try? modelContext.save()
                 isScanning = false
                 scanMessage = freshItems.isEmpty
-                    ? "没有发现新的候选工具。"
-                    : "发现 \(freshItems.count) 个候选工具。请在“候选收件箱”中确认要收录的项目。"
+                    ? AppCopy.text("noNewCandidates", language: language)
+                    : AppCopy.format("foundCandidates", freshItems.count, language: language)
                 if !freshItems.isEmpty { selectedSidebarItem = SidebarItem.inbox.rawValue }
             }
         }
@@ -246,7 +276,7 @@ struct LaunchpadView: View {
             name: candidate.name,
             executablePath: candidate.executablePath,
             commandTemplate: candidate.name,
-            toolDescription: "由本机扫描发现，等待补充说明。",
+            toolDescription: language == .simplifiedChinese ? "由本机扫描发现，等待补充说明。" : "Discovered locally; details are pending enrichment.",
             category: category,
             iconSymbol: ToolIconCatalog.definition(for: candidate.name, category: category).symbol
         )
@@ -303,11 +333,20 @@ struct LaunchpadView: View {
             tool.lastLaunchedAt = Date()
             try? modelContext.save()
             switch result {
-            case .launched(let message), .copied(let message):
-                launchNotice = LaunchNotice(title: "操作完成", message: message)
+            case .launched(let target):
+                let message = target == .iTerm
+                    ? AppCopy.text("itermLaunched", language: language)
+                    : AppCopy.text("terminalLaunched", language: language)
+                launchNotice = LaunchNotice(title: AppCopy.text("operationComplete", language: language), message: message)
+            case .copied(let target):
+                let message = target == .warp
+                    ? AppCopy.text("warpCopied", language: language)
+                    : AppCopy.text("copied", language: language)
+                launchNotice = LaunchNotice(title: AppCopy.text("operationComplete", language: language), message: message)
             }
         } catch {
-            launchNotice = LaunchNotice(title: "无法启动 \(tool.name)", message: error.localizedDescription)
+            let message = (error as? TerminalLauncherError)?.message(language: language) ?? error.localizedDescription
+            launchNotice = LaunchNotice(title: "\(AppCopy.text(\"cannotLaunch\", language: language)) \(tool.name)", message: message)
         }
     }
 }
@@ -325,6 +364,7 @@ private struct LaunchNotice {
 
 struct CandidateInboxView: View {
     let candidates: [CandidateTool]
+    let language: AppLanguage
     let onAccept: (CandidateTool) -> Void
     let onIgnore: (CandidateTool) -> Void
     let onRestore: (CandidateTool) -> Void
@@ -333,9 +373,9 @@ struct CandidateInboxView: View {
         Group {
             if candidates.isEmpty {
                 ContentUnavailableView(
-                    "候选收件箱为空",
+                    AppCopy.text("emptyInbox", language: language),
                     systemImage: "tray",
-                    description: Text("扫描后发现的新命令会先显示在这里；确认收录后才进入工具库。")
+                    description: Text(AppCopy.text("inboxDescription", language: language))
                 )
             } else {
                 List(candidates) { candidate in
@@ -352,16 +392,16 @@ struct CandidateInboxView: View {
                                 .truncationMode(.middle)
                         }
                         Spacer()
-                        Text(candidate.category.rawValue)
+                        Text(candidate.category.displayName(language))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         if candidate.status == .ignored {
-                            Button("恢复") { onRestore(candidate) }
+                            Button(AppCopy.text("restore", language: language)) { onRestore(candidate) }
                                 .buttonStyle(.bordered)
                         } else {
-                            Button("忽略") { onIgnore(candidate) }
+                            Button(AppCopy.text("ignore", language: language)) { onIgnore(candidate) }
                                 .buttonStyle(.bordered)
-                            Button("收录") { onAccept(candidate) }
+                            Button(AppCopy.text("collect", language: language)) { onAccept(candidate) }
                                 .buttonStyle(.borderedProminent)
                         }
                     }
@@ -376,6 +416,7 @@ struct CandidateInboxView: View {
 /// 单个工具卡片：保持 macOS 控件的克制密度，并允许右键管理。
 struct ToolTile: View {
     let tool: TerminalTool
+    let language: AppLanguage
     let action: () -> Void
     let onEdit: () -> Void
     let onToggleVisibility: () -> Void
@@ -389,7 +430,7 @@ struct ToolTile: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity)
-                Text(tool.category.rawValue)
+                Text(tool.category.displayName(language))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -405,11 +446,11 @@ struct ToolTile: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button(action: action) { Label("按模板启动", systemImage: "play") }
+            Button(action: action) { Label(AppCopy.text("launchByTemplate", language: language), systemImage: "play") }
             Divider()
-            Button(action: onEdit) { Label("编辑工具", systemImage: "slider.horizontal.3") }
+            Button(action: onEdit) { Label(AppCopy.text("editTool", language: language), systemImage: "slider.horizontal.3") }
             Button(action: onToggleVisibility) {
-                Label(tool.isHidden ? "取消隐藏" : "隐藏工具", systemImage: tool.isHidden ? "eye" : "eye.slash")
+                Label(tool.isHidden ? AppCopy.text("unhideTool", language: language) : AppCopy.text("hideTool", language: language), systemImage: tool.isHidden ? "eye" : "eye.slash")
             }
         }
         .accessibilityIdentifier("tool-tile-\(tool.name)")
@@ -418,6 +459,7 @@ struct ToolTile: View {
 }
 
 struct VariableInputSheet: View {
+    let language: AppLanguage
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Bindable var tool: TerminalTool
@@ -425,8 +467,9 @@ struct VariableInputSheet: View {
     @State private var values: [String: String]
     @State private var validationMessage: String?
 
-    init(tool: TerminalTool, onLaunch: @escaping (String) -> Void) {
+    init(tool: TerminalTool, language: AppLanguage, onLaunch: @escaping (String) -> Void) {
         self.tool = tool
+        self.language = language
         self.onLaunch = onLaunch
         _values = State(initialValue: CommandTemplate.loadValues(from: tool))
     }
@@ -436,7 +479,7 @@ struct VariableInputSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("需要填写的参数") {
+                Section(AppCopy.text("variables", language: language)) {
                     ForEach(variables, id: \.self) { variable in
                         TextField(variable.replacingOccurrences(of: "_", with: " "), text: Binding(
                             get: { values[variable] ?? "" },
@@ -444,30 +487,30 @@ struct VariableInputSheet: View {
                         ))
                     }
                 }
-                Section("命令预览") {
+                Section(AppCopy.text("commandPreview", language: language)) {
                     Text(preview)
                         .font(.system(.body, design: .monospaced))
                         .textSelection(.enabled)
                 }
-                Text("参数会以 shell 安全转义方式写入本次命令，并保存在本机以便下次使用。")
+                Text(AppCopy.text("variableSecurityHint", language: language))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .formStyle(.grouped)
-            .navigationTitle("启动 \(tool.name)")
+            .navigationTitle("\(AppCopy.text(\"launch\", language: language)) \(tool.name)")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button(AppCopy.text("cancel", language: language)) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("启动") { submit() }
+                    Button(AppCopy.text("launch", language: language)) { submit() }
                 }
             }
-            .alert("请检查参数", isPresented: Binding(
+            .alert(AppCopy.text("checkParameters", language: language), isPresented: Binding(
                 get: { validationMessage != nil },
                 set: { if !$0 { validationMessage = nil } }
             )) {
-                Button("好", role: .cancel) { validationMessage = nil }
+                Button(AppCopy.text("ok", language: language), role: .cancel) { validationMessage = nil }
             } message: {
                 Text(validationMessage ?? "")
             }
@@ -493,6 +536,7 @@ struct VariableInputSheet: View {
 }
 
 struct ManualToolSheet: View {
+    let language: AppLanguage
     @Environment(\.dismiss) private var dismiss
     let onSave: (TerminalTool) -> Void
 
@@ -505,30 +549,30 @@ struct ManualToolSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("基本信息") {
-                    TextField("工具名称", text: $name)
-                    TextField("可执行文件路径", text: $executablePath)
-                    Picker("分类", selection: $category) {
+                Section(AppCopy.text("basicInfo", language: language)) {
+                    TextField(AppCopy.text("toolName", language: language), text: $name)
+                    TextField(AppCopy.text("executablePath", language: language), text: $executablePath)
+                    Picker(AppCopy.text("categories", language: language), selection: $category) {
                         ForEach(ToolCategory.allCases) { category in
-                            Text(category.rawValue).tag(category)
+                            Text(category.displayName(language)).tag(category)
                         }
                     }
                 }
-                Section("启动命令") {
-                    TextField("命令模板", text: $commandTemplate)
-                    Text("需要用户填写的内容可写为 `{{variable_name}}`，首次启动时会自动询问。")
+                Section(AppCopy.text("launchCommand", language: language)) {
+                    TextField(AppCopy.text("commandTemplate", language: language), text: $commandTemplate)
+                    Text(AppCopy.text("variableHint", language: language))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    TextField("说明（可选）", text: $toolDescription, axis: .vertical)
+                    TextField(AppCopy.text("description", language: language), text: $toolDescription, axis: .vertical)
                         .lineLimit(2...4)
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("手动添加工具")
+            .navigationTitle(AppCopy.text("addTool", language: language))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(AppCopy.text("cancel", language: language)) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("添加") {
+                    Button(AppCopy.text("save", language: language)) {
                         let command = commandTemplate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? name : commandTemplate
                         let tool = TerminalTool(
                             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -551,6 +595,7 @@ struct ManualToolSheet: View {
 }
 
 struct ToolEditView: View {
+    let language: AppLanguage
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Bindable var tool: TerminalTool
@@ -559,9 +604,9 @@ struct ToolEditView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("启动方式") {
-                    TextField("启动命令", text: $tool.commandTemplate)
-                    Text("可使用 `{{variable_name}}` 创建首次启动填写项。")
+                Section(AppCopy.text("launchCommand", language: language)) {
+                    TextField(AppCopy.text("launchCommand", language: language), text: $tool.commandTemplate)
+                    Text(AppCopy.text("editVariableHint", language: language))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text(tool.executablePath)
@@ -569,18 +614,18 @@ struct ToolEditView: View {
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
-                Section("整理") {
-                    Picker("分类", selection: $tool.category) {
+                Section(AppCopy.text("organize", language: language)) {
+                    Picker(AppCopy.text("categories", language: language), selection: $tool.category) {
                         ForEach(ToolCategory.allCases) { category in
-                            Text(category.rawValue).tag(category)
+                            Text(category.displayName(language)).tag(category)
                         }
                     }
-                    Toggle("隐藏此工具", isOn: $tool.isHidden)
-                    TextField("工具描述", text: $tool.toolDescription, axis: .vertical)
+                    Toggle(AppCopy.text("hideThisTool", language: language), isOn: $tool.isHidden)
+                    TextField(AppCopy.text("toolDescription", language: language), text: $tool.toolDescription, axis: .vertical)
                         .lineLimit(2...4)
                 }
                 Section {
-                    Button("删除工具", role: .destructive) {
+                    Button(AppCopy.text("delete", language: language), role: .destructive) {
                         modelContext.delete(tool)
                         try? modelContext.save()
                         dismiss()
@@ -591,9 +636,9 @@ struct ToolEditView: View {
             .formStyle(.grouped)
             .navigationTitle(tool.name)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(AppCopy.text("cancel", language: language)) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
+                    Button(AppCopy.text("done", language: language)) {
                         tool.isUserCustomized = true
                         try? modelContext.save()
                         dismiss()

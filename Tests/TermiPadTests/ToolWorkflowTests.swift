@@ -37,4 +37,19 @@ final class ToolWorkflowTests: XCTestCase {
         let command = try CommandTemplate.render(template: "tool {{ model }}", values: ["model": "sonnet"])
         XCTAssertEqual(command, "tool 'sonnet'")
     }
+
+    func testLanguageAndAppearancePreferencesHaveStableValues() {
+        XCTAssertEqual(AppLanguage(rawValue: "zh-Hans"), .simplifiedChinese)
+        XCTAssertEqual(AppLanguage(rawValue: "en"), .english)
+        XCTAssertEqual(AppAppearance.system.colorScheme, nil)
+        XCTAssertEqual(AppAppearance.light.colorScheme, .light)
+        XCTAssertEqual(AppAppearance.dark.colorScheme, .dark)
+    }
+
+    func testCoreCopyAndCategoryAreLocalized() {
+        XCTAssertEqual(AppCopy.text("discover", language: .simplifiedChinese), "发现工具")
+        XCTAssertEqual(AppCopy.text("discover", language: .english), "Discover Tools")
+        XCTAssertEqual(ToolCategory.development.displayName(.english), "Development")
+        XCTAssertEqual(TerminalTarget.copyOnly.displayName(.english), "Copy Command Only")
+    }
 }

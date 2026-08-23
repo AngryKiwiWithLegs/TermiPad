@@ -105,3 +105,9 @@ TermiPad/
 ## 公开版前的开发路线
 
 公开前仍需完成更可靠的 GitHub 匹配、Keychain 凭据存储、品牌图标缓存/替换、备份导出与更深的 UI 测试。详细优先级见私有开发文档 `termipad_development_backlog.md`。
+
+## Language and appearance
+
+TermiPad supports an immediate in-app language switch between **简体中文** and **English**. Use the character button in the main toolbar or open **TermiPad → Settings… → Language**. Tool names, commands, paths, and README-derived descriptions are deliberately left unchanged.
+
+The appearance button in the main toolbar, and **Settings → Appearance**, offers the native macOS choices **System**, **Light**, and **Dark**. The preference is stored locally and applied to both the main window and the Settings window.
