@@ -23,9 +23,6 @@ struct LaunchpadView: View {
     @State private var isPresentingManualTool = false
     @State private var scanMessage: String?
     @State private var launchNotice: LaunchNotice?
-    @State private var activeToolHover: ToolHoverAnchor?
-    @State private var hoveredToolID: UUID?
-    @State private var toolHoverFrames: [UUID: CGRect] = [:]
 
     private let columns = [GridItem(.adaptive(minimum: 142, maximum: 180), spacing: 18)]
 
@@ -235,39 +232,19 @@ struct LaunchpadView: View {
                 }
                 .accessibilityIdentifier("empty-state-title")
             } else {
-                GeometryReader { proxy in
-                    ZStack(alignment: .topLeading) {
-                        ScrollView {
-                            LazyVGrid(columns: columns, spacing: 18) {
-                                ForEach(filteredTools) { tool in
-                                    ToolTile(
-                                        tool: tool,
-                                        language: language,
-                                        action: { requestLaunch(for: tool) },
-                                        onEdit: { selectedToolForEdit = tool },
-                                        onToggleVisibility: { toggleVisibility(for: tool) },
-                                        onHoverChanged: { isHovering in
-                                            updateToolHover(for: tool, isHovering: isHovering)
-                                        }
-                                    )
-                                }
-                            }
-                            .padding(24)
-                        }
-                        .onPreferenceChange(ToolHoverFramePreferenceKey.self) { frames in
-                            toolHoverFrames = frames
-                            refreshActiveToolHover()
-                        }
-
-                        if let activeToolHover {
-                            ToolHoverTooltip(content: activeToolHover.content, language: language)
-                                .offset(tooltipOffset(for: activeToolHover.location, in: proxy.size))
-                                .allowsHitTesting(false)
-                                .transition(reduceMotion ? .identity : .opacity.combined(with: .scale(scale: 0.98, anchor: .topLeading)))
-                                .zIndex(10_000)
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 18) {
+                        ForEach(filteredTools) { tool in
+                            ToolTile(
+                                tool: tool,
+                                language: language,
+                                action: { requestLaunch(for: tool) },
+                                onEdit: { selectedToolForEdit = tool },
+                                onToggleVisibility: { toggleVisibility(for: tool) }
+                            )
                         }
                     }
-                    .coordinateSpace(name: ToolHoverCoordinateSpace.name)
+                    .padding(24)
                 }
                 .background(theme.contentSurface)
             }
@@ -281,66 +258,6 @@ struct LaunchpadView: View {
             }
         }
         .accessibilityIdentifier("tool-library")
-    }
-
-    private func updateToolHover(for tool: TerminalTool, isHovering: Bool) {
-        guard isHovering else {
-            guard hoveredToolID == tool.id else { return }
-            hoveredToolID = nil
-            dismissToolHover()
-            return
-        }
-
-        hoveredToolID = tool.id
-        presentToolHover(for: tool)
-    }
-
-    private func refreshActiveToolHover() {
-        guard let hoveredToolID,
-              let tool = filteredTools.first(where: { $0.id == hoveredToolID }) else {
-            return
-        }
-        presentToolHover(for: tool)
-    }
-
-    private func presentToolHover(for tool: TerminalTool) {
-        guard let frame = toolHoverFrames[tool.id] else { return }
-        let anchor = ToolHoverAnchor(
-            id: tool.id,
-            content: ToolDescriptionPresentation.hoverContent(for: tool, language: language),
-            location: CGPoint(x: frame.midX, y: frame.maxY)
-        )
-        if activeToolHover?.id == tool.id || reduceMotion {
-            activeToolHover = anchor
-        } else {
-            withAnimation(.easeInOut(duration: 0.14)) {
-                activeToolHover = anchor
-            }
-        }
-    }
-
-    private func dismissToolHover() {
-        if reduceMotion {
-            activeToolHover = nil
-        } else {
-            withAnimation(.easeInOut(duration: 0.12)) {
-                activeToolHover = nil
-            }
-        }
-    }
-
-    private func tooltipOffset(for location: CGPoint, in size: CGSize) -> CGSize {
-        let tooltipWidth: CGFloat = 292
-        let tooltipHeight: CGFloat = 156
-        let horizontalPadding: CGFloat = 10
-        let verticalPadding: CGFloat = 10
-        let preferredX = location.x + 14
-        let preferredY = location.y + 18
-        let x = min(max(horizontalPadding, preferredX), max(horizontalPadding, size.width - tooltipWidth - horizontalPadding))
-        let y = preferredY + tooltipHeight <= size.height - verticalPadding
-            ? preferredY
-            : max(verticalPadding, location.y - tooltipHeight - 14)
-        return CGSize(width: x, height: y)
     }
 
     private var emptyLibraryTitle: String {
@@ -543,33 +460,16 @@ struct CandidateInboxView: View {
     }
 }
 
-private enum ToolHoverCoordinateSpace {
-    static let name = "TermiPadToolHoverSpace"
-}
-
-struct ToolHoverAnchor {
-    let id: UUID
-    let content: ToolHoverContent
-    let location: CGPoint
-}
-
-struct ToolHoverFramePreferenceKey: PreferenceKey {
-    static var defaultValue: [UUID: CGRect] = [:]
-
-    static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
-        value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
-    }
-}
-
 /// 单个工具卡片：保持 macOS 控件的克制密度，并允许右键管理。
 struct ToolTile: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
     let tool: TerminalTool
     let language: AppLanguage
     let action: () -> Void
     let onEdit: () -> Void
     let onToggleVisibility: () -> Void
-    let onHoverChanged: (Bool) -> Void
 
     private var hoverContent: ToolHoverContent {
         ToolDescriptionPresentation.hoverContent(for: tool, language: language)
@@ -597,15 +497,19 @@ struct ToolTile: View {
             .shadow(color: SoftMacTheme(colorScheme: colorScheme).cardShadow, radius: 4, y: 2)
         }
         .buttonStyle(.plain)
-        .background {
-            GeometryReader { proxy in
-                Color.clear.preference(
-                    key: ToolHoverFramePreferenceKey.self,
-                    value: [tool.id: proxy.frame(in: .named(ToolHoverCoordinateSpace.name))]
-                )
+        .onHover { hovering in
+            if reduceMotion {
+                isHovering = hovering
+            } else {
+                withAnimation(.easeInOut(duration: 0.14)) {
+                    isHovering = hovering
+                }
             }
         }
-        .onHover(perform: onHoverChanged)
+        .popover(isPresented: $isHovering, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
+            ToolHoverTooltip(content: hoverContent, language: language)
+                .presentationBackground(.clear)
+        }
         .contextMenu {
             Button(action: action) { Label(AppCopy.text("launchByTemplate", language: language), systemImage: "play") }
             Divider()
