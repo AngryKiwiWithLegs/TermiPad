@@ -33,6 +33,8 @@ enum GitHubService {
         let readmeContent: String
         let ownerAvatarURLString: String?
         let repositoryDescription: String?
+        let metadataProvenance: ToolMetadataProvenance
+        let matchConfidence: Int
     }
 
     /// 根据工具名称定位仓库。优先使用官方映射；通用搜索仅接受名称分数足够高的非归档仓库。
@@ -41,7 +43,11 @@ enum GitHubService {
         guard !normalizedToolName.isEmpty else { return nil }
 
         if let officialRepository = officialRepositoryByToolName[normalizedToolName] {
-            return await fetchRepository(fullName: officialRepository)
+            return await fetchRepository(
+                fullName: officialRepository,
+                metadataProvenance: .githubOfficial,
+                matchConfidence: 100
+            )
         }
 
         let query = "\(toolName) topic:cli"
@@ -55,19 +61,22 @@ enum GitHubService {
             return nil
         }
 
-        guard let repository = searchResult.items
+        guard let match = searchResult.items
             .map({ ($0, matchScore(toolName: normalizedToolName, repository: $0)) })
             .filter({ $0.1 >= minimumAutomaticMatchScore })
-            .max(by: { $0.1 < $1.1 })?.0 else {
+            .max(by: { $0.1 < $1.1 }) else {
             return nil
         }
 
+        let repository = match.0
         let readmeContent = await fetchReadme(for: repository.fullName)
         return RepositoryInfo(
             repoFullName: repository.fullName,
             readmeContent: readmeContent ?? repository.description ?? "",
             ownerAvatarURLString: repository.owner?.avatarURLString,
-            repositoryDescription: repository.description
+            repositoryDescription: repository.description,
+            metadataProvenance: .githubMatched,
+            matchConfidence: match.1
         )
     }
 
@@ -90,7 +99,11 @@ enum GitHubService {
         return 0
     }
 
-    private static func fetchRepository(fullName: String) async -> RepositoryInfo? {
+    private static func fetchRepository(
+        fullName: String,
+        metadataProvenance: ToolMetadataProvenance,
+        matchConfidence: Int
+    ) async -> RepositoryInfo? {
         guard let url = URL(string: "\(baseURL)/repos/\(fullName)") else { return nil }
         guard let data = await fetchData(from: url, accept: "application/vnd.github+json"),
               let repository = try? JSONDecoder().decode(GitHubRepoItem.self, from: data),
@@ -103,7 +116,9 @@ enum GitHubService {
             repoFullName: repository.fullName,
             readmeContent: readmeContent ?? repository.description ?? "",
             ownerAvatarURLString: repository.owner?.avatarURLString,
-            repositoryDescription: repository.description
+            repositoryDescription: repository.description,
+            metadataProvenance: metadataProvenance,
+            matchConfidence: matchConfidence
         )
     }
 

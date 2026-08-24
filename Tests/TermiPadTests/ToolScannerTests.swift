@@ -98,3 +98,38 @@ final class GitHubServiceTests: XCTestCase {
         )
     }
 }
+
+final class ToolTrustModelTests: XCTestCase {
+    func testInstallationSourceDetectionRecognizesCommonUserPaths() {
+        XCTAssertEqual(ToolInstallationSource.detect(for: "/opt/homebrew/bin/gh"), .homebrew)
+        XCTAssertEqual(ToolInstallationSource.detect(for: "/Users/example/.cargo/bin/aider"), .cargo)
+        XCTAssertEqual(ToolInstallationSource.detect(for: "/Users/example/.bun/bin/claude"), .bun)
+    }
+
+    func testBackupPreservesSourceAndMetadataTrustFields() {
+        let tool = TerminalTool(
+            name: "gh",
+            executablePath: "/opt/homebrew/bin/gh",
+            commandTemplate: "gh",
+            category: .development,
+            installationSource: .homebrew
+        )
+        tool.repositoryFullName = "cli/cli"
+        tool.metadataProvenance = .githubOfficial
+        tool.metadataMatchConfidence = 100
+        tool.metadataUpdatedAt = Date(timeIntervalSince1970: 1_700_000_000)
+
+        let candidate = CandidateTool(
+            name: "aider",
+            executablePath: "/Users/example/.cargo/bin/aider",
+            category: .ai,
+            installationSource: .cargo
+        )
+
+        let backup = TermiPadBackup.make(tools: [tool], candidates: [candidate], includeSavedVariableValues: false)
+        XCTAssertEqual(backup.tools.first?.installationSourceRawValue, ToolInstallationSource.homebrew.rawValue)
+        XCTAssertEqual(backup.tools.first?.metadataProvenanceRawValue, ToolMetadataProvenance.githubOfficial.rawValue)
+        XCTAssertEqual(backup.tools.first?.metadataMatchConfidence, 100)
+        XCTAssertEqual(backup.candidates.first?.installationSourceRawValue, ToolInstallationSource.cargo.rawValue)
+    }
+}

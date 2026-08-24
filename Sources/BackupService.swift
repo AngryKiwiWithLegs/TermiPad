@@ -23,6 +23,10 @@ struct TermiPadBackup: Codable {
         let iconSymbol: String
         let iconURLString: String?
         let repositoryFullName: String?
+        let installationSourceRawValue: String?
+        let metadataProvenanceRawValue: String?
+        let metadataMatchConfidence: Int?
+        let metadataUpdatedAt: Date?
         let isUserCustomized: Bool
         let isHidden: Bool
         let variableValuesJSON: String?
@@ -39,6 +43,10 @@ struct TermiPadBackup: Codable {
             iconSymbol = tool.iconSymbol
             iconURLString = tool.iconURLString
             repositoryFullName = tool.repositoryFullName
+            installationSourceRawValue = tool.installationSourceRawValue
+            metadataProvenanceRawValue = tool.metadataProvenanceRawValue
+            metadataMatchConfidence = tool.metadataMatchConfidence
+            metadataUpdatedAt = tool.metadataUpdatedAt
             isUserCustomized = tool.isUserCustomized
             isHidden = tool.isHidden
             variableValuesJSON = includeSavedVariableValues ? tool.variableValuesJSON : nil
@@ -55,6 +63,10 @@ struct TermiPadBackup: Codable {
             tool.iconSymbol = iconSymbol
             tool.iconURLString = iconURLString
             tool.repositoryFullName = repositoryFullName
+            tool.installationSourceRawValue = installationSourceRawValue ?? ToolInstallationSource.detect(for: executablePath).rawValue
+            tool.metadataProvenanceRawValue = metadataProvenanceRawValue ?? ToolMetadataProvenance.local.rawValue
+            tool.metadataMatchConfidence = metadataMatchConfidence ?? 0
+            tool.metadataUpdatedAt = metadataUpdatedAt
             tool.isUserCustomized = isUserCustomized
             tool.isHidden = isHidden
             if includesSavedVariableValues {
@@ -72,11 +84,15 @@ struct TermiPadBackup: Codable {
                 toolDescription: toolDescription,
                 category: ToolCategory(rawValue: categoryRawValue) ?? .other,
                 iconSymbol: iconSymbol,
+                installationSource: ToolInstallationSource(rawValue: installationSourceRawValue ?? ""),
                 isUserCustomized: isUserCustomized
             )
             tool.id = id
             tool.iconURLString = iconURLString
             tool.repositoryFullName = repositoryFullName
+            tool.metadataProvenanceRawValue = metadataProvenanceRawValue ?? ToolMetadataProvenance.local.rawValue
+            tool.metadataMatchConfidence = metadataMatchConfidence ?? 0
+            tool.metadataUpdatedAt = metadataUpdatedAt
             tool.isHidden = isHidden
             if includesSavedVariableValues {
                 tool.variableValuesJSON = variableValuesJSON
@@ -93,6 +109,7 @@ struct TermiPadBackup: Codable {
         let executablePath: String
         let categoryRawValue: String
         let statusRawValue: String
+        let installationSourceRawValue: String?
         let discoveredAt: Date
 
         init(candidate: CandidateTool) {
@@ -101,6 +118,7 @@ struct TermiPadBackup: Codable {
             executablePath = candidate.executablePath
             categoryRawValue = candidate.categoryRawValue
             statusRawValue = candidate.statusRawValue
+            installationSourceRawValue = candidate.installationSourceRawValue
             discoveredAt = candidate.discoveredAt
         }
 
@@ -109,6 +127,7 @@ struct TermiPadBackup: Codable {
             candidate.executablePath = executablePath
             candidate.categoryRawValue = categoryRawValue
             candidate.statusRawValue = statusRawValue
+            candidate.installationSourceRawValue = installationSourceRawValue ?? ToolInstallationSource.detect(for: executablePath).rawValue
             candidate.discoveredAt = discoveredAt
         }
 
@@ -117,6 +136,7 @@ struct TermiPadBackup: Codable {
                 name: name,
                 executablePath: executablePath,
                 category: ToolCategory(rawValue: categoryRawValue) ?? .other,
+                installationSource: ToolInstallationSource(rawValue: installationSourceRawValue ?? ""),
                 status: CandidateStatus(rawValue: statusRawValue) ?? .pending
             )
             candidate.id = id

@@ -338,7 +338,8 @@ struct LaunchpadView: View {
             commandTemplate: candidate.name,
             toolDescription: "",
             category: category,
-            iconSymbol: ToolIconCatalog.definition(for: candidate.name, category: category).symbol
+            iconSymbol: ToolIconCatalog.definition(for: candidate.name, category: category).symbol,
+            installationSource: candidate.installationSource
         )
         modelContext.insert(tool)
         candidate.status = .accepted
@@ -369,6 +370,9 @@ struct LaunchpadView: View {
         guard let repository = try? await GitHubService.findRepository(for: toolName) else { return }
         tool.repositoryFullName = repository.repoFullName
         tool.iconURLString = repository.ownerAvatarURLString
+        tool.metadataProvenance = repository.metadataProvenance
+        tool.metadataMatchConfidence = repository.matchConfidence
+        tool.metadataUpdatedAt = Date()
 
         if !tool.isUserCustomized,
            let intelligence = try? await AIService.analyzeTool(name: toolName, readme: repository.readmeContent) {
@@ -469,9 +473,12 @@ struct CandidateInboxView: View {
                                 .truncationMode(.middle)
                         }
                         Spacer()
-                        Text(candidate.category.displayName(language))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(candidate.category.displayName(language))
+                            Text(candidate.installationSource.displayName(language))
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                         if candidate.status == .ignored {
                             Button(AppCopy.text("restore", language: language)) { onRestore(candidate) }
                                 .buttonStyle(.bordered)
@@ -721,6 +728,7 @@ struct ManualToolSheet: View {
                             toolDescription: toolDescription.trimmingCharacters(in: .whitespacesAndNewlines),
                             category: category,
                             iconSymbol: ToolIconCatalog.definition(for: name, category: category).symbol,
+                            installationSource: .manual,
                             isUserCustomized: true
                         )
                         onSave(tool)
@@ -763,6 +771,16 @@ struct ToolEditView: View {
                     Toggle(AppCopy.text("hideThisTool", language: language), isOn: $tool.isHidden)
                     TextField(AppCopy.text("toolDescription", language: language), text: $tool.toolDescription, axis: .vertical)
                         .lineLimit(2...4)
+                }
+                Section(AppCopy.text("toolTrust", language: language)) {
+                    LabeledContent(AppCopy.text("installationSource", language: language), value: tool.installationSource.displayName(language))
+                    LabeledContent(AppCopy.text("metadataSource", language: language), value: tool.metadataProvenance.displayName(language))
+                    if let repository = tool.repositoryFullName {
+                        LabeledContent(AppCopy.text("repository", language: language), value: repository)
+                    }
+                    if let confidence = tool.metadataMatchConfidence, confidence > 0 {
+                        LabeledContent(AppCopy.text("matchConfidence", language: language), value: "\(confidence)%")
+                    }
                 }
                 Section {
                     Button(AppCopy.text("delete", language: language), role: .destructive) {

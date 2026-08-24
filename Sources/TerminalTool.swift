@@ -41,6 +41,71 @@ enum ToolCategory: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// 安装来源只表示可执行文件的发现位置，不代表发行方已经过验证。
+enum ToolInstallationSource: String, Codable, CaseIterable, Sendable {
+    case homebrew
+    case cargo
+    case npm
+    case pnpm
+    case bun
+    case userLocal
+    case manual
+    case other
+
+    static func detect(for executablePath: String) -> ToolInstallationSource {
+        let path = (executablePath as NSString).standardizingPath
+        if path.hasPrefix("/opt/homebrew/") || path.hasPrefix("/usr/local/Homebrew/") { return .homebrew }
+        if path.contains("/.cargo/") { return .cargo }
+        if path.contains("/.npm-") || path.contains("/npm/") { return .npm }
+        if path.contains("/pnpm/") { return .pnpm }
+        if path.contains("/.bun/") { return .bun }
+        if path.hasPrefix(NSHomeDirectory() + "/") { return .userLocal }
+        return .other
+    }
+
+    func displayName(_ language: AppLanguage) -> String {
+        switch (self, language) {
+        case (.homebrew, .simplifiedChinese): return "Homebrew"
+        case (.cargo, .simplifiedChinese): return "Cargo"
+        case (.npm, .simplifiedChinese): return "npm"
+        case (.pnpm, .simplifiedChinese): return "pnpm"
+        case (.bun, .simplifiedChinese): return "Bun"
+        case (.userLocal, .simplifiedChinese): return "用户本地目录"
+        case (.manual, .simplifiedChinese): return "手动添加"
+        case (.other, .simplifiedChinese): return "其他位置"
+        case (.homebrew, .english): return "Homebrew"
+        case (.cargo, .english): return "Cargo"
+        case (.npm, .english): return "npm"
+        case (.pnpm, .english): return "pnpm"
+        case (.bun, .english): return "Bun"
+        case (.userLocal, .english): return "User-local directory"
+        case (.manual, .english): return "Added manually"
+        case (.other, .english): return "Other location"
+        }
+    }
+}
+
+/// 描述工具信息来自何处。用户自行编辑后始终优先于远程补充。
+enum ToolMetadataProvenance: String, Codable, CaseIterable, Sendable {
+    case local
+    case manual
+    case githubOfficial
+    case githubMatched
+
+    func displayName(_ language: AppLanguage) -> String {
+        switch (self, language) {
+        case (.local, .simplifiedChinese): return "本地扫描"
+        case (.manual, .simplifiedChinese): return "手动填写"
+        case (.githubOfficial, .simplifiedChinese): return "GitHub 官方映射"
+        case (.githubMatched, .simplifiedChinese): return "GitHub 高置信匹配"
+        case (.local, .english): return "Local scan"
+        case (.manual, .english): return "Entered manually"
+        case (.githubOfficial, .english): return "Official GitHub mapping"
+        case (.githubMatched, .english): return "High-confidence GitHub match"
+        }
+    }
+}
+
 /// 发现候选的处理状态。候选不再自动进入工具墙，用户必须明确收录。
 enum CandidateStatus: String, Codable, CaseIterable {
     case pending
@@ -361,6 +426,10 @@ final class TerminalTool {
     var iconSymbol: String
     var iconURLString: String?
     var repositoryFullName: String?
+    var installationSourceRawValue: String?
+    var metadataProvenanceRawValue: String?
+    var metadataMatchConfidence: Int?
+    var metadataUpdatedAt: Date?
     var isUserCustomized: Bool
     var isHidden: Bool = false
     var variableValuesJSON: String?
@@ -372,6 +441,16 @@ final class TerminalTool {
         set { categoryRawValue = newValue.rawValue }
     }
 
+    var installationSource: ToolInstallationSource {
+        get { ToolInstallationSource(rawValue: installationSourceRawValue ?? "") ?? .other }
+        set { installationSourceRawValue = newValue.rawValue }
+    }
+
+    var metadataProvenance: ToolMetadataProvenance {
+        get { ToolMetadataProvenance(rawValue: metadataProvenanceRawValue ?? "") ?? .local }
+        set { metadataProvenanceRawValue = newValue.rawValue }
+    }
+
     init(
         name: String,
         executablePath: String,
@@ -379,6 +458,7 @@ final class TerminalTool {
         toolDescription: String = "",
         category: ToolCategory = .other,
         iconSymbol: String = "terminal",
+        installationSource: ToolInstallationSource? = nil,
         isUserCustomized: Bool = false
     ) {
         id = UUID()
@@ -390,6 +470,10 @@ final class TerminalTool {
         self.iconSymbol = iconSymbol
         iconURLString = nil
         repositoryFullName = nil
+        installationSourceRawValue = (installationSource ?? ToolInstallationSource.detect(for: executablePath)).rawValue
+        metadataProvenanceRawValue = isUserCustomized ? ToolMetadataProvenance.manual.rawValue : ToolMetadataProvenance.local.rawValue
+        metadataMatchConfidence = 0
+        metadataUpdatedAt = nil
         self.isUserCustomized = isUserCustomized
         isHidden = false
         variableValuesJSON = nil
@@ -406,6 +490,7 @@ final class CandidateTool {
     var executablePath: String
     var categoryRawValue: String
     var statusRawValue: String
+    var installationSourceRawValue: String?
     var discoveredAt: Date
 
     var category: ToolCategory {
@@ -418,10 +503,16 @@ final class CandidateTool {
         set { statusRawValue = newValue.rawValue }
     }
 
+    var installationSource: ToolInstallationSource {
+        get { ToolInstallationSource(rawValue: installationSourceRawValue ?? "") ?? .other }
+        set { installationSourceRawValue = newValue.rawValue }
+    }
+
     init(
         name: String,
         executablePath: String,
         category: ToolCategory,
+        installationSource: ToolInstallationSource? = nil,
         status: CandidateStatus = .pending
     ) {
         id = UUID()
@@ -429,6 +520,7 @@ final class CandidateTool {
         self.executablePath = executablePath
         categoryRawValue = category.rawValue
         statusRawValue = status.rawValue
+        installationSourceRawValue = (installationSource ?? ToolInstallationSource.detect(for: executablePath)).rawValue
         discoveredAt = Date()
     }
 }
