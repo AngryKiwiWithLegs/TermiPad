@@ -93,7 +93,6 @@ final class GitHubServiceTests: XCTestCase {
             name: name,
             fullName: fullName,
             description: nil,
-            owner: nil,
             isArchived: archived
         )
     }
