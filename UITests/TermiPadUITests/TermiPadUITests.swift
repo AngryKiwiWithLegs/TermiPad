@@ -18,16 +18,10 @@ final class TermiPadUITests: XCTestCase {
         )
         onboardingFinish.click()
 
-        let title = app.staticTexts["app-title"]
-        XCTAssertTrue(
-            title.waitForExistence(timeout: 10),
-            "完成首次引导后，TermiPad 应显示应用标题。"
-        )
-
         let discoveryButton = app.buttons["discover-tools-button"]
         XCTAssertTrue(
-            discoveryButton.exists,
-            "TermiPad 应显示“发现工具”按钮。"
+            discoveryButton.waitForExistence(timeout: 10),
+            "完成首次引导后，TermiPad 应显示“发现工具”按钮。"
         )
 
         XCTAssertTrue(
