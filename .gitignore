@@ -4,6 +4,7 @@ TermiPad.xcodeproj/
 
 # Xcode user state and build products
 DerivedData/
+.verification/
 *.xcuserstate
 xcuserdata/
 

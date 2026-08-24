@@ -90,6 +90,15 @@ TermiPad 会在启动前显示表单。变量值会使用 POSIX 单引号方式�
 
 ## 自动化验证
 
+在 macOS 本机，优先运行以下一键验证脚本：
+
+```bash
+cd ~/TermiPad
+./scripts/verify-macos.sh
+```
+
+脚本会重新生成 `.xcodeproj`，依次执行 Swift Package 清单校验、单元测试、`xcodebuild` 构建与 macOS UI 冒烟测试，并将每次日志、`.xcresult`、可导出的 UI 截图和摘要写入 `.verification/`。如只需快速检查核心逻辑和构建，可运行 `./scripts/verify-macos.sh --skip-ui`。
+
 GitHub Actions 工作流包含：
 
 1. Swift 单元测试：扫描过滤、分类、命令变量与图标回退。
@@ -102,6 +111,7 @@ GitHub Actions 工作流包含：
 
 ```text
 TermiPad/
+├── scripts/verify-macos.sh      # 一键执行本机 macOS 验证
 ├── Sources/
 │   ├── TerminalTool.swift       # SwiftData 工具与候选模型
 │   ├── ToolScanner.swift        # PATH 与常见生态路径扫描
