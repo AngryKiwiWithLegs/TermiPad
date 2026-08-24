@@ -16,6 +16,19 @@ final class ToolScannerTests: XCTestCase {
         XCTAssertFalse(ToolScanner.shouldExclude(commandName: "fzf"))
     }
 
+    func testScriptsAndAppleDeveloperToolchainsAreExcluded() {
+        XCTAssertTrue(ToolScanner.shouldExclude(commandName: "helper.sh"))
+        XCTAssertTrue(ToolScanner.isExcludedInstallationPath("/Library/Developer/CommandLineTools/usr/bin"))
+        XCTAssertTrue(ToolScanner.isExcludedInstallationPath("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin"))
+        XCTAssertTrue(ToolScanner.isExcludedInstallationPath("/Library/Apple/usr/bin"))
+    }
+
+    func testInstallationPathRulesRespectDirectoryBoundaries() {
+        XCTAssertFalse(ToolScanner.isExcludedInstallationPath("/usr/bin-tools"))
+        XCTAssertFalse(ToolScanner.isExcludedInstallationPath("/opt/homebrew/bin"))
+        XCTAssertFalse(ToolScanner.isExcludedInstallationPath("/Users/example/.local/bin"))
+    }
+
     func testAIClassification() {
         XCTAssertEqual(ToolScanner.guessCategory(for: "claude"), .ai)
         XCTAssertEqual(ToolScanner.guessCategory(for: "Gemini-CLI"), .ai)
@@ -52,5 +65,36 @@ final class ToolIconCatalogTests: XCTestCase {
         let second = ToolIconCatalog.definition(for: "my-private-cli", category: .other)
 
         XCTAssertEqual(first.symbol, second.symbol)
+    }
+}
+
+final class GitHubServiceTests: XCTestCase {
+    func testExactRepositoryNameReceivesHighestConfidence() {
+        let repository = makeRepository(name: "ripgrep", fullName: "BurntSushi/ripgrep")
+        XCTAssertEqual(GitHubService.matchScore(toolName: "rg", repository: repository), 0)
+        XCTAssertEqual(GitHubService.matchScore(toolName: "ripgrep", repository: repository), 100)
+    }
+
+    func testClearToolPrefixCanBeAutomaticallyMatched() {
+        let repository = makeRepository(name: "mytool-cli", fullName: "example/mytool-cli")
+        XCTAssertEqual(GitHubService.matchScore(toolName: "mytool", repository: repository), 85)
+    }
+
+    func testUnrelatedAndArchivedRepositoriesAreNeverAutomaticMatches() {
+        let unrelated = makeRepository(name: "awesome-cli-list", fullName: "example/awesome-cli-list")
+        let archived = makeRepository(name: "mytool", fullName: "example/mytool", archived: true)
+
+        XCTAssertEqual(GitHubService.matchScore(toolName: "mytool", repository: unrelated), 0)
+        XCTAssertEqual(GitHubService.matchScore(toolName: "mytool", repository: archived), Int.min)
+    }
+
+    private func makeRepository(name: String, fullName: String, archived: Bool = false) -> GitHubRepoItem {
+        GitHubRepoItem(
+            name: name,
+            fullName: fullName,
+            description: nil,
+            owner: nil,
+            isArchived: archived
+        )
     }
 }

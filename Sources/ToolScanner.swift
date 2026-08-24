@@ -10,7 +10,13 @@ enum ToolScanner {
         "sh", "bash", "zsh", "fish", "python", "python3", "node", "ruby", "perl", "swift", "env", "which"
     ]
 
-    private static let systemDirectories: Set<String> = ["/bin", "/sbin", "/usr/bin", "/usr/sbin"]
+    /// Apple 随系统或 Xcode / Command Line Tools 安装的目录。这里的内容是构建零件或系统辅助命令，
+    /// 不是 TermiPad 应主动收录的用户安装、可交互 CLI。
+    private static let excludedPathPrefixes = [
+        "/bin", "/sbin", "/usr/bin", "/usr/sbin",
+        "/Library/Apple/usr", "/Library/Developer/CommandLineTools", "/Library/Developer/Toolchains",
+        "/Applications/Xcode.app/Contents/Developer", "/System/Library"
+    ]
 
     /// 常见第三方 CLI 安装路径；PATH 仍是最高优先级来源。
     private static var supplementalSearchPaths: [String] {
@@ -29,8 +35,8 @@ enum ToolScanner {
         var discovered: [String: String] = [:]
 
         for directory in orderedPaths {
-            let normalizedDirectory = (directory as NSString).standardizingPath
-            guard !systemDirectories.contains(normalizedDirectory),
+            let normalizedDirectory = normalizedPath(directory)
+            guard !isExcludedInstallationPath(normalizedDirectory),
                   fileManager.fileExists(atPath: normalizedDirectory),
                   let children = try? fileManager.contentsOfDirectory(atPath: normalizedDirectory) else {
                 continue
@@ -38,7 +44,7 @@ enum ToolScanner {
 
             for name in children where isCandidateFileName(name) {
                 let path = (normalizedDirectory as NSString).appendingPathComponent(name)
-                guard !shouldExclude(commandName: name), fileManager.isExecutableFile(atPath: path) else { continue }
+                guard isEligibleExecutable(named: name, at: path, fileManager: fileManager) else { continue }
                 if discovered[name] == nil { discovered[name] = path }
             }
         }
@@ -55,6 +61,20 @@ enum ToolScanner {
             || normalized.hasSuffix(".d")
             || normalized.hasSuffix(".py")
             || normalized.hasSuffix(".js")
+            || normalized.hasSuffix(".sh")
+    }
+
+    /// 可在单元测试中直接验证的安装路径规则。路径经过标准化，确保 `/usr/bin-tools` 不会被误判为 `/usr/bin`。
+    static func isExcludedInstallationPath(_ path: String) -> Bool {
+        let normalized = normalizedPath(path)
+        return excludedPathPrefixes.contains { prefix in
+            normalized == prefix || normalized.hasPrefix(prefix + "/")
+        }
+    }
+
+    /// 将符号链接解析到实际目标。用户目录中的包装命令若最终仍指向 Apple 开发工具链，也不应成为候选。
+    static func resolvedExecutablePath(_ path: String) -> String {
+        URL(fileURLWithPath: path).resolvingSymlinksInPath().path
     }
 
     static func guessCategory(for toolName: String) -> ToolCategory {
@@ -71,12 +91,29 @@ enum ToolScanner {
         })?.0 ?? .other
     }
 
+    private static func isEligibleExecutable(named name: String, at path: String, fileManager: FileManager) -> Bool {
+        var isDirectory: ObjCBool = false
+        guard !shouldExclude(commandName: name),
+              fileManager.fileExists(atPath: path, isDirectory: &isDirectory),
+              !isDirectory.boolValue,
+              fileManager.isExecutableFile(atPath: path) else {
+            return false
+        }
+
+        let resolvedPath = resolvedExecutablePath(path)
+        return !isExcludedInstallationPath(resolvedPath)
+    }
+
     private static func orderedUnique(_ paths: [String]) -> [String] {
         var seen = Set<String>()
         return paths.compactMap { rawPath in
-            let path = (rawPath as NSString).standardizingPath
+            let path = normalizedPath(rawPath)
             return seen.insert(path).inserted ? path : nil
         }
+    }
+
+    private static func normalizedPath(_ path: String) -> String {
+        (path as NSString).standardizingPath
     }
 
     private static func isCandidateFileName(_ name: String) -> Bool {
