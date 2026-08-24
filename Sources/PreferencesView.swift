@@ -90,6 +90,7 @@ struct PreferencesView: View {
                         Text(target.displayName(language)).tag(target)
                     }
                 }
+                .accessibilityIdentifier("settings-terminal-picker")
                 Text((TerminalTarget(rawValue: terminalTargetRawValue) ?? .systemTerminal).helpText(language))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -138,6 +139,7 @@ struct PreferencesView: View {
 
                 HStack {
                     Button(AppCopy.text("exportBackup", language: language), action: prepareBackupExport)
+                        .accessibilityIdentifier("settings-export-backup")
                     Button(AppCopy.text("importBackup", language: language)) {
                         isImportingBackup = true
                     }

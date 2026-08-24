@@ -41,8 +41,12 @@ final class TermiPadUITests: XCTestCase {
         completeOnboarding()
 
         XCTAssertTrue(
-            app.descendants(matching: .any)["preferences-content"].waitForExistence(timeout: 10),
-            "设置启动场景应展示与菜单栏共用的偏好内容。"
+            app.descendants(matching: .any)["settings-terminal-picker"].waitForExistence(timeout: 10),
+            "设置启动场景应展示默认终端偏好。"
+        )
+        XCTAssertTrue(
+            app.buttons["settings-export-backup"].waitForExistence(timeout: 5),
+            "设置启动场景应展示备份导出操作。"
         )
         XCTAssertFalse(
             app.buttons["discover-tools-button"].exists,
