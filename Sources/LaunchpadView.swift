@@ -97,6 +97,9 @@ struct LaunchpadView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .onAppear {
+            if ProcessInfo.processInfo.environment["TERMIPAD_UI_TEST_OPEN_SETTINGS"] == "1" {
+                selectedSidebarItem = SidebarItem.settings.rawValue
+            }
             if !hasCompletedOnboarding {
                 isPresentingOnboarding = true
             }
