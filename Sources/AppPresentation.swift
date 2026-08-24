@@ -62,7 +62,7 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 enum AppCopy {
     static func text(_ key: String, language: AppLanguage) -> String {
         let chinese: [String: String] = [
-            "allTools": "所有工具", "inbox": "候选收件箱", "hidden": "已隐藏", "categories": "分类", "toolLibrary": "工具库",
+            "allTools": "所有工具", "inbox": "候选收件箱", "hidden": "已隐藏", "categories": "分类", "toolLibrary": "工具库", "settings": "设置",
             "discover": "发现工具", "discovering": "正在发现", "addTool": "手动添加", "searchTools": "搜索工具", "searchCandidates": "筛选候选工具",
             "noTools": "尚未收录工具", "noMatches": "未找到匹配工具", "noHidden": "没有已隐藏工具", "emptyInbox": "候选收件箱为空",
             "scanDescription": "使用“发现工具”扫描 PATH 中的交互式命令行工具；扫描结果会先进入候选收件箱。",
@@ -87,7 +87,7 @@ enum AppCopy {
             "warpCopied": "已打开 Warp，并将命令复制到剪贴板。", "copied": "完整命令已复制到剪贴板。", "terminalLaunched": "已在 Terminal 中执行命令。", "itermLaunched": "已在 iTerm 中输入命令。"
         ]
         let english: [String: String] = [
-            "allTools": "All Tools", "inbox": "Review Inbox", "hidden": "Hidden", "categories": "Categories", "toolLibrary": "Library",
+            "allTools": "All Tools", "inbox": "Review Inbox", "hidden": "Hidden", "categories": "Categories", "toolLibrary": "Library", "settings": "Settings",
             "discover": "Discover Tools", "discovering": "Discovering", "addTool": "Add Manually", "searchTools": "Search tools", "searchCandidates": "Filter candidates",
             "noTools": "No tools collected", "noMatches": "No matching tools", "noHidden": "No hidden tools", "emptyInbox": "Your review inbox is empty",
             "scanDescription": "Use Discover Tools to scan interactive CLI commands in PATH. New results are reviewed before entering your library.",

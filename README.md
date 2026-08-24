@@ -59,13 +59,13 @@ open Package.swift
 
 首次启动时，TermiPad 会明确说明以下行为：扫描仅检查 PATH 与常见第三方安装目录；新命令先进入候选收件箱，不会自动加入工具墙；工具、分类、模板与变量值默认保存在本机；GitHub / AI 网络补充可选且默认关闭。终端命令只会在您点击工具后交给所选终端执行。
 
-从 **TermiPad → Settings… → AI 服务** 可设置兼容 OpenAI Chat Completions 的服务地址、模型和 API Key。API Key 仅写入 macOS Keychain，不保存在 UserDefaults 或仓库中；删除 API Key 后，应用会自动退回本地说明和手动编辑能力。
+从工具库左侧边栏的 **设置**，或 macOS 菜单栏的 **TermiPad → Settings… → AI 服务**，可设置兼容 OpenAI Chat Completions 的服务地址、模型和 API Key。API Key 仅写入 macOS Keychain，不保存在 UserDefaults 或仓库中；删除 API Key 后，应用会自动退回本地说明和手动编辑能力。
 
-从 **TermiPad → Settings… → 备份与恢复** 可导出版本化 JSON 备份，或导入另一台 Mac 的备份并先预览合并结果。备份包含工具、候选、分类、图标元数据和命令模板；**API Key 永不导出**，已保存的变量值默认排除，只有用户明确勾选后才会包含。导入按记录 ID 和可执行路径合并，不会删除当前已有工具或候选。
+从左侧边栏的 **设置 → 备份与恢复**，或菜单栏的 **TermiPad → Settings… → 备份与恢复**，可导出版本化 JSON 备份，或导入另一台 Mac 的备份并先预览合并结果。备份包含工具、候选、分类、图标元数据和命令模板；**API Key 永不导出**，已保存的变量值默认排除，只有用户明确勾选后才会包含。导入按记录 ID 和可执行路径合并，不会删除当前已有工具或候选。
 
 ## 终端偏好
 
-从 macOS 菜单栏打开 **TermiPad → Settings…**：
+从左侧边栏的 **设置**，或从 macOS 菜单栏打开 **TermiPad → Settings…**：
 
 - **Terminal.app**：通过 AppleScript 在新标签或窗口中执行命令。
 - **iTerm**：将命令写入当前会话；未打开窗口时会创建默认窗口。

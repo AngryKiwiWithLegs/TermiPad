@@ -58,6 +58,7 @@ struct LaunchpadView: View {
 
     private var isInbox: Bool { selectedSidebarItem == SidebarItem.inbox.rawValue }
     private var isHiddenLibrary: Bool { selectedSidebarItem == SidebarItem.hidden.rawValue }
+    private var isSettings: Bool { selectedSidebarItem == SidebarItem.settings.rawValue }
 
     private var selectedCategory: ToolCategory? {
         ToolCategory(rawValue: selectedSidebarItem)
@@ -96,16 +97,18 @@ struct LaunchpadView: View {
         .navigationSplitViewStyle(.balanced)
         .searchable(text: $searchText, placement: .toolbar, prompt: isInbox ? AppCopy.text("searchCandidates", language: language) : AppCopy.text("searchTools", language: language))
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: performScan) {
-                    Label(isScanning ? AppCopy.text("discovering", language: language) : AppCopy.text("discover", language: language), systemImage: isScanning ? "arrow.triangle.2.circlepath" : "plus.viewfinder")
+            if !isSettings {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: performScan) {
+                        Label(isScanning ? AppCopy.text("discovering", language: language) : AppCopy.text("discover", language: language), systemImage: isScanning ? "arrow.triangle.2.circlepath" : "plus.viewfinder")
+                    }
+                    .disabled(isScanning)
+                    .accessibilityIdentifier("discover-tools-button")
                 }
-                .disabled(isScanning)
-                .accessibilityIdentifier("discover-tools-button")
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button { isPresentingManualTool = true } label: {
-                    Label(AppCopy.text("addTool", language: language), systemImage: "plus")
+                ToolbarItem(placement: .primaryAction) {
+                    Button { isPresentingManualTool = true } label: {
+                        Label(AppCopy.text("addTool", language: language), systemImage: "plus")
+                    }
                 }
             }
             ToolbarItemGroup(placement: .automatic) {
@@ -193,6 +196,12 @@ struct LaunchpadView: View {
                         .tag(category.rawValue)
                 }
             }
+
+            Section {
+                Label(AppCopy.text("settings", language: language), systemImage: "gearshape")
+                    .tag(SidebarItem.settings.rawValue)
+                    .accessibilityIdentifier("sidebar-settings")
+            }
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
@@ -203,7 +212,11 @@ struct LaunchpadView: View {
 
     @ViewBuilder
     private var detailContent: some View {
-        if isInbox {
+        if isSettings {
+            PreferencesView(embeddedInNavigation: true)
+                .navigationTitle(AppCopy.text("settings", language: language))
+                .accessibilityIdentifier("sidebar-settings-detail")
+        } else if isInbox {
             CandidateInboxView(
                 candidates: filteredCandidates,
                 language: language,
@@ -410,6 +423,7 @@ private enum SidebarItem: String {
     case all = "__all_tools__"
     case inbox = "__candidate_inbox__"
     case hidden = "__hidden_tools__"
+    case settings = "__settings__"
 }
 
 private struct LaunchNotice {

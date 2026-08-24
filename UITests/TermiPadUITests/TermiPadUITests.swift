@@ -39,6 +39,17 @@ final class TermiPadUITests: XCTestCase {
             "TermiPad 应显示三档外观分段切换控件。"
         )
 
+        let settingsEntry = app.descendants(matching: .any)["sidebar-settings"]
+        XCTAssertTrue(
+            settingsEntry.waitForExistence(timeout: 5),
+            "TermiPad 应在左边栏提供常驻设置入口。"
+        )
+        settingsEntry.click()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["preferences-content"].waitForExistence(timeout: 5),
+            "左边栏设置入口应展示与菜单栏共用的设置内容。"
+        )
+
         attachScreenshot(named: "termipad-launch")
     }
 

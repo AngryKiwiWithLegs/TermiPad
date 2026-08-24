@@ -3,6 +3,7 @@ import SwiftData
 import UniformTypeIdentifiers
 
 struct PreferencesView: View {
+    let embeddedInNavigation: Bool
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
     @Query(sort: \TerminalTool.name) private var tools: [TerminalTool]
@@ -25,6 +26,10 @@ struct PreferencesView: View {
     @State private var isImportingBackup = false
     @State private var pendingImportedBackup: TermiPadBackup?
     @State private var backupMessage: String?
+
+    init(embeddedInNavigation: Bool = false) {
+        self.embeddedInNavigation = embeddedInNavigation
+    }
 
     private var language: AppLanguage {
         AppLanguage(rawValue: languageRawValue) ?? .simplifiedChinese
@@ -146,6 +151,7 @@ struct PreferencesView: View {
             }
         }
         .formStyle(.grouped)
+        .accessibilityIdentifier("preferences-content")
         .onAppear {
             hasStoredAPIKey = AIService.hasStoredAPIKey
         }
@@ -194,7 +200,7 @@ struct PreferencesView: View {
         .scrollContentBackground(.hidden)
         .background(theme.contentSurface)
         .padding(20)
-        .frame(width: 560)
+        .frame(maxWidth: embeddedInNavigation ? .infinity : 560, alignment: .topLeading)
     }
 
     private func saveAPIKey() {
