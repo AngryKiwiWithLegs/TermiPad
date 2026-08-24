@@ -2,8 +2,8 @@ import Foundation
 
 /// 负责调用兼容 OpenAI Chat Completions 的服务，并将 README 提炼为可启动的工具信息。
 ///
-/// 配置方式：在应用的 UserDefaults 中写入以下值（后续会在设置页中提供图形化配置）。
-/// - `TermiPad.aiAPIKey`：服务 API Key
+/// 配置方式：API Key 保存在 macOS Keychain；服务地址和模型名称属于普通偏好，保存在 UserDefaults。
+/// - Keychain `ai-api-key`：服务 API Key
 /// - `TermiPad.aiBaseURL`：可选，默认 `https://api.openai.com/v1`
 /// - `TermiPad.aiModel`：可选，默认 `gpt-4o-mini`
 enum AIService {
@@ -19,13 +19,33 @@ enum AIService {
         }
     }
 
-    private static let apiKeyDefaultsKey = "TermiPad.aiAPIKey"
-    private static let baseURLDefaultsKey = "TermiPad.aiBaseURL"
-    private static let modelDefaultsKey = "TermiPad.aiModel"
+    static let baseURLDefaultsKey = "TermiPad.aiBaseURL"
+    static let modelDefaultsKey = "TermiPad.aiModel"
+    private static let legacyAPIKeyDefaultsKey = "TermiPad.aiAPIKey"
+    private static let apiKeyAccount = "ai-api-key"
+
+    static var hasStoredAPIKey: Bool {
+        (try? storedAPIKey())?.isEmpty == false
+    }
+
+    static func saveAPIKey(_ value: String) throws {
+        let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedValue.isEmpty else {
+            try clearAPIKey()
+            return
+        }
+        try KeychainStore.save(trimmedValue, for: apiKeyAccount)
+        UserDefaults.standard.removeObject(forKey: legacyAPIKeyDefaultsKey)
+    }
+
+    static func clearAPIKey() throws {
+        try KeychainStore.remove(account: apiKeyAccount)
+        UserDefaults.standard.removeObject(forKey: legacyAPIKeyDefaultsKey)
+    }
 
     /// 解析 README：如已配置 API Key，则调用大语言模型；否则返回明确标注的本地回退结果。
     static func analyzeTool(name: String, readme: String) async throws -> ToolIntelligence {
-        guard let apiKey = UserDefaults.standard.string(forKey: apiKeyDefaultsKey), !apiKey.isEmpty else {
+        guard let apiKey = try storedAPIKey(), !apiKey.isEmpty else {
             return localFallback(name: name, readme: readme)
         }
 
@@ -68,6 +88,21 @@ enum AIService {
         }
 
         return try decodeIntelligence(from: content, fallbackName: name)
+    }
+
+    private static func storedAPIKey() throws -> String? {
+        if let keychainValue = try KeychainStore.string(for: apiKeyAccount), !keychainValue.isEmpty {
+            return keychainValue
+        }
+
+        // 仅迁移旧版偏好中的密钥；迁移成功或失败后都不再继续以 UserDefaults 作为运行时凭据来源。
+        guard let legacyValue = UserDefaults.standard.string(forKey: legacyAPIKeyDefaultsKey),
+              !legacyValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        try KeychainStore.save(legacyValue, for: apiKeyAccount)
+        UserDefaults.standard.removeObject(forKey: legacyAPIKeyDefaultsKey)
+        return legacyValue
     }
 
     private static func buildPrompt(name: String, readme: String) -> String {

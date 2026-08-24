@@ -11,10 +11,17 @@ final class TermiPadUITests: XCTestCase {
     }
 
     func testLaunchShowsPrimaryControls() throws {
+        let onboardingFinish = app.buttons["onboarding-finish"]
+        XCTAssertTrue(
+            onboardingFinish.waitForExistence(timeout: 10),
+            "TermiPad 首次启动应显示边界说明并允许用户确认。"
+        )
+        onboardingFinish.click()
+
         let title = app.staticTexts["app-title"]
         XCTAssertTrue(
             title.waitForExistence(timeout: 10),
-            "TermiPad 应显示应用标题。"
+            "完成首次引导后，TermiPad 应显示应用标题。"
         )
 
         let discoveryButton = app.buttons["discover-tools-button"]

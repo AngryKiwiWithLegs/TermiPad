@@ -12,7 +12,7 @@
 | 人工整理 | 可收录、忽略、恢复候选；支持手动添加、编辑、隐藏、恢复和删除已收录工具。 |
 | 命令模板 | 支持 `{{variable_name}}` 占位符；首次启动时会要求填写变量、展示命令预览并保存本机默认值。 |
 | 终端启动 | 可在设置中选择 Terminal.app、iTerm、Warp 或“仅复制命令”。Warp 采用打开应用并复制命令的保守方式。 |
-| 信息补充 | 可选 GitHub README 搜索与 AI 提炼；失败时保留本地命令和手动编辑能力。 |
+| 信息补充 | 可选 GitHub README 搜索与 AI 提炼；默认关闭网络补充，失败时保留本地命令和手动编辑能力。AI API Key 仅保存于 macOS Keychain。 |
 | 图标 | 常用工具有差异化语义图标；已识别 GitHub 仓库时优先显示组织头像，未知工具使用稳定的渐变回退图标。 |
 | 本地存储 | 工具、候选、分类、隐藏状态、命令模板和变量值保存在本机 SwiftData 容器中。 |
 
@@ -35,7 +35,7 @@ xcodegen generate
 open TermiPad.xcodeproj
 ```
 
-在 Xcode 顶部选择 **TermiPad > My Mac**，然后按 `Command + R`。首轮扫描后，请进入左侧 **候选收件箱**确认要收录的工具。
+在 Xcode 顶部选择 **TermiPad > My Mac**，然后按 `Command + R`。首次运行会先说明扫描、数据、本地终端自动化与可选网络补充的边界；确认后再使用“发现工具”。首轮扫描后，请进入左侧 **候选收件箱**确认要收录的工具。
 
 ### Swift Package 方式
 
@@ -54,6 +54,12 @@ open Package.swift
 发现工具 → 候选收件箱确认收录 → （可选）GitHub / AI 补充 → 点击图标
 → 若模板含变量则填写表单 → 在偏好终端执行或复制命令
 ```
+
+## 首次启动、数据与网络边界
+
+首次启动时，TermiPad 会明确说明以下行为：扫描仅检查 PATH 与常见第三方安装目录；新命令先进入候选收件箱，不会自动加入工具墙；工具、分类、模板与变量值默认保存在本机；GitHub / AI 网络补充可选且默认关闭。终端命令只会在您点击工具后交给所选终端执行。
+
+从 **TermiPad → Settings… → AI 服务** 可设置兼容 OpenAI Chat Completions 的服务地址、模型和 API Key。API Key 仅写入 macOS Keychain，不保存在 UserDefaults 或仓库中；删除 API Key 后，应用会自动退回本地说明和手动编辑能力。
 
 ## 终端偏好
 
@@ -86,7 +92,7 @@ GitHub Actions 工作流包含：
 
 1. Swift 单元测试：扫描过滤、分类、命令变量与图标回退。
 2. `xcodebuild` macOS 构建。
-3. macOS UI Smoke Test：启动应用、检查主要控件、归档 `.xcresult` 和截图。
+3. macOS UI Smoke Test：完成首次信任引导、检查主要控件、归档 `.xcresult` 和截图。
 
 当前 GitHub Actions 的云端运行受账户级账单/额度限制拦截；恢复后，工作流会自动继续执行上述验证。
 
@@ -110,7 +116,7 @@ TermiPad/
 
 ## 公开版前的开发路线
 
-公开前仍需完成更可靠的 GitHub 匹配、Keychain 凭据存储、品牌图标缓存/替换、备份导出与更深的 UI 测试。详细优先级见私有开发文档 `termipad_development_backlog.md`。
+公开前仍需完成更可靠的 GitHub 匹配、品牌图标缓存/替换、备份导出与更深的 UI 测试。详细优先级见私有开发文档 `termipad_development_backlog.md`。
 
 ## Language and appearance
 

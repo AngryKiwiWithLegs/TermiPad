@@ -12,8 +12,9 @@ struct LaunchpadView: View {
     @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.simplifiedChinese.rawValue
     @AppStorage("TermiPad.appearance") private var appearanceRawValue = AppAppearance.system.rawValue
     @AppStorage("TermiPad.terminalTarget") private var terminalTargetRawValue = TerminalTarget.systemTerminal.rawValue
-    @AppStorage("TermiPad.autoEnrich") private var autoEnrich = true
+    @AppStorage("TermiPad.autoEnrich") private var autoEnrich = false
     @AppStorage("TermiPad.showIgnoredCandidates") private var showIgnoredCandidates = false
+    @AppStorage("TermiPad.hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     @State private var searchText = ""
     @State private var selectedSidebarItem = SidebarItem.all.rawValue
@@ -163,6 +164,15 @@ struct LaunchpadView: View {
                 try? modelContext.save()
             }
         }
+        .sheet(isPresented: Binding(
+            get: { !hasCompletedOnboarding },
+            set: { if !$0 { hasCompletedOnboarding = true } }
+        )) {
+            OnboardingSheet(language: language, autoEnrich: $autoEnrich) {
+                hasCompletedOnboarding = true
+            }
+            .interactiveDismissDisabled()
+        }
     }
 
     private var sidebar: some View {
@@ -275,6 +285,7 @@ struct LaunchpadView: View {
     }
 
     private func performScan() {
+        guard hasCompletedOnboarding else { return }
         guard !isScanning else { return }
         isScanning = true
         let knownNames = Set(tools.map { $0.name.lowercased() })
@@ -755,5 +766,95 @@ struct ToolEditView: View {
             }
         }
         .frame(minWidth: 500, minHeight: 420)
+    }
+}
+
+
+/// 首次启动前说明扫描、数据、网络和终端自动化边界，避免用户在不了解行为时开始发现工具。
+private struct OnboardingSheet: View {
+    let language: AppLanguage
+    @Binding var autoEnrich: Bool
+    let onFinish: () -> Void
+
+    private var isChinese: Bool { language == .simplifiedChinese }
+    private var title: String { isChinese ? "欢迎使用 TermiPad" : "Welcome to TermiPad" }
+    private var introduction: String {
+        isChinese
+            ? "TermiPad 只整理您主动安装、会直接互动使用的命令行工具。开始前，请确认以下边界。"
+            : "TermiPad organizes CLI tools you installed and use interactively. Please review these boundaries before you begin."
+    }
+    private var finishTitle: String { isChinese ? "开始使用" : "Get Started" }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Image(systemName: "square.grid.2x2")
+                .font(.system(size: 34, weight: .medium))
+                .foregroundStyle(.tint)
+
+            Text(title)
+                .font(.title2.weight(.semibold))
+            Text(introduction)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 14) {
+                noticeRow(
+                    symbol: "magnifyingglass",
+                    title: isChinese ? "扫描先进入候选收件箱" : "Scanning starts in the review inbox",
+                    detail: isChinese
+                        ? "TermiPad 会检查 PATH 和常见第三方安装目录。新命令不会自动进入工具墙，需由您确认收录。"
+                        : "TermiPad checks PATH and common third-party install folders. New commands never enter your library until you accept them."
+                )
+                noticeRow(
+                    symbol: "externaldrive",
+                    title: isChinese ? "数据默认只保存在这台 Mac" : "Your data stays on this Mac by default",
+                    detail: isChinese
+                        ? "工具、分类、命令模板和变量值保存在本地。您可随时编辑、隐藏或删除它们。"
+                        : "Tools, categories, command templates, and values are stored locally. You can edit, hide, or delete them at any time."
+                )
+                noticeRow(
+                    symbol: "terminal",
+                    title: isChinese ? "命令只在您点击后交给偏好终端" : "Commands run only after you choose a tool",
+                    detail: isChinese
+                        ? "首次使用 Terminal.app 或 iTerm 时，macOS 可能要求您允许自动化；未授权时命令会复制到剪贴板而不会丢失。"
+                        : "macOS may ask before TermiPad controls Terminal.app or iTerm. If permission is unavailable, the command is copied instead of being lost."
+                )
+            }
+
+            Toggle(isChinese ? "允许可选的 GitHub / AI 网络补充" : "Allow optional GitHub / AI enrichment", isOn: $autoEnrich)
+            Text(isChinese
+                 ? "关闭时，TermiPad 仍可扫描、整理和启动本地工具；需要时可在设置中重新开启。"
+                 : "When off, TermiPad can still scan, organize, and launch local tools. You can enable this later in Settings.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Spacer()
+                Button(finishTitle, action: onFinish)
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                    .accessibilityIdentifier("onboarding-finish")
+            }
+        }
+        .padding(24)
+        .frame(width: 520)
+    }
+
+    @ViewBuilder
+    private func noticeRow(symbol: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: symbol)
+                .font(.body)
+                .frame(width: 18)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }

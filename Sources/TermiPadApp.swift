@@ -6,6 +6,9 @@ struct TermiPadApp: App {
     @AppStorage("TermiPad.appearance") private var appearanceRawValue = AppAppearance.system.rawValue
 
     init() {
+        if ProcessInfo.processInfo.environment["TERMIPAD_UI_TEST_MODE"] == "1" {
+            UserDefaults.standard.set(false, forKey: "TermiPad.hasCompletedOnboarding")
+        }
         WindowPlacementCoordinator.shared.installIfNeeded()
     }
 
