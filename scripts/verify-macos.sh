@@ -33,12 +33,12 @@ run_step() {
   local name="$1"
   shift
   echo
-  echo "========== $name =========="
-  if "$@" 2>&1 | tee "$LOG_DIR/$name.log"; then
-    echo "[通过] $name"
+  echo "========== ${name} =========="
+  if "$@" 2>&1 | tee "${LOG_DIR}/${name}.log"; then
+    echo "[通过] ${name}"
   else
-    FAILED_STEP="$name"
-    echo "[失败] $name；完整日志：$LOG_DIR/$name.log" >&2
+    FAILED_STEP="${name}"
+    echo "[失败] ${name}；完整日志：${LOG_DIR}/${name}.log" >&2
     return 1
   fi
 }

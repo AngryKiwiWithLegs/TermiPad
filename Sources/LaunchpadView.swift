@@ -22,6 +22,7 @@ struct LaunchpadView: View {
     @State private var selectedToolForEdit: TerminalTool?
     @State private var toolForVariables: TerminalTool?
     @State private var isPresentingManualTool = false
+    @State private var isPresentingOnboarding = false
     @State private var scanMessage: String?
     @State private var launchNotice: LaunchNotice?
 
@@ -95,6 +96,11 @@ struct LaunchpadView: View {
             detailContent
         }
         .navigationSplitViewStyle(.balanced)
+        .onAppear {
+            if !hasCompletedOnboarding {
+                isPresentingOnboarding = true
+            }
+        }
         .searchable(text: $searchText, placement: .toolbar, prompt: isInbox ? AppCopy.text("searchCandidates", language: language) : AppCopy.text("searchTools", language: language))
         .toolbar {
             if !isSettings {
@@ -167,12 +173,10 @@ struct LaunchpadView: View {
                 try? modelContext.save()
             }
         }
-        .sheet(isPresented: Binding(
-            get: { !hasCompletedOnboarding },
-            set: { if !$0 { hasCompletedOnboarding = true } }
-        )) {
+        .sheet(isPresented: $isPresentingOnboarding) {
             OnboardingSheet(language: language, autoEnrich: $autoEnrich) {
                 hasCompletedOnboarding = true
+                isPresentingOnboarding = false
             }
             .interactiveDismissDisabled()
         }
