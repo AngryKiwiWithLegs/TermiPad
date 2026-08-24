@@ -25,11 +25,11 @@ final class TermiPadUITests: XCTestCase {
         )
 
         XCTAssertTrue(
-            app.segmentedControls["language-segmented-control"].exists,
+            app.descendants(matching: .any)["language-segmented-control"].waitForExistence(timeout: 5),
             "TermiPad 应显示中英文分段切换控件。"
         )
         XCTAssertTrue(
-            app.segmentedControls["appearance-segmented-control"].exists,
+            app.descendants(matching: .any)["appearance-segmented-control"].waitForExistence(timeout: 5),
             "TermiPad 应显示三档外观分段切换控件。"
         )
 
