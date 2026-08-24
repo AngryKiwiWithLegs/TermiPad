@@ -80,13 +80,28 @@ run_step build xcodebuild \
   clean build
 
 if [[ "$SKIP_UI" -eq 0 ]]; then
+  run_step ui-build-for-testing xcodebuild \
+    -project TermiPad.xcodeproj \
+    -scheme TermiPad \
+    -destination 'platform=macOS' \
+    -derivedDataPath "$UI_DERIVED_DATA" \
+    build-for-testing
+
+  UI_RUNNER="$(find "$UI_DERIVED_DATA/Build/Products" -type d -name 'TermiPadUITests-Runner.app' -print -quit 2>/dev/null || true)"
+  if [[ -z "$UI_RUNNER" ]]; then
+    FAILED_STEP="ui-runner-discovery"
+    echo "未找到 TermiPadUITests-Runner.app；请查看 $LOG_DIR/ui-build-for-testing.log" >&2
+    exit 1
+  fi
+  run_step ui-runner-signature codesign --verify --deep --strict --verbose=2 "$UI_RUNNER"
+
   run_step ui-smoke-test xcodebuild \
     -project TermiPad.xcodeproj \
     -scheme TermiPad \
     -destination 'platform=macOS' \
     -derivedDataPath "$UI_DERIVED_DATA" \
     -resultBundlePath "$RESULT_BUNDLE" \
-    test
+    test-without-building
 
   if [[ -d "$RESULT_BUNDLE" ]]; then
     mkdir -p "$LOG_DIR/ui-attachments"

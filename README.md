@@ -97,7 +97,7 @@ cd ~/TermiPad
 ./scripts/verify-macos.sh
 ```
 
-脚本会重新生成 `.xcodeproj`，依次执行 Swift Package 清单校验、单元测试、`xcodebuild` 构建与 macOS UI 冒烟测试，并将每次日志、`.xcresult`、可导出的 UI 截图和摘要写入 `.verification/`。如只需快速检查核心逻辑和构建，可运行 `./scripts/verify-macos.sh --skip-ui`。
+脚本会重新生成 `.xcodeproj`，依次执行 Swift Package 清单校验、单元测试、`xcodebuild` 构建，并在 UI 冒烟测试前校验测试 Runner 的本机签名。每次日志、`.xcresult`、可导出的 UI 截图和摘要都会写入 `.verification/`。如只需快速检查核心逻辑和构建，可运行 `./scripts/verify-macos.sh --skip-ui`。
 
 GitHub Actions 工作流包含：
 

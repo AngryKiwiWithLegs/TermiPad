@@ -11,8 +11,12 @@ settings:
   base:
     SWIFT_VERSION: "5.9"
     MACOSX_DEPLOYMENT_TARGET: "14.0"
-    CODE_SIGNING_ALLOWED: "NO"
-    CODE_SIGNING_REQUIRED: "NO"
+    # UI 测试 Runner 必须至少使用 ad hoc 签名，否则本机 Gatekeeper 可能阻止其启动。
+    # “-”不需要开发者证书或 Apple Developer 团队，仅用于本地构建与测试。
+    CODE_SIGNING_ALLOWED: "YES"
+    CODE_SIGNING_REQUIRED: "YES"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
     ENABLE_HARDENED_RUNTIME: "NO"
     DEAD_CODE_STRIPPING: "YES"
     ENABLE_USER_SCRIPT_SANDBOXING: "YES"
