@@ -1,6 +1,6 @@
 import Foundation
 
-/// GitHub 服务：仅在官方映射或高置信名称匹配时补充仓库、README 与头像。
+/// GitHub 服务：仅在官方映射或高置信名称匹配时补充仓库与 README。
 /// 低置信搜索结果不会自动写入工具，避免把无关仓库的命令或品牌信息带入本地工具库。
 enum GitHubService {
     private static let baseURL = "https://api.github.com"
@@ -31,7 +31,6 @@ enum GitHubService {
     struct RepositoryInfo: Sendable {
         let repoFullName: String
         let readmeContent: String
-        let ownerAvatarURLString: String?
         let repositoryDescription: String?
         let metadataProvenance: ToolMetadataProvenance
         let matchConfidence: Int
@@ -73,7 +72,6 @@ enum GitHubService {
         return RepositoryInfo(
             repoFullName: repository.fullName,
             readmeContent: readmeContent ?? repository.description ?? "",
-            ownerAvatarURLString: repository.owner?.avatarURLString,
             repositoryDescription: repository.description,
             metadataProvenance: .githubMatched,
             matchConfidence: match.1
@@ -115,7 +113,6 @@ enum GitHubService {
         return RepositoryInfo(
             repoFullName: repository.fullName,
             readmeContent: readmeContent ?? repository.description ?? "",
-            ownerAvatarURLString: repository.owner?.avatarURLString,
             repositoryDescription: repository.description,
             metadataProvenance: metadataProvenance,
             matchConfidence: matchConfidence
@@ -156,26 +153,16 @@ struct GitHubRepoItem: Decodable {
     let name: String
     let fullName: String
     let description: String?
-    let owner: GitHubRepositoryOwner?
     let isArchived: Bool
 
     enum CodingKeys: String, CodingKey {
         case name
         case fullName = "full_name"
         case description
-        case owner
         case isArchived = "archived"
     }
 }
 
 private struct GitHubSearchResponse: Decodable {
     let items: [GitHubRepoItem]
-}
-
-struct GitHubRepositoryOwner: Decodable {
-    let avatarURLString: String?
-
-    enum CodingKeys: String, CodingKey {
-        case avatarURLString = "avatar_url"
-    }
 }

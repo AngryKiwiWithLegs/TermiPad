@@ -369,14 +369,14 @@ struct LaunchpadView: View {
     private func enrich(tool: TerminalTool, toolName: String, fallbackCategory: ToolCategory) async {
         guard let repository = try? await GitHubService.findRepository(for: toolName) else { return }
         tool.repositoryFullName = repository.repoFullName
-        tool.iconURLString = repository.ownerAvatarURLString
+        // GitHub owner 头像并不等同于工具官方图标；保留本地图标目录以避免错误品牌归属。
+        tool.iconURLString = nil
         tool.metadataProvenance = repository.metadataProvenance
         tool.metadataMatchConfidence = repository.matchConfidence
         tool.metadataUpdatedAt = Date()
 
         if !tool.isUserCustomized,
            let intelligence = try? await AIService.analyzeTool(name: toolName, readme: repository.readmeContent) {
-            tool.commandTemplate = intelligence.commandTemplate
             tool.toolDescription = intelligence.description
             tool.category = ToolCategory(rawValue: intelligence.suggestedCategory) ?? fallbackCategory
         }

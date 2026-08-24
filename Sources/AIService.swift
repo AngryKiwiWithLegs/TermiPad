@@ -7,13 +7,12 @@ import Foundation
 /// - `TermiPad.aiBaseURL`：可选，默认 `https://api.openai.com/v1`
 /// - `TermiPad.aiModel`：可选，默认 `gpt-4o-mini`
 enum AIService {
+    /// AI 只能补充用途说明与分类；启动命令始终来自本地扫描或用户手动编辑。
     struct ToolIntelligence: Codable, Sendable {
-        let commandTemplate: String
         let description: String
         let suggestedCategory: String
 
         enum CodingKeys: String, CodingKey {
-            case commandTemplate = "command_template"
             case description
             case suggestedCategory = "category"
         }
@@ -43,7 +42,7 @@ enum AIService {
         UserDefaults.standard.removeObject(forKey: legacyAPIKeyDefaultsKey)
     }
 
-    /// 解析 README：如已配置 API Key，则调用大语言模型；否则返回明确标注的本地回退结果。
+    /// 解析 README：如已配置 API Key，则调用大语言模型；否则返回本地说明回退。解析结果从不直接改写启动命令。
     static func analyzeTool(name: String, readme: String) async throws -> ToolIntelligence {
         guard let apiKey = try storedAPIKey(), !apiKey.isEmpty else {
             return localFallback(name: name, readme: readme)
@@ -116,8 +115,7 @@ enum AIService {
 
         JSON 必须严格符合：
         {
-          "command_template": "官方推荐的交互式启动命令。没有明确必填参数时只写工具名；将每个用户必须填写的值写为 {{variable_name}}。不得编造参数。",
-          "description": "不超过 60 个中文字符的用途说明。",
+          "description": "不超过 60 个中文字符的用途说明。不得把命令、参数、密钥或代码写入此字段。",
           "category": "仅可取：AI/智能体、开发工具、效率工具、媒体处理、网络与系统、其他/未分类。"
         }
         """
@@ -130,9 +128,6 @@ enum AIService {
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         let decoded = try JSONDecoder().decode(ToolIntelligence.self, from: Data(cleanedContent.utf8))
-        let safeCommand = decoded.commandTemplate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? fallbackName
-            : decoded.commandTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
         let safeDescription = decoded.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? "已由 AI 解析，但 README 未提供简要描述。"
             : decoded.description.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -140,7 +135,6 @@ enum AIService {
             ?? ToolScanner.guessCategory(for: fallbackName).rawValue
 
         return ToolIntelligence(
-            commandTemplate: safeCommand,
             description: safeDescription,
             suggestedCategory: safeCategory
         )
@@ -149,7 +143,6 @@ enum AIService {
     private static func localFallback(name: String, readme: String) -> ToolIntelligence {
         let summary = firstReadableLine(in: readme) ?? "已发现本地工具；配置 AI 服务后可自动提炼命令说明。"
         return ToolIntelligence(
-            commandTemplate: name,
             description: summary,
             suggestedCategory: ToolScanner.guessCategory(for: name).rawValue
         )
