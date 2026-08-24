@@ -61,6 +61,8 @@ open Package.swift
 
 从 **TermiPad → Settings… → AI 服务** 可设置兼容 OpenAI Chat Completions 的服务地址、模型和 API Key。API Key 仅写入 macOS Keychain，不保存在 UserDefaults 或仓库中；删除 API Key 后，应用会自动退回本地说明和手动编辑能力。
 
+从 **TermiPad → Settings… → 备份与恢复** 可导出版本化 JSON 备份，或导入另一台 Mac 的备份并先预览合并结果。备份包含工具、候选、分类、图标元数据和命令模板；**API Key 永不导出**，已保存的变量值默认排除，只有用户明确勾选后才会包含。导入按记录 ID 和可执行路径合并，不会删除当前已有工具或候选。
+
 ## 终端偏好
 
 从 macOS 菜单栏打开 **TermiPad → Settings…**：
@@ -116,7 +118,7 @@ TermiPad/
 
 ## 公开版前的开发路线
 
-公开前仍需完成更可靠的 GitHub 匹配、品牌图标缓存/替换、备份导出与更深的 UI 测试。详细优先级见私有开发文档 `termipad_development_backlog.md`。
+公开前仍需完成更可靠的 GitHub 匹配、品牌图标缓存/替换与更深的 UI 测试。详细优先级见私有开发文档 `termipad_development_backlog.md`。
 
 ## Language and appearance
 

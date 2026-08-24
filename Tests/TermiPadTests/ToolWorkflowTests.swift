@@ -104,3 +104,36 @@ final class ToolWorkflowTests: XCTestCase {
         XCTAssertFalse(ToolDescriptionPresentation.isPlaceholder("A compiler for source code."))
     }
 }
+
+
+extension ToolWorkflowTests {
+    func testBackupRoundTripKeepsSchemaAndPrivacyChoice() throws {
+        let backup = TermiPadBackup(
+            schemaVersion: TermiPadBackup.currentSchemaVersion,
+            exportedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            includesSavedVariableValues: false,
+            tools: [],
+            candidates: []
+        )
+
+        let decoded = try BackupService.decode(BackupService.encode(backup))
+        XCTAssertEqual(decoded.schemaVersion, TermiPadBackup.currentSchemaVersion)
+        XCTAssertFalse(decoded.includesSavedVariableValues)
+        XCTAssertTrue(decoded.tools.isEmpty)
+        XCTAssertTrue(decoded.candidates.isEmpty)
+    }
+
+    func testBackupRejectsUnsupportedSchema() throws {
+        let backup = TermiPadBackup(
+            schemaVersion: TermiPadBackup.currentSchemaVersion + 1,
+            exportedAt: Date(),
+            includesSavedVariableValues: false,
+            tools: [],
+            candidates: []
+        )
+
+        XCTAssertThrowsError(try BackupService.decode(BackupService.encode(backup))) { error in
+            XCTAssertEqual(error as? BackupServiceError, .unsupportedSchema(TermiPadBackup.currentSchemaVersion + 1))
+        }
+    }
+}

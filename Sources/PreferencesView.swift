@@ -1,7 +1,12 @@
 import SwiftUI
+import SwiftData
+import UniformTypeIdentifiers
 
 struct PreferencesView: View {
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
+    @Query(sort: \TerminalTool.name) private var tools: [TerminalTool]
+    @Query(sort: \CandidateTool.discoveredAt, order: .reverse) private var candidates: [CandidateTool]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.simplifiedChinese.rawValue
     @AppStorage("TermiPad.appearance") private var appearanceRawValue = AppAppearance.system.rawValue
@@ -14,6 +19,12 @@ struct PreferencesView: View {
     @State private var apiKeyInput = ""
     @State private var hasStoredAPIKey = false
     @State private var credentialMessage: String?
+    @State private var includeSavedVariableValues = false
+    @State private var backupDocument: BackupFileDocument?
+    @State private var isExportingBackup = false
+    @State private var isImportingBackup = false
+    @State private var pendingImportedBackup: TermiPadBackup?
+    @State private var backupMessage: String?
 
     private var language: AppLanguage {
         AppLanguage(rawValue: languageRawValue) ?? .simplifiedChinese
@@ -114,6 +125,20 @@ struct PreferencesView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section(AppCopy.text("dataManagement", language: language)) {
+                Toggle(AppCopy.text("includeSavedValues", language: language), isOn: $includeSavedVariableValues)
+                Text(AppCopy.text("backupHint", language: language))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack {
+                    Button(AppCopy.text("exportBackup", language: language), action: prepareBackupExport)
+                    Button(AppCopy.text("importBackup", language: language)) {
+                        isImportingBackup = true
+                    }
+                }
+            }
+
             Section(AppCopy.text("dataPrivacy", language: language)) {
                 Text(AppCopy.text("privacyHint", language: language))
                     .font(.caption)
@@ -131,6 +156,40 @@ struct PreferencesView: View {
             Button(AppCopy.text("ok", language: language), role: .cancel) { credentialMessage = nil }
         } message: {
             Text(credentialMessage ?? "")
+        }
+        .alert(AppCopy.text("dataManagement", language: language), isPresented: Binding(
+            get: { backupMessage != nil },
+            set: { if !$0 { backupMessage = nil } }
+        )) {
+            Button(AppCopy.text("ok", language: language), role: .cancel) { backupMessage = nil }
+        } message: {
+            Text(backupMessage ?? "")
+        }
+        .confirmationDialog(AppCopy.text("restorePreview", language: language), isPresented: Binding(
+            get: { pendingImportedBackup != nil },
+            set: { if !$0 { pendingImportedBackup = nil } }
+        ), titleVisibility: .visible) {
+            Button(AppCopy.text("restoreBackup", language: language), action: restoreImportedBackup)
+            Button(AppCopy.text("cancelRestore", language: language), role: .cancel) { pendingImportedBackup = nil }
+        } message: {
+            Text(importPreviewMessage)
+        }
+        .fileExporter(
+            isPresented: $isExportingBackup,
+            document: backupDocument,
+            contentType: .json,
+            defaultFilename: BackupService.suggestedFileName()
+        ) { result in
+            switch result {
+            case .success:
+                backupMessage = AppCopy.text("backupExported", language: language)
+            case .failure(let error):
+                backupMessage = backupFailureMessage(error)
+            }
+            backupDocument = nil
+        }
+        .fileImporter(isPresented: $isImportingBackup, allowedContentTypes: [.json]) { result in
+            handleBackupImport(result)
         }
         .scrollContentBackground(.hidden)
         .background(theme.contentSurface)
@@ -160,5 +219,77 @@ struct PreferencesView: View {
             let prefix = AppCopy.text("keychainOperationFailed", language: language)
             credentialMessage = "\(prefix) \(error.localizedDescription)"
         }
+    }
+
+    private var importPreviewMessage: String {
+        guard let backup = pendingImportedBackup else { return "" }
+        let valuesText = backup.includesSavedVariableValues
+            ? (language == .simplifiedChinese ? "包含已保存的变量值。" : "Saved variable values are included.")
+            : (language == .simplifiedChinese ? "不包含已保存的变量值。" : "Saved variable values are not included.")
+        let restoreHint = AppCopy.text("restoreHint", language: language)
+        if language == .simplifiedChinese {
+            return "备份包含 \(backup.tools.count) 个工具和 \(backup.candidates.count) 个候选项目。\(valuesText) \(restoreHint)"
+        }
+        return "This backup contains \(backup.tools.count) tools and \(backup.candidates.count) candidates. \(valuesText) \(restoreHint)"
+    }
+
+    private func prepareBackupExport() {
+        do {
+            let backup = TermiPadBackup.make(
+                tools: tools,
+                candidates: candidates,
+                includeSavedVariableValues: includeSavedVariableValues
+            )
+            backupDocument = BackupFileDocument(data: try BackupService.encode(backup))
+            isExportingBackup = true
+        } catch {
+            backupMessage = backupFailureMessage(error)
+        }
+    }
+
+    private func handleBackupImport(_ result: Result<URL, Error>) {
+        switch result {
+        case .success(let url):
+            let didAccess = url.startAccessingSecurityScopedResource()
+            defer {
+                if didAccess { url.stopAccessingSecurityScopedResource() }
+            }
+            do {
+                pendingImportedBackup = try BackupService.decode(Data(contentsOf: url))
+            } catch {
+                backupMessage = backupFailureMessage(error)
+            }
+        case .failure(let error):
+            backupMessage = backupFailureMessage(error)
+        }
+    }
+
+    private func restoreImportedBackup() {
+        guard let backup = pendingImportedBackup else { return }
+        let summary = BackupService.restore(
+            backup,
+            existingTools: tools,
+            existingCandidates: candidates,
+            modelContext: modelContext
+        )
+        do {
+            try modelContext.save()
+            pendingImportedBackup = nil
+            backupMessage = restoreSummaryMessage(summary)
+        } catch {
+            backupMessage = backupFailureMessage(error)
+        }
+    }
+
+    private func backupFailureMessage(_ error: Error) -> String {
+        let prefix = AppCopy.text("backupImportFailed", language: language)
+        return "\(prefix) \(error.localizedDescription)"
+    }
+
+    private func restoreSummaryMessage(_ summary: BackupRestoreSummary) -> String {
+        if language == .simplifiedChinese {
+            return "新增 \(summary.addedTools) 个工具，更新 \(summary.updatedTools) 个工具；新增 \(summary.addedCandidates) 个候选，更新 \(summary.updatedCandidates) 个候选。"
+        }
+        return "\(summary.addedTools) tools added, \(summary.updatedTools) tools updated; \(summary.addedCandidates) candidates added, \(summary.updatedCandidates) candidates updated."
     }
 }
