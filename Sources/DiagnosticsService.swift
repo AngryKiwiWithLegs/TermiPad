@@ -9,6 +9,7 @@ enum DiagnosticEventKind: String, Codable, CaseIterable {
     case commandCopied
     case automationFallback
     case launchFailed
+    case toolHealthBlocked
     case backupExported
     case backupRestored
     case backupFailed

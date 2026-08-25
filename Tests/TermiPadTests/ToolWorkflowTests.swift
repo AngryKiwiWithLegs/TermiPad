@@ -564,3 +564,26 @@ extension ToolWorkflowTests {
         XCTAssertFalse(json.contains("local-only.png"))
     }
 }
+
+
+extension ToolWorkflowTests {
+    func testToolHealthChecksOnlyInspectableAbsolutePaths() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TermiPadTests-Health-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let executableURL = directory.appendingPathComponent("available-tool")
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: executableURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executableURL.path)
+
+        let nonExecutableURL = directory.appendingPathComponent("non-executable-tool")
+        try Data("plain text".utf8).write(to: nonExecutableURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: nonExecutableURL.path)
+
+        XCTAssertEqual(ToolHealthChecker.check(executablePath: executableURL.path), .available)
+        XCTAssertEqual(ToolHealthChecker.check(executablePath: nonExecutableURL.path), .notExecutable)
+        XCTAssertEqual(ToolHealthChecker.check(executablePath: directory.appendingPathComponent("missing-tool").path), .missing)
+        XCTAssertEqual(ToolHealthChecker.check(executablePath: "tool-on-path"), .notInspectable)
+    }
+}

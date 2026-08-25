@@ -183,6 +183,12 @@ struct LaunchpadView: View {
             get: { launchNotice != nil },
             set: { if !$0 { launchNotice = nil } }
         )) {
+            if let repairTool = launchNotice?.repairTool {
+                Button(AppCopy.text("editTool", language: language)) {
+                    launchNotice = nil
+                    selectedToolForEdit = repairTool
+                }
+            }
             Button(AppCopy.text("ok", language: language), role: .cancel) { launchNotice = nil }
         } message: {
             Text(launchNotice?.message ?? "")
@@ -420,6 +426,16 @@ struct LaunchpadView: View {
     }
 
     private func requestLaunch(for tool: TerminalTool) {
+        let health = ToolHealthChecker.check(executablePath: tool.executablePath)
+        guard health.permitsLaunch else {
+            DiagnosticsStore.shared.record(.toolHealthBlocked)
+            launchNotice = LaunchNotice(
+                title: "\(AppCopy.text(\"cannotLaunch\", language: language)) \(tool.name)",
+                message: health.recoveryMessage(language),
+                repairTool: tool
+            )
+            return
+        }
         if CommandTemplate.variables(in: tool.commandTemplate).isEmpty {
             execute(command: tool.commandTemplate, for: tool)
         } else {
@@ -482,6 +498,13 @@ private enum SidebarItem: String {
 private struct LaunchNotice {
     let title: String
     let message: String
+    let repairTool: TerminalTool?
+
+    init(title: String, message: String, repairTool: TerminalTool? = nil) {
+        self.title = title
+        self.message = message
+        self.repairTool = repairTool
+    }
 }
 
 struct CandidateInboxView: View {
@@ -797,6 +820,10 @@ struct ToolEditView: View {
     @State private var isImportingCustomIcon = false
     @State private var customIconMessage: String?
 
+    private var health: ToolHealth {
+        ToolHealthChecker.check(executablePath: tool.executablePath)
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -805,10 +832,10 @@ struct ToolEditView: View {
                     Text(AppCopy.text("editVariableHint", language: language))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text(tool.executablePath)
+                    TextField(AppCopy.text("executablePath", language: language), text: $tool.executablePath)
+                    Text(AppCopy.text("executablePathHint", language: language))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
                 }
                 Section(AppCopy.text("organize", language: language)) {
                     Picker(AppCopy.text("categories", language: language), selection: $tool.category) {
@@ -819,6 +846,14 @@ struct ToolEditView: View {
                     Toggle(AppCopy.text("hideThisTool", language: language), isOn: $tool.isHidden)
                     TextField(AppCopy.text("toolDescription", language: language), text: $tool.toolDescription, axis: .vertical)
                         .lineLimit(2...4)
+                }
+                Section(AppCopy.text("toolHealth", language: language)) {
+                    LabeledContent(AppCopy.text("toolHealth", language: language), value: health.displayName(language))
+                    if !health.recoveryMessage(language).isEmpty {
+                        Text(health.recoveryMessage(language))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Section(AppCopy.text("customIcon", language: language)) {
                     HStack {
