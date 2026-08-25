@@ -115,6 +115,7 @@ struct PreferencesView: View {
 
             Section(AppCopy.text("updates", language: language)) {
                 Toggle(AppCopy.text("enableUpdateChecks", language: language), isOn: $updateChecksEnabled)
+                    .accessibilityIdentifier("settings-update-check-enabled")
                 if updateChecksEnabled {
                     TextField(AppCopy.text("updateFeedURL", language: language), text: $updateFeedURL)
                         .textContentType(.URL)

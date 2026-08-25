@@ -56,6 +56,14 @@ final class TermiPadUITests: XCTestCase {
             app.buttons["settings-export-backup"].waitForExistence(timeout: 5),
             "设置启动场景应展示备份导出操作。"
         )
+        XCTAssertTrue(
+            app.buttons["settings-export-diagnostics"].waitForExistence(timeout: 5),
+            "设置启动场景应展示用户主动导出的隐私化诊断包入口。"
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["settings-update-check-enabled"].waitForExistence(timeout: 5),
+            "设置启动场景应展示默认关闭的手动更新检查开关。"
+        )
         XCTAssertFalse(
             app.buttons["discover-tools-button"].exists,
             "设置页不应显示只属于工具库的“发现工具”操作。"
