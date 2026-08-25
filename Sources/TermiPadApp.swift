@@ -61,9 +61,9 @@ struct TermiPadApp: App {
             .frame(minWidth: 680, minHeight: 560)
             .preferredColorScheme(appearance.colorScheme)
             .softMacWindow(appearanceKey: appearanceRawValue)
-            .modelContainer(sharedModelContainer)
         }
         .defaultSize(width: 920, height: 720)
+        .modelContainer(sharedModelContainer)
         .commands {
             TermiPadMenuCommands()
         }

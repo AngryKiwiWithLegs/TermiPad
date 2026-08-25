@@ -8,6 +8,9 @@ final class TermiPadUITests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
+        if app != nil {
+            attachScreenshot(named: "termipad-final-ui-state")
+        }
         app?.terminate()
     }
 
@@ -97,6 +100,10 @@ final class TermiPadUITests: XCTestCase {
             app.launchEnvironment["TERMIPAD_UI_TEST_FORCE_RECOVERY"] = "1"
         }
         app.launch()
+        XCTAssertTrue(
+            app.wait(for: .runningForeground, timeout: 10),
+            "TermiPad 未能在 10 秒内进入前台。当前 UI 层级：\n\(app.debugDescription)"
+        )
     }
 
     private func completeOnboarding() {
