@@ -506,3 +506,17 @@ extension ToolWorkflowTests {
         }
     }
 }
+
+
+extension ToolWorkflowTests {
+    func testLocalizedFormatSupportsStringAndIntegerPlaceholders() {
+        XCTAssertEqual(
+            AppCopy.format("updateAvailable", "1.2.3", language: .english),
+            "Version 1.2.3 is available. Review the release notes and decide whether to obtain it."
+        )
+        XCTAssertEqual(
+            AppCopy.format("foundCandidates", 3, language: .simplifiedChinese),
+            "发现 3 个候选工具。请在“候选收件箱”中确认要收录的项目。"
+        )
+    }
+}

@@ -116,7 +116,11 @@ enum AppCopy {
     }
 
     static func format(_ key: String, _ value: Int, language: AppLanguage) -> String {
+        format(key, String(value), language: language)
+    }
+
+    static func format(_ key: String, _ value: String, language: AppLanguage) -> String {
         let template = text(key, language: language)
-        return template.replacingOccurrences(of: "%@", with: String(value))
+        return template.replacingOccurrences(of: "%@", with: value)
     }
 }

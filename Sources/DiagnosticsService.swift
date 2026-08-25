@@ -81,7 +81,7 @@ final class DiagnosticsStore {
     ) {
         self.defaults = defaults
         self.storageKey = storageKey
-        self.maximumEventCount = maximum(1, maximumEventCount)
+        self.maximumEventCount = max(1, maximumEventCount)
         self.now = now
     }
 
