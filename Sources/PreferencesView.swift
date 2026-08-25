@@ -9,6 +9,7 @@ struct PreferencesView: View {
     @Query(sort: \TerminalTool.name) private var tools: [TerminalTool]
     @Query(sort: \CandidateTool.discoveredAt, order: .reverse) private var candidates: [CandidateTool]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openURL) private var openURL
     @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.simplifiedChinese.rawValue
     @AppStorage("TermiPad.appearance") private var appearanceRawValue = AppAppearance.system.rawValue
     @AppStorage("TermiPad.terminalTarget") private var terminalTargetRawValue = TerminalTarget.systemTerminal.rawValue
@@ -16,6 +17,8 @@ struct PreferencesView: View {
     @AppStorage("TermiPad.showIgnoredCandidates") private var showIgnoredCandidates = false
     @AppStorage(AIService.baseURLDefaultsKey) private var aiBaseURL = "https://api.openai.com/v1"
     @AppStorage(AIService.modelDefaultsKey) private var aiModel = "gpt-4o-mini"
+    @AppStorage("TermiPad.updateChecksEnabled") private var updateChecksEnabled = false
+    @AppStorage("TermiPad.updateFeedURL") private var updateFeedURL = ""
 
     @State private var apiKeyInput = ""
     @State private var hasStoredAPIKey = false
@@ -29,6 +32,9 @@ struct PreferencesView: View {
     @State private var diagnosticDocument: DiagnosticFileDocument?
     @State private var isExportingDiagnostics = false
     @State private var diagnosticMessage: String?
+    @State private var isCheckingForUpdates = false
+    @State private var updateMessage: String?
+    @State private var updateReleaseNotesURL: URL?
 
     init(embeddedInNavigation: Bool = false) {
         self.embeddedInNavigation = embeddedInNavigation
@@ -103,6 +109,23 @@ struct PreferencesView: View {
                 Toggle(AppCopy.text("autoEnrich", language: language), isOn: $autoEnrich)
                 Toggle(AppCopy.text("showIgnored", language: language), isOn: $showIgnoredCandidates)
                 Text(AppCopy.text("scanPreferenceHint", language: language))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section(AppCopy.text("updates", language: language)) {
+                Toggle(AppCopy.text("enableUpdateChecks", language: language), isOn: $updateChecksEnabled)
+                if updateChecksEnabled {
+                    TextField(AppCopy.text("updateFeedURL", language: language), text: $updateFeedURL)
+                        .textContentType(.URL)
+                    HStack {
+                        Button(AppCopy.text("checkForUpdates", language: language), action: checkForUpdates)
+                            .disabled(isCheckingForUpdates || updateFeedURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .accessibilityIdentifier("settings-check-updates")
+                        if isCheckingForUpdates { ProgressView().controlSize(.small) }
+                    }
+                }
+                Text(AppCopy.text("updateChecksHint", language: language))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -186,6 +209,17 @@ struct PreferencesView: View {
             Button(AppCopy.text("ok", language: language), role: .cancel) { backupMessage = nil }
         } message: {
             Text(backupMessage ?? "")
+        }
+        .alert(AppCopy.text("updates", language: language), isPresented: Binding(
+            get: { updateMessage != nil },
+            set: { if !$0 { updateMessage = nil } }
+        )) {
+            if let updateReleaseNotesURL {
+                Button(AppCopy.text("openReleaseNotes", language: language)) { openURL(updateReleaseNotesURL) }
+            }
+            Button(AppCopy.text("ok", language: language), role: .cancel) { updateMessage = nil }
+        } message: {
+            Text(updateMessage ?? "")
         }
         .alert(AppCopy.text("diagnostics", language: language), isPresented: Binding(
             get: { diagnosticMessage != nil },
@@ -276,6 +310,32 @@ struct PreferencesView: View {
             return "备份包含 \(backup.tools.count) 个工具和 \(backup.candidates.count) 个候选项目。\(valuesText) \(restoreHint)"
         }
         return "This backup contains \(backup.tools.count) tools and \(backup.candidates.count) candidates. \(valuesText) \(restoreHint)"
+    }
+
+    private func checkForUpdates() {
+        guard updateChecksEnabled else { return }
+        isCheckingForUpdates = true
+        updateReleaseNotesURL = nil
+
+        Task { @MainActor in
+            defer { isCheckingForUpdates = false }
+            do {
+                let update = try await UpdateCheckService.check(
+                    feedURL: updateFeedURL,
+                    currentVersion: UpdateCheckService.currentAppVersion()
+                )
+                DiagnosticsStore.shared.record(.updateChecked)
+                if let update {
+                    updateReleaseNotesURL = update.releaseNotesURL
+                    updateMessage = AppCopy.format("updateAvailable", update.version, language: language)
+                } else {
+                    updateMessage = AppCopy.text("noUpdateAvailable", language: language)
+                }
+            } catch {
+                DiagnosticsStore.shared.record(.updateCheckFailed)
+                updateMessage = AppCopy.text("updateCheckFailed", language: language)
+            }
+        }
     }
 
     private func prepareDiagnosticsExport() {

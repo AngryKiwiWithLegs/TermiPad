@@ -485,3 +485,24 @@ extension ToolWorkflowTests {
         XCTAssertNil(TermiPadAppAction.from(malformed))
     }
 }
+
+
+extension ToolWorkflowTests {
+    func testUpdateCheckRequiresHTTPSAndComparesNumericVersionsOnly() throws {
+        XCTAssertEqual(UpdateCheckService.compare("1.2.0", to: "1.1.9"), .orderedDescending)
+        XCTAssertEqual(UpdateCheckService.compare("1.2", to: "1.2.0"), .orderedSame)
+        XCTAssertEqual(UpdateCheckService.compare("1.0.0", to: "2.0.0"), .orderedAscending)
+        XCTAssertNil(UpdateCheckService.compare("1.0-beta", to: "1.0.0"))
+
+        XCTAssertEqual(
+            try UpdateCheckService.validatedFeedURL("https://updates.example.com/termipad.json"),
+            URL(string: "https://updates.example.com/termipad.json")
+        )
+        XCTAssertThrowsError(try UpdateCheckService.validatedFeedURL("http://updates.example.com/termipad.json")) { error in
+            XCTAssertEqual(error as? UpdateCheckError, .insecureFeedURL)
+        }
+        XCTAssertThrowsError(try UpdateCheckService.validatedFeedURL("not a url")) { error in
+            XCTAssertEqual(error as? UpdateCheckError, .invalidFeedURL)
+        }
+    }
+}
