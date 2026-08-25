@@ -232,8 +232,8 @@ extension ToolWorkflowTests {
             existingCandidates: [],
             modelContext: recoveryContext
         )
-        XCTAssertEqual(summary.toolsAdded, 1)
-        XCTAssertEqual(summary.candidatesAdded, 1)
+        XCTAssertEqual(summary.addedTools, 1)
+        XCTAssertEqual(summary.addedCandidates, 1)
         try recoveryContext.save()
 
         let reopenedContainer = try TermiPadDataStore.makeRecoveryContainer(applicationSupportDirectory: recoveryRoot)
