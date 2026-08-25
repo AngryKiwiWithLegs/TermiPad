@@ -1,46 +1,74 @@
-# Shelldex：稳定产品线标识
+# TermiPad：地名版本代号体系
 
 **生效日期：** 2026-08-25
-**适用对象：** 已完成 P0 + P1 本地实现并在真实 Apple Silicon macOS 上通过集中验证的稳定基线。
+**适用对象：** TermiPad 的内部稳定基线、预览开发线与未来私有 beta 候选。
 
-## 1. 商品名
+## 1. 命名原则
 
-稳定产品线的商品名定为 **Shelldex**，中文说明为 **“终端工具库”**。
+TermiPad 保留为产品名、私有仓库名、Swift 模块名和当前 bundle 标识。每一代**经过完整验证的稳定版本**另获一个地名代号，采用类似经典 macOS 版本的“产品名 + 地名”表达，而不是为每个开发分支重新起一个独立商品名。
 
-> **Shelldex** 是一款原生 macOS 终端工具库：它将用户主动安装、需要直接交互使用的 CLI 整理为候选收件箱与图标化工具库，并只在用户确认后交给其选择的终端启动。
+> 稳定版本名的格式为：**TermiPad [地名]**。
+>
+> 例如，当前基线为 **TermiPad Mendocino**。
 
-该名称由 **Shell**（用户已有终端环境）与 **Index**（可审查、可整理的工具索引）构成。它强调产品是一个“看得见、找得到、可确认启动”的工具库，而不是另一个终端、包管理器或自动化代理。
+本系列采用**加利福尼亚太平洋海岸城镇与海湾**作为主题。它与“终端工具库”强调的本地、清晰、可探索但不越权的体验相符，同时避免使用苹果已经公开采用过的 macOS 代号，例如 Ventura、Sonoma、Monterey、Mojave、Catalina、Big Sur、Sequoia 或 Yosemite。
 
-`TermiPad` 继续作为当前私有仓库、Swift 模块和历史技术代号，直至正式重命名迁移另行批准。这样可以避免在已验证基线中临时修改 bundle identifier、SwiftData 容器、测试宿主或本地数据路径。商品名与代码代号分离，不会改变现有用户数据，也不会暗示已完成外部分发。
+地名代号不替代语义版本号。它是人可读的代际身份；语义版本、Git commit 和验证证据仍是工程上的事实来源。
 
-## 2. 命名选择依据
+## 2. 当前稳定版本
 
-公开检索发现已存在同名的开源 `TermiPad` CLI 记事本项目，因此不宜将 `TermiPad` 继续作为未来对外商品名称。[1] `Shelldex` 在本次公开软件名称初筛中未出现显著的 macOS 终端工具冲突；这只是产品命名层面的初筛，不构成商标、域名、公司名称或应用商店名称的法律清查。
+当前已通过真实 Apple Silicon macOS 集中验证的 P0 + P1 基线命名为：
 
-| 候选 | 评价 | 结论 |
+# TermiPad Mendocino
+
+**内部版本标识：** `1.0.0`
+
+**发布通道：** Stable（私有已验证基线）
+
+**代码验证基线：** `6a3bd11`（`Ensure UI tests create a main window`）
+
+**审计记录：** `c361db3`（私有 beta 验证审计更新）
+
+“Mendocino”代表第一代完整的本地优先工具库：候选收件箱、保守扫描、手动管理、命令模板、受控终端启动、GitHub/AI 信息边界、备份与隔离恢复、健康检查、工作目录、诊断、更新提示，以及真实 macOS 集中验证。
+
+**Stable** 仅表示该基线已完成项目内部定义的代码与真实 macOS 验证；它不表示已满足 Developer ID、Hardened Runtime、公证、Gatekeeper 冷启动或外部分发验收。
+
+## 3. P2 与稳定代号的关系
+
+地名只在一个能力批次完成、代码冻结并通过完整集中验证后升级。P2 的开发过程不能提前消耗下一个稳定地名，避免功能实验与可回退稳定版本混淆。
+
+| 状态 | 面向用户的写法 | 语义版本建议 | Git/工程标识 | 含义 |
+|---|---|---|---|---|
+| 当前稳定基线 | **TermiPad Mendocino** | `1.0.0` | `termipad-mendocino-1.0.0` | 已验证的 P0 + P1 本地版本；不含 P2 功能 |
+| P2-A 发现开发 | **TermiPad Mendocino — Discovery Preview** | `1.1.0-preview.N` | `p2/discovery-preview` | 仅手动发现、缓存、来源证据和可解释排序；不安装软件 |
+| P2-A 验证后下一稳定版 | **TermiPad Sausalito** | `2.0.0` | `termipad-sausalito-2.0.0` | P2-A 已完成并通过完整验证后的下一稳定代 |
+| P2-B 安装评审开发 | **TermiPad Sausalito — Install Review Preview** | `2.1.0-preview.N` | `p2/install-review-preview` | 仅开发受控安装计划和审查界面；尚不代表通用一键安装 |
+| P2-B 验证后下一稳定版 | **TermiPad Morro Bay** | `3.0.0` | `termipad-morro-bay-3.0.0` | 仅在受限渠道安装协助完成安全验收后使用 |
+| 未来只读环境报告 | **TermiPad Avalon — Environment Preview** | `3.1.0-preview.N` | 未来单独立项 | 仅展示生态与版本状态；不自动升级、不卸载、不解冲突 |
+
+任何预览版本都必须在产品文档和 UI 中清楚标明 **Preview**，并可随时回退到前一个稳定代号。预览不改写稳定版本的备份格式、数据存储路径、Keychain 服务、bundle identifier 或用户命令。
+
+## 4. 保留代号池
+
+下列名称用于后续稳定代际的候选池，而非已承诺的功能顺序：
+
+| 顺序 | 地名代号 | 使用条件 |
 |---|---|---|
-| TermiPad | 已用于公开 CLI 记事本，且“Pad”容易联想到 iPad | 不作为未来商品名 |
-| Pathloom | 发音柔和，但已用于户外路线规划产品 | 淘汰 |
-| Shellorium | 区分度较高，但过于抽象、难以一眼理解 | 备用 |
-| **Shelldex** | Shell + Index，贴合“可发现、可审查、可启动的 CLI 工具库”；简短、可读 | **采用** |
+| 1 | **Mendocino** | 当前 P0 + P1 已验证稳定版 |
+| 2 | **Sausalito** | P2-A 发现能力完成、冻结并验证后 |
+| 3 | **Morro Bay** | P2-B 受控安装协助完成独立安全验收后 |
+| 4 | **Avalon** | 后续具备清晰、安全边界的新稳定能力批次 |
+| 5 | **Solvang** | 未来候选；仅在需要下一稳定代时启用 |
+| 6 | **Arcata** | 未来候选；仅在需要下一稳定代时启用 |
 
-## 3. 稳定与 P2 的分层标识
+名称本身不表示质量、安全等级、地理来源、与当地机构的合作，也不构成商标或域名可用性的法律结论。在将来外部分发前，仍需对最终名称进行商标、域名、App Store 及当地法律层面的正式清查。
 
-| 层级 | 标识 | 用途 | 安全承诺 |
-|---|---|---|---|
-| 已验证稳定基线 | **Shelldex 1.0 Stable** | P0 + P1 本地功能、恢复与真实 macOS 验证的固定参照 | 不含远程发现、安装、自动升级或依赖治理 |
-| 当前代码基线标签 | `shelldex-stable-1.0.0` | 对应通过真实 macOS 集中验证及审计记录的 Git 固定点 | 可用于回归、差异审计与问题回退定位 |
-| P2 发现开发线 | **Shelldex Next — Discovery Preview** | P2-A 的手动发现、缓存、来源证据和可解释排序 | 默认关闭网络；不提供安装动作 |
-| 未来安装协助线 | **Shelldex Next — Install Review** | P2-B 的受控安装计划与终端交接 | 必须另行通过来源 allowlist、命令预览和明确确认验收 |
+## 5. 采用规则
 
-“Stable”只表示内部私有基线的代码与本机验证状态，不表示已通过 Developer ID、Hardened Runtime、公证、Gatekeeper 冷启动或外部分发验收。
+从现在起：
 
-## 4. 采用规则
-
-从 P2 起，产品文档、路线图、测试计划和未来 UI 文案使用 **Shelldex** 作为商品名；技术源码路径、已有 bundle identifier、Swift 模块和本地数据容器暂保留 `TermiPad`。任何面向外部用户的发行前重命名必须作为单独迁移：同时评估显示名、bundle identifier、SwiftData 容器、备份兼容、Keychain service、自动化权限和公证身份，不能以字符串替换方式处理。
-
-当前稳定基线固定后，P2 新功能必须以“Preview”身份描述，且不得回写、自动升级或改变 Shelldex 1.0 Stable 的已验证行为。若 P2 的实验导致回归，开发应回退到稳定标签，而不应以不透明的临时提交作为参照。
-
-## References
-
-[1]: https://github.com/Jcharis/TermiPad "Jcharis/TermiPad: A Simple Note Taking CLI Notepad"
+1. 已验证稳定基线统一称为 **TermiPad Mendocino**，而不是“Shelldex”或泛称“稳定版”。
+2. P2-A 实施期间使用 **TermiPad Mendocino — Discovery Preview**；它不能被表述为下一稳定版本。
+3. 只有 P2-A 的范围、测试和真实 macOS 集中验证全部完成时，才启用 **TermiPad Sausalito**。
+4. 外部分发仍需单独满足 Developer ID、Hardened Runtime、公证、Gatekeeper 冷启动和真实旧 store 升级验证；地名代号不绕过这些闸门。
+5. `TermiPad` 的技术名称和现有本地数据标识在当前阶段不改动，以保护 Mendocino 已验证基线。
