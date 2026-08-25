@@ -1,4 +1,5 @@
 import XCTest
+import SwiftData
 @testable import TermiPad
 
 final class ToolWorkflowTests: XCTestCase {
@@ -252,5 +253,73 @@ extension ToolWorkflowTests {
         XCTAssertNil(TerminalTarget.copyOnly.bundleIdentifier)
         XCTAssertTrue(TerminalTarget.copyOnly.helpText(.simplifiedChinese).contains("不启动任何终端"))
         XCTAssertTrue(TerminalTarget.copyOnly.helpText(.english).contains("without opening a terminal"))
+    }
+}
+
+
+extension ToolWorkflowTests {
+    func testPersistentDataStoreReopensExistingToolsAndCandidates() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TermiPadStoreTests-\(UUID().uuidString)", isDirectory: true)
+        let storeURL = directory.appendingPathComponent("TermiPad.store")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let toolID = UUID()
+        let candidateID = UUID()
+        do {
+            let container = try TermiPadDataStore.makeContainer(storeURL: storeURL)
+            let context = ModelContext(container)
+            let tool = TerminalTool(
+                name: "persisted-cli",
+                executablePath: "/opt/homebrew/bin/persisted-cli",
+                commandTemplate: "persisted-cli --safe",
+                toolDescription: "Persistent test tool",
+                category: .development,
+                installationSource: .homebrew
+            )
+            tool.id = toolID
+            tool.metadataProvenance = .githubOfficial
+            tool.metadataMatchConfidence = 100
+            context.insert(tool)
+
+            let candidate = CandidateTool(
+                name: "persisted-candidate",
+                executablePath: "/Users/example/.cargo/bin/persisted-candidate",
+                category: .other,
+                installationSource: .cargo
+            )
+            candidate.id = candidateID
+            context.insert(candidate)
+            try context.save()
+        }
+
+        let reopenedContainer = try TermiPadDataStore.makeContainer(storeURL: storeURL)
+        let reopenedContext = ModelContext(reopenedContainer)
+        let tools = try reopenedContext.fetch(FetchDescriptor<TerminalTool>())
+        let candidates = try reopenedContext.fetch(FetchDescriptor<CandidateTool>())
+
+        let restoredTool = try XCTUnwrap(tools.first(where: { $0.id == toolID }))
+        XCTAssertEqual(restoredTool.commandTemplate, "persisted-cli --safe")
+        XCTAssertEqual(restoredTool.installationSource, .homebrew)
+        XCTAssertEqual(restoredTool.metadataProvenance, .githubOfficial)
+        XCTAssertEqual(restoredTool.metadataMatchConfidence, 100)
+
+        let restoredCandidate = try XCTUnwrap(candidates.first(where: { $0.id == candidateID }))
+        XCTAssertEqual(restoredCandidate.installationSource, .cargo)
+        XCTAssertEqual(restoredCandidate.status, .pending)
+    }
+
+    func testInMemoryDataStoreSupportsIsolatedRecoveryTests() throws {
+        let container = try TermiPadDataStore.makeContainer(isStoredInMemoryOnly: true)
+        let context = ModelContext(container)
+        context.insert(TerminalTool(
+            name: "memory-cli",
+            executablePath: "/usr/local/bin/memory-cli",
+            commandTemplate: "memory-cli"
+        ))
+        try context.save()
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<TerminalTool>()).count, 1)
     }
 }

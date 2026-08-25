@@ -7,10 +7,8 @@ struct TermiPadApp: App {
     private let sharedModelContainer: ModelContainer
 
     init() {
-        let schema = Schema([TerminalTool.self, CandidateTool.self])
-        let configuration = ModelConfiguration(schema: schema)
         do {
-            sharedModelContainer = try ModelContainer(for: schema, configurations: [configuration])
+            sharedModelContainer = try TermiPadDataStore.makeContainer()
         } catch {
             fatalError("Unable to create TermiPad data store: \(error)")
         }
