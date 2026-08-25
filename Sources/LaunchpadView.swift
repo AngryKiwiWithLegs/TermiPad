@@ -1119,6 +1119,8 @@ private struct OnboardingSheet: View {
         }
         .padding(24)
         .frame(width: 520)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("onboarding-sheet")
     }
 
     @ViewBuilder

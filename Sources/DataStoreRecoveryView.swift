@@ -62,6 +62,8 @@ struct DataStoreRecoveryView: View {
         }
         .padding(32)
         .frame(minWidth: 680, minHeight: 560)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("data-recovery-screen")
         .fileImporter(
             isPresented: $isImportingBackup,
             allowedContentTypes: [.json]

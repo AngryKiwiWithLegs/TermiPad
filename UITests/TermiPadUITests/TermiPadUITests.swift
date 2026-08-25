@@ -18,29 +18,29 @@ final class TermiPadUITests: XCTestCase {
         launchApp()
         completeOnboarding()
 
-        let discoveryButton = app.buttons["discover-tools-button"]
+        let discoveryButton = element("discover-tools-button")
         XCTAssertTrue(
             discoveryButton.waitForExistence(timeout: 10),
             "完成首次引导后，TermiPad 应显示“发现工具”按钮。"
         )
         XCTAssertTrue(
-            app.descendants(matching: .any)["language-segmented-control"].waitForExistence(timeout: 5),
+            element("language-segmented-control").waitForExistence(timeout: 5),
             "TermiPad 应显示中英文分段切换控件。"
         )
         XCTAssertTrue(
-            app.descendants(matching: .any)["appearance-segmented-control"].waitForExistence(timeout: 5),
+            element("appearance-segmented-control").waitForExistence(timeout: 5),
             "TermiPad 应显示三档外观分段切换控件。"
         )
         XCTAssertTrue(
-            app.descendants(matching: .any)["sidebar-settings"].waitForExistence(timeout: 5),
+            element("sidebar-settings").waitForExistence(timeout: 5),
             "TermiPad 应在左边栏提供常驻设置入口。"
         )
         XCTAssertTrue(
-            app.descendants(matching: .any)["sidebar-favorites"].waitForExistence(timeout: 5),
+            element("sidebar-favorites").waitForExistence(timeout: 5),
             "TermiPad 应在左边栏提供收藏入口。"
         )
         XCTAssertTrue(
-            app.descendants(matching: .any)["sidebar-recent"].waitForExistence(timeout: 5),
+            element("sidebar-recent").waitForExistence(timeout: 5),
             "TermiPad 应在左边栏提供最近使用入口。"
         )
 
@@ -51,11 +51,15 @@ final class TermiPadUITests: XCTestCase {
         launchApp(forceRecovery: true)
 
         XCTAssertTrue(
-            app.buttons["data-recovery-import-backup"].waitForExistence(timeout: 10),
+            element("data-recovery-screen").waitForExistence(timeout: 10),
+            "强制恢复模式应显示受控数据恢复页面。"
+        )
+        XCTAssertTrue(
+            element("data-recovery-import-backup").waitForExistence(timeout: 5),
             "默认数据容器无法打开时，恢复模式应提供用户主动导入 JSON 备份的入口。"
         )
         XCTAssertFalse(
-            app.buttons["discover-tools-button"].exists,
+            element("discover-tools-button").exists,
             "恢复模式不应假装默认工具库可用。"
         )
 
@@ -67,23 +71,23 @@ final class TermiPadUITests: XCTestCase {
         completeOnboarding()
 
         XCTAssertTrue(
-            app.descendants(matching: .any)["settings-terminal-picker"].waitForExistence(timeout: 10),
+            element("settings-terminal-picker").waitForExistence(timeout: 10),
             "设置启动场景应展示默认终端偏好。"
         )
         XCTAssertTrue(
-            app.buttons["settings-export-backup"].waitForExistence(timeout: 5),
+            element("settings-export-backup").waitForExistence(timeout: 5),
             "设置启动场景应展示备份导出操作。"
         )
         XCTAssertTrue(
-            app.buttons["settings-export-diagnostics"].waitForExistence(timeout: 5),
+            element("settings-export-diagnostics").waitForExistence(timeout: 5),
             "设置启动场景应展示用户主动导出的隐私化诊断包入口。"
         )
         XCTAssertTrue(
-            app.descendants(matching: .any)["settings-update-check-enabled"].waitForExistence(timeout: 5),
+            element("settings-update-check-enabled").waitForExistence(timeout: 5),
             "设置启动场景应展示默认关闭的手动更新检查开关。"
         )
         XCTAssertFalse(
-            app.buttons["discover-tools-button"].exists,
+            element("discover-tools-button").exists,
             "设置页不应显示只属于工具库的“发现工具”操作。"
         )
 
@@ -107,12 +111,20 @@ final class TermiPadUITests: XCTestCase {
     }
 
     private func completeOnboarding() {
-        let onboardingFinish = app.buttons["onboarding-finish"]
         XCTAssertTrue(
-            onboardingFinish.waitForExistence(timeout: 10),
+            element("onboarding-sheet").waitForExistence(timeout: 10),
+            "TermiPad 首次启动应显示边界说明。"
+        )
+        let onboardingFinish = element("onboarding-finish")
+        XCTAssertTrue(
+            onboardingFinish.waitForExistence(timeout: 5),
             "TermiPad 首次启动应显示边界说明并允许用户确认。"
         )
         onboardingFinish.click()
+    }
+
+    private func element(_ identifier: String) -> XCUIElement {
+        app.descendants(matching: .any)[identifier]
     }
 
     private func attachScreenshot(named name: String) {
