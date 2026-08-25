@@ -323,3 +323,73 @@ extension ToolWorkflowTests {
         XCTAssertEqual(try context.fetch(FetchDescriptor<TerminalTool>()).count, 1)
     }
 }
+
+
+extension ToolWorkflowTests {
+    func testBackupRestoreMergesByPathPreservesPrivateValuesAndPersists() throws {
+        let container = try TermiPadDataStore.makeContainer(isStoredInMemoryOnly: true)
+        let context = ModelContext(container)
+
+        let existingTool = TerminalTool(
+            name: "old-name",
+            executablePath: "/opt/homebrew/bin/merge-cli",
+            commandTemplate: "merge-cli --old",
+            toolDescription: "Old description",
+            category: .other,
+            installationSource: .homebrew
+        )
+        existingTool.variableValuesJSON = "{\"token\":\"keep-local\"}"
+        let existingToolID = existingTool.id
+        context.insert(existingTool)
+        try context.save()
+
+        let incomingTool = TerminalTool(
+            name: "merge-cli",
+            executablePath: "/opt/homebrew/bin/merge-cli",
+            commandTemplate: "merge-cli --new",
+            toolDescription: "Restored description",
+            category: .development,
+            installationSource: .homebrew
+        )
+        incomingTool.metadataProvenance = .githubOfficial
+        incomingTool.metadataMatchConfidence = 100
+        incomingTool.variableValuesJSON = "{\"token\":\"should-not-import\"}"
+
+        let incomingCandidate = CandidateTool(
+            name: "restored-candidate",
+            executablePath: "/Users/example/.cargo/bin/restored-candidate",
+            category: .other,
+            installationSource: .cargo
+        )
+        let backup = TermiPadBackup.make(
+            tools: [incomingTool],
+            candidates: [incomingCandidate],
+            includeSavedVariableValues: false
+        )
+
+        let summary = BackupService.restore(
+            backup,
+            existingTools: [existingTool],
+            existingCandidates: [],
+            modelContext: context
+        )
+        try context.save()
+
+        XCTAssertEqual(summary.addedTools, 0)
+        XCTAssertEqual(summary.updatedTools, 1)
+        XCTAssertEqual(summary.addedCandidates, 1)
+        XCTAssertEqual(summary.updatedCandidates, 0)
+        XCTAssertEqual(existingTool.id, existingToolID)
+        XCTAssertEqual(existingTool.name, "merge-cli")
+        XCTAssertEqual(existingTool.commandTemplate, "merge-cli --new")
+        XCTAssertEqual(existingTool.metadataProvenance, .githubOfficial)
+        XCTAssertEqual(existingTool.metadataMatchConfidence, 100)
+        XCTAssertEqual(existingTool.variableValuesJSON, "{\"token\":\"keep-local\"}")
+
+        let tools = try context.fetch(FetchDescriptor<TerminalTool>())
+        let candidates = try context.fetch(FetchDescriptor<CandidateTool>())
+        XCTAssertEqual(tools.count, 1)
+        XCTAssertEqual(candidates.count, 1)
+        XCTAssertEqual(candidates.first?.installationSource, .cargo)
+    }
+}
