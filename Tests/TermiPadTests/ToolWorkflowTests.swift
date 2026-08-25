@@ -200,6 +200,7 @@ extension ToolWorkflowTests {
         let record = try XCTUnwrap(backup.tools.first)
         let restored = record.makeTool(includesSavedVariableValues: backup.includesSavedVariableValues)
         XCTAssertNil(restored.iconURLString)
+        XCTAssertFalse(restored.favorite)
         XCTAssertEqual(restored.installationSource, .homebrew)
         XCTAssertEqual(restored.metadataProvenance, .local)
         XCTAssertEqual(restored.metadataMatchConfidence, 0)
@@ -210,8 +211,10 @@ extension ToolWorkflowTests {
             commandTemplate: "existing-cli"
         )
         existing.iconURLString = "https://avatars.githubusercontent.com/u/2"
+        existing.favorite = true
         record.apply(to: existing, includesSavedVariableValues: backup.includesSavedVariableValues)
         XCTAssertNil(existing.iconURLString)
+        XCTAssertTrue(existing.favorite)
 
         let candidate = try XCTUnwrap(backup.candidates.first).makeCandidate()
         XCTAssertEqual(candidate.installationSource, .cargo)
@@ -391,5 +394,41 @@ extension ToolWorkflowTests {
         XCTAssertEqual(tools.count, 1)
         XCTAssertEqual(candidates.count, 1)
         XCTAssertEqual(candidates.first?.installationSource, .cargo)
+    }
+}
+
+
+extension ToolWorkflowTests {
+    func testFavoriteDefaultsFalseAndCanBeToggledLocally() {
+        let tool = TerminalTool(
+            name: "favorite-cli",
+            executablePath: "/usr/local/bin/favorite-cli",
+            commandTemplate: "favorite-cli"
+        )
+
+        XCTAssertFalse(tool.favorite)
+        tool.favorite = true
+        XCTAssertTrue(tool.favorite)
+        tool.favorite = false
+        XCTAssertFalse(tool.favorite)
+    }
+}
+
+
+extension ToolWorkflowTests {
+    func testRecentToolOrderingPrefersLastLaunchAndUsesStableNameFallback() {
+        let older = TerminalTool(name: "zulu", executablePath: "/usr/local/bin/zulu", commandTemplate: "zulu")
+        older.lastLaunchedAt = Date(timeIntervalSince1970: 10)
+
+        let newer = TerminalTool(name: "bravo", executablePath: "/usr/local/bin/bravo", commandTemplate: "bravo")
+        newer.lastLaunchedAt = Date(timeIntervalSince1970: 20)
+
+        let sameTime = TerminalTool(name: "alpha", executablePath: "/usr/local/bin/alpha", commandTemplate: "alpha")
+        sameTime.lastLaunchedAt = Date(timeIntervalSince1970: 20)
+
+        let neverLaunched = TerminalTool(name: "charlie", executablePath: "/usr/local/bin/charlie", commandTemplate: "charlie")
+
+        let ordered = ToolLibraryOrdering.recentFirst([older, newer, neverLaunched, sameTime])
+        XCTAssertEqual(ordered.map(\.name), ["alpha", "bravo", "zulu", "charlie"])
     }
 }

@@ -32,6 +32,14 @@ final class TermiPadUITests: XCTestCase {
             app.descendants(matching: .any)["sidebar-settings"].waitForExistence(timeout: 5),
             "TermiPad 应在左边栏提供常驻设置入口。"
         )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["sidebar-favorites"].waitForExistence(timeout: 5),
+            "TermiPad 应在左边栏提供收藏入口。"
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["sidebar-recent"].waitForExistence(timeout: 5),
+            "TermiPad 应在左边栏提供最近使用入口。"
+        )
 
         attachScreenshot(named: "termipad-library")
     }

@@ -58,6 +58,8 @@ struct LaunchpadView: View {
     }
 
     private var isInbox: Bool { selectedSidebarItem == SidebarItem.inbox.rawValue }
+    private var isFavorites: Bool { selectedSidebarItem == SidebarItem.favorites.rawValue }
+    private var isRecent: Bool { selectedSidebarItem == SidebarItem.recent.rawValue }
     private var isHiddenLibrary: Bool { selectedSidebarItem == SidebarItem.hidden.rawValue }
     private var isSettings: Bool { selectedSidebarItem == SidebarItem.settings.rawValue }
 
@@ -72,19 +74,25 @@ struct LaunchpadView: View {
     }
 
     private var filteredTools: [TerminalTool] {
-        tools.filter { tool in
+        let matchingTools = tools.filter { tool in
             let visibilityMatches = isHiddenLibrary ? tool.isHidden : !tool.isHidden
+            let favoriteMatches = !isFavorites || tool.favorite
+            let recentMatches = !isRecent || tool.lastLaunchedAt != nil
             let searchMatches = searchText.isEmpty
                 || tool.name.localizedCaseInsensitiveContains(searchText)
                 || ToolDescriptionPresentation.displayDescription(for: tool, language: language)
                     .localizedCaseInsensitiveContains(searchText)
             let categoryMatches = selectedCategory == nil || tool.category == selectedCategory
-            return visibilityMatches && searchMatches && categoryMatches
+            return visibilityMatches && favoriteMatches && recentMatches && searchMatches && categoryMatches
         }
+        guard isRecent else { return matchingTools }
+        return ToolLibraryOrdering.recentFirst(matchingTools)
     }
 
     private var contentTitle: String {
         if isInbox { return AppCopy.text("inbox", language: language) }
+        if isFavorites { return AppCopy.text("favorites", language: language) }
+        if isRecent { return AppCopy.text("recent", language: language) }
         if isHiddenLibrary { return AppCopy.text("hidden", language: language) }
         return selectedCategory?.displayName(language) ?? AppCopy.text("allTools", language: language)
     }
@@ -193,6 +201,12 @@ struct LaunchpadView: View {
                 Label(AppCopy.text("inbox", language: language), systemImage: "tray.full")
                     .badge(pendingCandidates.filter { $0.status == .pending }.count)
                     .tag(SidebarItem.inbox.rawValue)
+                Label(AppCopy.text("favorites", language: language), systemImage: "star")
+                    .tag(SidebarItem.favorites.rawValue)
+                    .accessibilityIdentifier("sidebar-favorites")
+                Label(AppCopy.text("recent", language: language), systemImage: "clock")
+                    .tag(SidebarItem.recent.rawValue)
+                    .accessibilityIdentifier("sidebar-recent")
                 Label(AppCopy.text("hidden", language: language), systemImage: "eye.slash")
                     .tag(SidebarItem.hidden.rawValue)
             }
@@ -270,6 +284,7 @@ struct LaunchpadView: View {
                                 language: language,
                                 action: { requestLaunch(for: tool) },
                                 onEdit: { selectedToolForEdit = tool },
+                                onToggleFavorite: { toggleFavorite(for: tool) },
                                 onToggleVisibility: { toggleVisibility(for: tool) }
                             )
                         }
@@ -291,15 +306,21 @@ struct LaunchpadView: View {
     }
 
     private var emptyLibraryTitle: String {
+        if isFavorites { return AppCopy.text("noFavorites", language: language) }
+        if isRecent { return AppCopy.text("noRecent", language: language) }
         if isHiddenLibrary { return AppCopy.text("noHidden", language: language) }
         return searchText.isEmpty ? AppCopy.text("noTools", language: language) : AppCopy.text("noMatches", language: language)
     }
 
     private var emptyLibrarySymbol: String {
-        isHiddenLibrary ? "eye" : "terminal"
+        if isFavorites { return "star" }
+        if isRecent { return "clock" }
+        return isHiddenLibrary ? "eye" : "terminal"
     }
 
     private var emptyLibraryDescription: String {
+        if isFavorites { return AppCopy.text("favoritesDescription", language: language) }
+        if isRecent { return AppCopy.text("recentDescription", language: language) }
         if isHiddenLibrary { return AppCopy.text("hiddenDescription", language: language) }
         return AppCopy.text("scanDescription", language: language)
     }
@@ -349,6 +370,11 @@ struct LaunchpadView: View {
 
     private func restoreCandidate(_ candidate: CandidateTool) {
         candidate.status = .pending
+        try? modelContext.save()
+    }
+
+    private func toggleFavorite(for tool: TerminalTool) {
+        tool.favorite.toggle()
         try? modelContext.save()
     }
 
@@ -425,6 +451,8 @@ struct LaunchpadView: View {
 private enum SidebarItem: String {
     case all = "__all_tools__"
     case inbox = "__candidate_inbox__"
+    case favorites = "__favorite_tools__"
+    case recent = "__recent_tools__"
     case hidden = "__hidden_tools__"
     case settings = "__settings__"
 }
@@ -500,6 +528,7 @@ struct ToolTile: View {
     let language: AppLanguage
     let action: () -> Void
     let onEdit: () -> Void
+    let onToggleFavorite: () -> Void
     let onToggleVisibility: () -> Void
 
     private var hoverContent: ToolHoverContent {
@@ -545,6 +574,9 @@ struct ToolTile: View {
             Button(action: action) { Label(AppCopy.text("launchByTemplate", language: language), systemImage: "play") }
             Divider()
             Button(action: onEdit) { Label(AppCopy.text("editTool", language: language), systemImage: "slider.horizontal.3") }
+            Button(action: onToggleFavorite) {
+                Label(tool.favorite ? AppCopy.text("unfavoriteTool", language: language) : AppCopy.text("favoriteTool", language: language), systemImage: tool.favorite ? "star.slash" : "star")
+            }
             Button(action: onToggleVisibility) {
                 Label(tool.isHidden ? AppCopy.text("unhideTool", language: language) : AppCopy.text("hideTool", language: language), systemImage: tool.isHidden ? "eye" : "eye.slash")
             }

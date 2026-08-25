@@ -27,6 +27,7 @@ struct TermiPadBackup: Codable {
         let metadataProvenanceRawValue: String?
         let metadataMatchConfidence: Int?
         let metadataUpdatedAt: Date?
+        let isFavorite: Bool?
         let isUserCustomized: Bool
         let isHidden: Bool
         let variableValuesJSON: String?
@@ -48,6 +49,7 @@ struct TermiPadBackup: Codable {
             metadataProvenanceRawValue = tool.metadataProvenanceRawValue
             metadataMatchConfidence = tool.metadataMatchConfidence
             metadataUpdatedAt = tool.metadataUpdatedAt
+            isFavorite = tool.isFavorite
             isUserCustomized = tool.isUserCustomized
             isHidden = tool.isHidden
             variableValuesJSON = includeSavedVariableValues ? tool.variableValuesJSON : nil
@@ -69,6 +71,7 @@ struct TermiPadBackup: Codable {
             tool.metadataProvenanceRawValue = metadataProvenanceRawValue ?? ToolMetadataProvenance.local.rawValue
             tool.metadataMatchConfidence = metadataMatchConfidence ?? 0
             tool.metadataUpdatedAt = metadataUpdatedAt
+            if let isFavorite { tool.isFavorite = isFavorite }
             tool.isUserCustomized = isUserCustomized
             tool.isHidden = isHidden
             if includesSavedVariableValues {
@@ -96,6 +99,7 @@ struct TermiPadBackup: Codable {
             tool.metadataProvenanceRawValue = metadataProvenanceRawValue ?? ToolMetadataProvenance.local.rawValue
             tool.metadataMatchConfidence = metadataMatchConfidence ?? 0
             tool.metadataUpdatedAt = metadataUpdatedAt
+            tool.isFavorite = isFavorite ?? false
             tool.isHidden = isHidden
             if includesSavedVariableValues {
                 tool.variableValuesJSON = variableValuesJSON

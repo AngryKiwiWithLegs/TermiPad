@@ -117,6 +117,7 @@ final class ToolTrustModelTests: XCTestCase {
         tool.metadataProvenance = .githubOfficial
         tool.metadataMatchConfidence = 100
         tool.metadataUpdatedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        tool.favorite = true
 
         let candidate = CandidateTool(
             name: "aider",
@@ -129,6 +130,7 @@ final class ToolTrustModelTests: XCTestCase {
         XCTAssertEqual(backup.tools.first?.installationSourceRawValue, ToolInstallationSource.homebrew.rawValue)
         XCTAssertEqual(backup.tools.first?.metadataProvenanceRawValue, ToolMetadataProvenance.githubOfficial.rawValue)
         XCTAssertEqual(backup.tools.first?.metadataMatchConfidence, 100)
+        XCTAssertEqual(backup.tools.first?.isFavorite, true)
         XCTAssertEqual(backup.candidates.first?.installationSourceRawValue, ToolInstallationSource.cargo.rawValue)
     }
 }

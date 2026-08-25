@@ -430,6 +430,8 @@ final class TerminalTool {
     var metadataProvenanceRawValue: String?
     var metadataMatchConfidence: Int?
     var metadataUpdatedAt: Date?
+    /// 旧版存储没有该字段时为 nil，并安全视为未收藏。
+    var isFavorite: Bool?
     var isUserCustomized: Bool
     var isHidden: Bool = false
     var variableValuesJSON: String?
@@ -449,6 +451,11 @@ final class TerminalTool {
     var metadataProvenance: ToolMetadataProvenance {
         get { ToolMetadataProvenance(rawValue: metadataProvenanceRawValue ?? "") ?? .local }
         set { metadataProvenanceRawValue = newValue.rawValue }
+    }
+
+    var favorite: Bool {
+        get { isFavorite ?? false }
+        set { isFavorite = newValue }
     }
 
     init(
@@ -474,11 +481,26 @@ final class TerminalTool {
         metadataProvenanceRawValue = isUserCustomized ? ToolMetadataProvenance.manual.rawValue : ToolMetadataProvenance.local.rawValue
         metadataMatchConfidence = 0
         metadataUpdatedAt = nil
+        isFavorite = false
         self.isUserCustomized = isUserCustomized
         isHidden = false
         variableValuesJSON = nil
         lastLaunchedAt = nil
         createdAt = Date()
+    }
+}
+
+/// 工具库的本地展示排序规则。最近使用列表不访问网络，也不改变持久化数据。
+enum ToolLibraryOrdering {
+    static func recentFirst(_ tools: [TerminalTool]) -> [TerminalTool] {
+        tools.sorted {
+            let leftDate = $0.lastLaunchedAt ?? .distantPast
+            let rightDate = $1.lastLaunchedAt ?? .distantPast
+            if leftDate == rightDate {
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            return leftDate > rightDate
+        }
     }
 }
 

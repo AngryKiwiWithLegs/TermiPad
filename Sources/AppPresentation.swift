@@ -62,14 +62,14 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 enum AppCopy {
     static func text(_ key: String, language: AppLanguage) -> String {
         let chinese: [String: String] = [
-            "allTools": "所有工具", "inbox": "候选收件箱", "hidden": "已隐藏", "categories": "分类", "toolLibrary": "工具库", "settings": "设置",
+            "allTools": "所有工具", "inbox": "候选收件箱", "favorites": "收藏", "recent": "最近使用", "hidden": "已隐藏", "categories": "分类", "toolLibrary": "工具库", "settings": "设置",
             "discover": "发现工具", "discovering": "正在发现", "addTool": "手动添加", "searchTools": "搜索工具", "searchCandidates": "筛选候选工具",
-            "noTools": "尚未收录工具", "noMatches": "未找到匹配工具", "noHidden": "没有已隐藏工具", "emptyInbox": "候选收件箱为空",
+            "noTools": "尚未收录工具", "noMatches": "未找到匹配工具", "noFavorites": "还没有收藏工具", "noRecent": "还没有最近使用的工具", "noHidden": "没有已隐藏工具", "emptyInbox": "候选收件箱为空",
             "scanDescription": "使用“发现工具”扫描 PATH 中的交互式命令行工具；扫描结果会先进入候选收件箱。",
             "inboxDescription": "扫描后发现的新命令会先显示在这里；确认收录后才进入工具库。",
-            "hiddenDescription": "在工具卡片的右键菜单中选择“隐藏”后，它会出现在这里。",
+            "hiddenDescription": "在工具卡片的右键菜单中选择“隐藏”后，它会出现在这里。", "favoritesDescription": "在工具卡片的右键菜单中选择“收藏”，即可在这里快速找到它。", "recentDescription": "成功启动过的工具会按最近时间显示在这里。",
             "clearSearch": "清除搜索", "goToLibrary": "前往工具库", "tools": "个工具", "collect": "收录", "ignore": "忽略", "restore": "恢复",
-            "launch": "启动", "launchByTemplate": "按模板启动", "editTool": "编辑工具", "hideTool": "隐藏工具", "unhideTool": "取消隐藏",
+            "launch": "启动", "launchByTemplate": "按模板启动", "editTool": "编辑工具", "favoriteTool": "收藏工具", "unfavoriteTool": "取消收藏", "hideTool": "隐藏工具", "unhideTool": "取消隐藏",
             "scanComplete": "工具发现完成", "ok": "好", "operationComplete": "操作完成", "operationResult": "操作结果", "cannotLaunch": "无法启动", "automationPermissionNeeded": "需要允许自动化",
             "noNewCandidates": "没有发现新的候选工具。", "foundCandidates": "发现 %@ 个候选工具。请在“候选收件箱”中确认要收录的项目。",
             "settingsAppearance": "外观", "settingsLanguage": "语言", "settingsTerminal": "终端启动", "defaultTerminal": "默认终端", "toolDiscovery": "工具发现", "dataPrivacy": "数据与隐私", "dataManagement": "备份与恢复",
@@ -87,14 +87,14 @@ enum AppCopy {
             "warpCopied": "已打开 Warp，并将命令复制到剪贴板。", "copied": "完整命令已复制到剪贴板。", "terminalLaunched": "已在 Terminal 中执行命令。", "itermLaunched": "已在 iTerm 中输入命令。"
         ]
         let english: [String: String] = [
-            "allTools": "All Tools", "inbox": "Review Inbox", "hidden": "Hidden", "categories": "Categories", "toolLibrary": "Library", "settings": "Settings",
+            "allTools": "All Tools", "inbox": "Review Inbox", "favorites": "Favorites", "recent": "Recent", "hidden": "Hidden", "categories": "Categories", "toolLibrary": "Library", "settings": "Settings",
             "discover": "Discover Tools", "discovering": "Discovering", "addTool": "Add Manually", "searchTools": "Search tools", "searchCandidates": "Filter candidates",
-            "noTools": "No tools collected", "noMatches": "No matching tools", "noHidden": "No hidden tools", "emptyInbox": "Your review inbox is empty",
+            "noTools": "No tools collected", "noMatches": "No matching tools", "noFavorites": "No favorite tools yet", "noRecent": "No recently used tools yet", "noHidden": "No hidden tools", "emptyInbox": "Your review inbox is empty",
             "scanDescription": "Use Discover Tools to scan interactive CLI commands in PATH. New results are reviewed before entering your library.",
             "inboxDescription": "New commands found by scanning appear here first. Accept them to add them to your library.",
-            "hiddenDescription": "Tools you hide from a card's context menu appear here.",
+            "hiddenDescription": "Tools you hide from a card's context menu appear here.", "favoritesDescription": "Favorite a tool from its context menu to keep it easy to find here.", "recentDescription": "Successfully launched tools appear here in most-recent-first order.",
             "clearSearch": "Clear Search", "goToLibrary": "Open Library", "tools": "tools", "collect": "Accept", "ignore": "Ignore", "restore": "Restore",
-            "launch": "Launch", "launchByTemplate": "Launch with Template", "editTool": "Edit Tool", "hideTool": "Hide Tool", "unhideTool": "Unhide Tool",
+            "launch": "Launch", "launchByTemplate": "Launch with Template", "editTool": "Edit Tool", "favoriteTool": "Favorite Tool", "unfavoriteTool": "Remove from Favorites", "hideTool": "Hide Tool", "unhideTool": "Unhide Tool",
             "scanComplete": "Tool discovery complete", "ok": "OK", "operationComplete": "Done", "operationResult": "Result", "cannotLaunch": "Unable to launch", "automationPermissionNeeded": "Automation Permission Needed",
             "noNewCandidates": "No new tool candidates were found.", "foundCandidates": "Found %@ new tool candidates. Review them in the inbox.",
             "settingsAppearance": "Appearance", "settingsLanguage": "Language", "settingsTerminal": "Terminal Launching", "defaultTerminal": "Default Terminal", "toolDiscovery": "Tool Discovery", "dataPrivacy": "Data & Privacy", "dataManagement": "Backup & Restore",
