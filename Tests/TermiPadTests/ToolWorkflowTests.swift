@@ -137,3 +137,82 @@ extension ToolWorkflowTests {
         }
     }
 }
+
+
+extension ToolWorkflowTests {
+    func testBackupDoesNotExportLegacyRemoteIconURL() {
+        let tool = TerminalTool(
+            name: "legacy-cli",
+            executablePath: "/opt/homebrew/bin/legacy-cli",
+            commandTemplate: "legacy-cli",
+            category: .development
+        )
+        tool.iconURLString = "https://avatars.githubusercontent.com/u/1"
+
+        let backup = TermiPadBackup.make(
+            tools: [tool],
+            candidates: [],
+            includeSavedVariableValues: false
+        )
+
+        XCTAssertNil(backup.tools.first?.iconURLString)
+    }
+
+    func testLegacySchemaOneBackupDefaultsTrustFieldsAndStripsRemoteIcon() throws {
+        let legacyJSON = """
+        {
+          "schemaVersion": 1,
+          "exportedAt": "2024-01-02T03:04:05Z",
+          "includesSavedVariableValues": false,
+          "tools": [
+            {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "name": "legacy-cli",
+              "executablePath": "/opt/homebrew/bin/legacy-cli",
+              "commandTemplate": "legacy-cli",
+              "toolDescription": "Legacy CLI",
+              "categoryRawValue": "开发工具",
+              "iconSymbol": "terminal",
+              "iconURLString": "https://avatars.githubusercontent.com/u/1",
+              "repositoryFullName": "example/legacy-cli",
+              "isUserCustomized": false,
+              "isHidden": false,
+              "variableValuesJSON": null,
+              "lastLaunchedAt": null,
+              "createdAt": "2024-01-02T03:04:05Z"
+            }
+          ],
+          "candidates": [
+            {
+              "id": "00000000-0000-0000-0000-000000000002",
+              "name": "legacy-candidate",
+              "executablePath": "/Users/example/.cargo/bin/legacy-candidate",
+              "categoryRawValue": "其他/未分类",
+              "statusRawValue": "pending",
+              "discoveredAt": "2024-01-02T03:04:05Z"
+            }
+          ]
+        }
+        """
+
+        let backup = try BackupService.decode(Data(legacyJSON.utf8))
+        let record = try XCTUnwrap(backup.tools.first)
+        let restored = record.makeTool(includesSavedVariableValues: backup.includesSavedVariableValues)
+        XCTAssertNil(restored.iconURLString)
+        XCTAssertEqual(restored.installationSource, .homebrew)
+        XCTAssertEqual(restored.metadataProvenance, .local)
+        XCTAssertEqual(restored.metadataMatchConfidence, 0)
+
+        let existing = TerminalTool(
+            name: "existing-cli",
+            executablePath: "/usr/local/bin/existing-cli",
+            commandTemplate: "existing-cli"
+        )
+        existing.iconURLString = "https://avatars.githubusercontent.com/u/2"
+        record.apply(to: existing, includesSavedVariableValues: backup.includesSavedVariableValues)
+        XCTAssertNil(existing.iconURLString)
+
+        let candidate = try XCTUnwrap(backup.candidates.first).makeCandidate()
+        XCTAssertEqual(candidate.installationSource, .cargo)
+    }
+}

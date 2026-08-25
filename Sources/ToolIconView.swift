@@ -63,7 +63,7 @@ enum ToolIconCatalog {
     }
 }
 
-/// 图标渲染优先级：GitHub 仓库组织头像（通常为官方品牌 Logo）→ 内置的工具专属图形 → 具有稳定差异的语义回退。
+/// 图标渲染只使用内置的工具专属图形与具有稳定差异的语义回退；不会从网络加载品牌或所有者头像。
 struct ToolIconView: View {
     let tool: TerminalTool
     let size: CGFloat
@@ -83,28 +83,7 @@ struct ToolIconView: View {
                     )
                 )
 
-            if let url = URL(string: tool.iconURLString ?? "") {
-                AsyncImage(url: url, transaction: Transaction(animation: .easeInOut(duration: 0.2))) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: size, height: size)
-                            .clipShape(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
-                    case .failure:
-                        fallbackSymbol
-                    case .empty:
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(.white)
-                    @unknown default:
-                        fallbackSymbol
-                    }
-                }
-            } else {
-                fallbackSymbol
-            }
+            fallbackSymbol
         }
         .frame(width: size, height: size)
         .shadow(color: definition.primaryColor.opacity(0.20), radius: 5, y: 2)
