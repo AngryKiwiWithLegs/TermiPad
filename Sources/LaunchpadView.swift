@@ -430,7 +430,7 @@ struct LaunchpadView: View {
         guard health.permitsLaunch else {
             DiagnosticsStore.shared.record(.toolHealthBlocked)
             launchNotice = LaunchNotice(
-                title: "\(AppCopy.text(\"cannotLaunch\", language: language)) \(tool.name)",
+                title: "\(AppCopy.text("cannotLaunch", language: language)) \(tool.name)",
                 message: health.recoveryMessage(language),
                 repairTool: tool
             )

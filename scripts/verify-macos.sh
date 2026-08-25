@@ -66,8 +66,16 @@ write_summary() {
 }
 trap write_summary EXIT
 
+swift_source_guard() {
+  if grep -RInF '\(AppCopy.text(\"' Sources; then
+    echo '检测到 Swift 字符串插值中被错误转义的 AppCopy 调用。' >&2
+    return 1
+  fi
+}
+
 run_step toolchain bash -c 'xcodebuild -version && swift --version && xcodegen --version'
 run_step scripts-syntax bash -c 'bash -n scripts/verify-macos.sh && bash -n scripts/verify-release-artifact.sh'
+run_step swift-source-guard swift_source_guard
 run_step package-manifest swift package dump-package
 run_step unit-tests swift test
 
