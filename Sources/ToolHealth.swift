@@ -36,9 +36,9 @@ enum ToolHealth: Equatable {
             return "The recorded executable path no longer exists. Edit the tool to update its path, or remove this stale tool."
         case (.notExecutable, .english):
             return "The recorded file is not executable. Edit the tool to check its path and file permissions."
-        case (.available, .notInspectable, .simplifiedChinese):
+        case (.available, .simplifiedChinese), (.notInspectable, .simplifiedChinese):
             return ""
-        case (.available, .notInspectable, .english):
+        case (.available, .english), (.notInspectable, .english):
             return ""
         }
     }

@@ -71,6 +71,10 @@ swift_source_guard() {
     echo '检测到 Swift 字符串插值中被错误转义的 AppCopy 调用。' >&2
     return 1
   fi
+  if grep -RInF 'case (.available, .notInspectable,' Sources; then
+    echo '检测到 ToolHealth 二元元组被错误写成三元 case。' >&2
+    return 1
+  fi
 }
 
 run_step toolchain bash -c 'xcodebuild -version && swift --version && xcodegen --version'
