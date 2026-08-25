@@ -96,6 +96,7 @@ final class TermiPadUITests: XCTestCase {
 
     private func launchApp(openSettings: Bool = false, forceRecovery: Bool = false) {
         app = XCUIApplication(bundleIdentifier: "com.termipad.app")
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         app.launchEnvironment["TERMIPAD_UI_TEST_MODE"] = "1"
         if openSettings {
             app.launchEnvironment["TERMIPAD_UI_TEST_OPEN_SETTINGS"] = "1"
@@ -105,13 +106,30 @@ final class TermiPadUITests: XCTestCase {
         }
         app.launch()
         let reachedForeground = app.wait(for: .runningForeground, timeout: 10)
+        XCTAssertTrue(
+            reachedForeground,
+            "TermiPad 未能在 10 秒内进入前台。当前 UI 层级：\n\(app.debugDescription)"
+        )
+        ensureMainWindow()
         attachTextDiagnostic(
             named: "termipad-launch-state",
             text: "bundleIdentifier=com.termipad.app\nstate=\(app.state.rawValue)\n\(app.debugDescription)"
         )
+    }
+
+    private func ensureMainWindow() {
+        let mainWindow = app.windows.firstMatch
+        if !mainWindow.waitForExistence(timeout: 3) {
+            let newWindow = app.menuBars.menuItems["New Window"]
+            XCTAssertTrue(
+                newWindow.waitForExistence(timeout: 5),
+                "TermiPad 未恢复主窗口时，应用菜单应提供 New Window。"
+            )
+            newWindow.click()
+        }
         XCTAssertTrue(
-            reachedForeground,
-            "TermiPad 未能在 10 秒内进入前台。当前 UI 层级：\n\(app.debugDescription)"
+            mainWindow.waitForExistence(timeout: 10),
+            "TermiPad 在 UI 测试中应呈现可访问的主窗口。"
         )
     }
 
