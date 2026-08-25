@@ -332,15 +332,7 @@ struct LaunchpadView: View {
 
     private func accept(_ candidate: CandidateTool) {
         let category = candidate.category
-        let tool = TerminalTool(
-            name: candidate.name,
-            executablePath: candidate.executablePath,
-            commandTemplate: candidate.name,
-            toolDescription: "",
-            category: category,
-            iconSymbol: ToolIconCatalog.definition(for: candidate.name, category: category).symbol,
-            installationSource: candidate.installationSource
-        )
+        let tool = candidate.makeToolForAcceptance()
         modelContext.insert(tool)
         candidate.status = .accepted
         try? modelContext.save()

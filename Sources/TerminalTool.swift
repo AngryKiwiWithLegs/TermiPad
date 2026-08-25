@@ -523,4 +523,17 @@ final class CandidateTool {
         installationSourceRawValue = (installationSource ?? ToolInstallationSource.detect(for: executablePath)).rawValue
         discoveredAt = Date()
     }
+
+    /// 将用户确认收录的候选转换为本地工具。命令仅来自候选名称，不采纳网络补充内容。
+    func makeToolForAcceptance() -> TerminalTool {
+        TerminalTool(
+            name: name,
+            executablePath: executablePath,
+            commandTemplate: name,
+            toolDescription: "",
+            category: category,
+            iconSymbol: ToolIconCatalog.definition(for: name, category: category).symbol,
+            installationSource: installationSource
+        )
+    }
 }

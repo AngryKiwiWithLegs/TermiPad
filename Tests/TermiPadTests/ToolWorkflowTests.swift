@@ -216,3 +216,41 @@ extension ToolWorkflowTests {
         XCTAssertEqual(candidate.installationSource, .cargo)
     }
 }
+
+
+extension ToolWorkflowTests {
+    func testAcceptedCandidateKeepsLocalCommandAndTrustMetadata() {
+        let candidate = CandidateTool(
+            name: "custom-cli",
+            executablePath: "/Users/example/.cargo/bin/custom-cli",
+            category: .development,
+            installationSource: .cargo
+        )
+
+        let tool = candidate.makeToolForAcceptance()
+        XCTAssertEqual(tool.name, "custom-cli")
+        XCTAssertEqual(tool.executablePath, "/Users/example/.cargo/bin/custom-cli")
+        XCTAssertEqual(tool.commandTemplate, "custom-cli")
+        XCTAssertEqual(tool.category, .development)
+        XCTAssertEqual(tool.installationSource, .cargo)
+        XCTAssertEqual(tool.metadataProvenance, .local)
+        XCTAssertEqual(tool.metadataMatchConfidence, 0)
+        XCTAssertNil(tool.iconURLString)
+    }
+
+    func testTerminalErrorMessagesGiveSafeRecoveryGuidance() {
+        let unavailable = TerminalLauncherError.applicationUnavailable("Warp")
+        XCTAssertTrue(unavailable.message(language: .simplifiedChinese).contains("仅复制命令"))
+        XCTAssertTrue(unavailable.message(language: .english).contains("copy the command only"))
+
+        let denied = TerminalLauncherError.automationPermissionDenied(.iTerm)
+        XCTAssertTrue(denied.message(language: .simplifiedChinese).contains("自动化"))
+        XCTAssertTrue(denied.message(language: .english).contains("Automation"))
+    }
+
+    func testCopyOnlyTargetHasNoApplicationIdentifierAndClearBoundary() {
+        XCTAssertNil(TerminalTarget.copyOnly.bundleIdentifier)
+        XCTAssertTrue(TerminalTarget.copyOnly.helpText(.simplifiedChinese).contains("不启动任何终端"))
+        XCTAssertTrue(TerminalTarget.copyOnly.helpText(.english).contains("without opening a terminal"))
+    }
+}
