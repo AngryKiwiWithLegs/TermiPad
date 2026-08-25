@@ -436,6 +436,16 @@ struct LaunchpadView: View {
             )
             return
         }
+        let workingDirectoryHealth = ToolLaunchContext.workingDirectoryHealth(for: tool.workingDirectoryPath)
+        guard workingDirectoryHealth != .unavailable else {
+            DiagnosticsStore.shared.record(.workingDirectoryUnavailable)
+            launchNotice = LaunchNotice(
+                title: "\(AppCopy.text("cannotLaunch", language: language)) \(tool.name)",
+                message: workingDirectoryHealth.recoveryMessage(language),
+                repairTool: tool
+            )
+            return
+        }
         if CommandTemplate.variables(in: tool.commandTemplate).isEmpty {
             execute(command: tool.commandTemplate, for: tool)
         } else {
@@ -444,8 +454,9 @@ struct LaunchpadView: View {
     }
 
     private func execute(command: String, for tool: TerminalTool) {
+        let contextualCommand = ToolLaunchContext.command(command, inWorkingDirectory: tool.workingDirectoryPath)
         do {
-            let result = try TerminalLauncher.launch(command: command, target: terminalTarget)
+            let result = try TerminalLauncher.launch(command: contextualCommand, target: terminalTarget)
             switch result {
             case .launched(let target):
                 DiagnosticsStore.shared.record(.launchSucceeded, terminalTarget: target)
@@ -818,10 +829,15 @@ struct ToolEditView: View {
     @Bindable var tool: TerminalTool
     let onDeleted: () -> Void
     @State private var isImportingCustomIcon = false
+    @State private var isChoosingWorkingDirectory = false
     @State private var customIconMessage: String?
 
     private var health: ToolHealth {
         ToolHealthChecker.check(executablePath: tool.executablePath)
+    }
+
+    private var workingDirectoryHealth: ToolWorkingDirectoryHealth {
+        ToolLaunchContext.workingDirectoryHealth(for: tool.workingDirectoryPath)
     }
 
     var body: some View {
@@ -854,6 +870,31 @@ struct ToolEditView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                }
+                Section(AppCopy.text("workingDirectory", language: language)) {
+                    LabeledContent(AppCopy.text("workingDirectory", language: language), value: workingDirectoryHealth.displayName(language))
+                    if let workingDirectoryPath = tool.workingDirectoryPath {
+                        Text(workingDirectoryPath)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                    HStack {
+                        Button(AppCopy.text("chooseWorkingDirectory", language: language)) {
+                            isChoosingWorkingDirectory = true
+                        }
+                        .accessibilityIdentifier("tool-choose-working-directory")
+                        Button(AppCopy.text("clearWorkingDirectory", language: language), role: .destructive, action: clearWorkingDirectory)
+                            .disabled(tool.workingDirectoryPath == nil)
+                    }
+                    if !workingDirectoryHealth.recoveryMessage(language).isEmpty {
+                        Text(workingDirectoryHealth.recoveryMessage(language))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(AppCopy.text("workingDirectoryHint", language: language))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Section(AppCopy.text("customIcon", language: language)) {
                     HStack {
@@ -907,7 +948,7 @@ struct ToolEditView: View {
             }
         }
         .frame(minWidth: 500, minHeight: 420)
-        .alert(AppCopy.text("customIcon", language: language), isPresented: Binding(
+        .alert(AppCopy.text("operationResult", language: language), isPresented: Binding(
             get: { customIconMessage != nil },
             set: { if !$0 { customIconMessage = nil } }
         )) {
@@ -920,6 +961,12 @@ struct ToolEditView: View {
             allowedContentTypes: ToolIconStore.supportedContentTypes
         ) { result in
             replaceCustomIcon(with: result)
+        }
+        .fileImporter(
+            isPresented: $isChoosingWorkingDirectory,
+            allowedContentTypes: [.folder]
+        ) { result in
+            updateWorkingDirectory(with: result)
         }
     }
 
@@ -949,6 +996,43 @@ struct ToolEditView: View {
             customIconMessage = AppCopy.text("customIconReady", language: language)
         } catch {
             customIconMessage = AppCopy.text("customIconImportFailed", language: language)
+        }
+    }
+
+    private func updateWorkingDirectory(with result: Result<URL, Error>) {
+        guard case .success(let directoryURL) = result else {
+            customIconMessage = AppCopy.text("workingDirectoryUpdateFailed", language: language)
+            return
+        }
+        let didAccess = directoryURL.startAccessingSecurityScopedResource()
+        defer {
+            if didAccess { directoryURL.stopAccessingSecurityScopedResource() }
+        }
+        guard let normalizedPath = ToolLaunchContext.normalizedDirectoryPath(directoryURL.path),
+              ToolLaunchContext.workingDirectoryHealth(for: normalizedPath) == .available else {
+            customIconMessage = AppCopy.text("workingDirectoryUpdateFailed", language: language)
+            return
+        }
+        let previousPath = tool.workingDirectoryPath
+        tool.workingDirectoryPath = normalizedPath
+        do {
+            try modelContext.save()
+            customIconMessage = AppCopy.text("workingDirectoryReady", language: language)
+        } catch {
+            tool.workingDirectoryPath = previousPath
+            customIconMessage = AppCopy.text("workingDirectoryUpdateFailed", language: language)
+        }
+    }
+
+    private func clearWorkingDirectory() {
+        let previousPath = tool.workingDirectoryPath
+        tool.workingDirectoryPath = nil
+        do {
+            try modelContext.save()
+            customIconMessage = AppCopy.text("workingDirectoryReady", language: language)
+        } catch {
+            tool.workingDirectoryPath = previousPath
+            customIconMessage = AppCopy.text("workingDirectoryUpdateFailed", language: language)
         }
     }
 

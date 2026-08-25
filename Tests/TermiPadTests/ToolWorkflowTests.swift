@@ -345,6 +345,7 @@ extension ToolWorkflowTests {
         )
         existingTool.variableValuesJSON = "{\"token\":\"keep-local\"}"
         existingTool.customIconFilename = "keep-local.png"
+        existingTool.workingDirectoryPath = "/Users/example/keep-local"
         let existingToolID = existingTool.id
         context.insert(existingTool)
         try context.save()
@@ -361,6 +362,7 @@ extension ToolWorkflowTests {
         incomingTool.metadataMatchConfidence = 100
         incomingTool.variableValuesJSON = "{\"token\":\"should-not-import\"}"
         incomingTool.customIconFilename = "not-exported.png"
+        incomingTool.workingDirectoryPath = "/Users/example/not-exported"
 
         let incomingCandidate = CandidateTool(
             name: "restored-candidate",
@@ -393,6 +395,7 @@ extension ToolWorkflowTests {
         XCTAssertEqual(existingTool.metadataMatchConfidence, 100)
         XCTAssertEqual(existingTool.variableValuesJSON, "{\"token\":\"keep-local\"}")
         XCTAssertEqual(existingTool.customIconFilename, "keep-local.png")
+        XCTAssertEqual(existingTool.workingDirectoryPath, "/Users/example/keep-local")
 
         let tools = try context.fetch(FetchDescriptor<TerminalTool>())
         let candidates = try context.fetch(FetchDescriptor<CandidateTool>())
@@ -585,5 +588,32 @@ extension ToolWorkflowTests {
         XCTAssertEqual(ToolHealthChecker.check(executablePath: nonExecutableURL.path), .notExecutable)
         XCTAssertEqual(ToolHealthChecker.check(executablePath: directory.appendingPathComponent("missing-tool").path), .missing)
         XCTAssertEqual(ToolHealthChecker.check(executablePath: "tool-on-path"), .notInspectable)
+    }
+}
+
+
+extension ToolWorkflowTests {
+    func testWorkingDirectoryContextUsesEscapedCDPrefixAndChecksFolders() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TermiPadTests-Working Dir ' quoted", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let command = ToolLaunchContext.command("tool --flag", inWorkingDirectory: directory.path)
+        let normalizedPath = try XCTUnwrap(ToolLaunchContext.normalizedDirectoryPath(directory.path))
+        XCTAssertEqual(command, "cd -- \(CommandTemplate.shellEscape(normalizedPath)) && tool --flag")
+        XCTAssertEqual(ToolLaunchContext.workingDirectoryHealth(for: directory.path), .available)
+        XCTAssertEqual(ToolLaunchContext.workingDirectoryHealth(for: directory.appendingPathComponent("missing").path), .unavailable)
+        XCTAssertEqual(ToolLaunchContext.workingDirectoryHealth(for: "relative-folder"), .notConfigured)
+        XCTAssertEqual(ToolLaunchContext.command("tool --flag", inWorkingDirectory: nil), "tool --flag")
+    }
+
+    func testBackupDoesNotEncodeWorkingDirectoryPath() throws {
+        let tool = TerminalTool(name: "directory-cli", executablePath: "/usr/local/bin/directory-cli", commandTemplate: "directory-cli")
+        tool.workingDirectoryPath = "/Users/example/private-project"
+        let backup = TermiPadBackup.make(tools: [tool], candidates: [], includeSavedVariableValues: false)
+        let json = try XCTUnwrap(String(data: try BackupService.encode(backup), encoding: .utf8))
+        XCTAssertFalse(json.contains("workingDirectoryPath"))
+        XCTAssertFalse(json.contains("private-project"))
     }
 }

@@ -420,6 +420,8 @@ final class TerminalTool {
     var id: UUID
     var name: String
     var executablePath: String
+    /// 用户明确选择的本地工作目录；旧记录缺失时为 nil，不改变原有启动行为。
+    var workingDirectoryPath: String?
     var commandTemplate: String
     var toolDescription: String
     var categoryRawValue: String
@@ -473,6 +475,7 @@ final class TerminalTool {
         id = UUID()
         self.name = name
         self.executablePath = executablePath
+        workingDirectoryPath = nil
         self.commandTemplate = commandTemplate.isEmpty ? name : commandTemplate
         self.toolDescription = toolDescription
         categoryRawValue = category.rawValue
