@@ -177,3 +177,10 @@ P2-B1 需要一次单独的产品确认，因为它首次把 TermiPad 从“启�
 [7]: https://pip.pypa.io/en/stable/topics/secure-installs/ "pip: Secure installs"
 [8]: https://doc.rust-lang.org/cargo/commands/cargo-install.html "Cargo Book: cargo install"
 [9]: https://pip.pypa.io/en/stable/cli/pip_install/ "pip: pip install"
+
+
+## Implementation status — 2026-08-25
+
+**TermiPad Mendocino — Discovery Preview** 已开始实现 P2-A0 与 P2-A1 的本地代码批次。该批次仅覆盖固定公开 GitHub 查询、手动刷新、ETag 条件缓存、串行请求、限流信息、非 fork/非 archived 筛选、可解释排序、本地缓存、双语预览界面、默认关闭的设置开关，以及对应的单元/UI 回归测试。
+
+本批次**不含**任何安装、卸载、升级、Homebrew 调用、npm/pip/Cargo 调用、命令生成、终端交接、自动收录、README 抓取、AI 排序、GitHub 身份连接或后台刷新。远程条目不写入 SwiftData 工具库、候选收件箱、JSON 备份或隐私化诊断包。实现完成后仍必须在真实 macOS 环境执行完整集中验证，才能将本批次标记为通过。

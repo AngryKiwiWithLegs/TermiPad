@@ -79,6 +79,10 @@ swift_source_guard() {
     echo '检测到 BackupRestoreSummary 已废弃字段名。' >&2
     return 1
   fi
+  if grep -REn 'TerminalLauncher|CommandTemplate|modelContext\.insert|TerminalTool\(|CandidateTool\(|Process\(|NSAppleScript|brew install|npm install|pip install|cargo install' Sources/DiscoveryPreview*.swift Sources/DiscoveryService.swift; then
+    echo '检测到 Discovery Preview 触及命令执行、安装或工具库写入边界。' >&2
+    return 1
+  fi
 }
 
 run_step toolchain bash -c 'xcodebuild -version && swift --version && xcodegen --version'

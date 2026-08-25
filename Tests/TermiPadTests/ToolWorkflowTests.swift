@@ -666,3 +666,144 @@ extension ToolWorkflowTests {
         XCTAssertEqual(tools.map(\.name), ["recovered-cli"])
     }
 }
+
+
+extension ToolWorkflowTests {
+    func testDiscoveryRequestIsFixedPublicAndUsesMatchingCacheETagOnly() throws {
+        let cached = DiscoveryCacheSnapshot(
+            fetchedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            query: DiscoveryService.query,
+            entityTag: "\"cached-etag\"",
+            isIncomplete: false,
+            items: []
+        )
+        let request = try DiscoveryService.makeRequest(cache: cached)
+
+        XCTAssertEqual(request.url?.host, "api.github.com")
+        XCTAssertTrue(request.url?.absoluteString.contains("per_page=20") == true)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "If-None-Match"), "\"cached-etag\"")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), nil)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "TermiPad-DiscoveryPreview")
+        XCTAssertFalse(request.url?.absoluteString.contains("command") == true)
+        XCTAssertFalse(request.url?.absoluteString.contains("path") == true)
+
+        let staleQueryCache = DiscoveryCacheSnapshot(
+            fetchedAt: cached.fetchedAt,
+            query: "unrelated-query",
+            entityTag: "\"must-not-send\"",
+            isIncomplete: false,
+            items: []
+        )
+        XCTAssertNil(try DiscoveryService.makeRequest(cache: staleQueryCache).value(forHTTPHeaderField: "If-None-Match"))
+    }
+
+    func testDiscoveryDecodingFiltersArchivedAndForksAndExplainsEvidence() throws {
+        let payload = """
+        {
+          "incomplete_results": true,
+          "items": [
+            {
+              "id": 1,
+              "full_name": "example/active-cli",
+              "name": "active-cli",
+              "description": "An interactive command-line tool.",
+              "html_url": "https://github.com/example/active-cli",
+              "license": { "name": "MIT License" },
+              "topics": ["cli", "terminal"],
+              "stargazers_count": 1000,
+              "forks_count": 10,
+              "created_at": "2024-01-01T00:00:00Z",
+              "pushed_at": "2026-08-20T00:00:00Z",
+              "archived": false,
+              "fork": false
+            },
+            {
+              "id": 2,
+              "full_name": "example/archived-cli",
+              "name": "archived-cli",
+              "description": "Archived.",
+              "html_url": "https://github.com/example/archived-cli",
+              "license": null,
+              "topics": ["cli"],
+              "stargazers_count": 9999,
+              "forks_count": 0,
+              "created_at": "2024-01-01T00:00:00Z",
+              "pushed_at": "2026-08-20T00:00:00Z",
+              "archived": true,
+              "fork": false
+            },
+            {
+              "id": 3,
+              "full_name": "example/forked-cli",
+              "name": "forked-cli",
+              "description": "Fork.",
+              "html_url": "https://github.com/example/forked-cli",
+              "license": null,
+              "topics": ["cli"],
+              "stargazers_count": 9999,
+              "forks_count": 0,
+              "created_at": "2024-01-01T00:00:00Z",
+              "pushed_at": "2026-08-20T00:00:00Z",
+              "archived": false,
+              "fork": true
+            }
+          ]
+        }
+        """
+        let now = Date(timeIntervalSince1970: 1_777_000_000)
+        let snapshot = try DiscoveryService.decodeSnapshot(
+            data: try XCTUnwrap(payload.data(using: .utf8)),
+            entityTag: "\"demo\"",
+            fetchedAt: now
+        )
+
+        XCTAssertTrue(snapshot.isIncomplete)
+        XCTAssertEqual(snapshot.items.map(\.repositoryFullName), ["example/active-cli"])
+        XCTAssertTrue(DiscoveryRanking.explanation(for: try XCTUnwrap(snapshot.items.first), language: .english, now: now).contains("CLI"))
+        XCTAssertTrue(DiscoveryRanking.explanation(for: try XCTUnwrap(snapshot.items.first), language: .simplifiedChinese, now: now).contains("CLI/终端项目"))
+    }
+
+    func testDiscoveryCacheStaysInUserDefaultsAndCanBeCleared() throws {
+        let suiteName = "TermiPadTests-DiscoveryCache-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let snapshot = DiscoveryCacheSnapshot(
+            fetchedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            query: DiscoveryService.query,
+            entityTag: nil,
+            isIncomplete: false,
+            items: []
+        )
+        DiscoveryCacheStore.save(snapshot, defaults: defaults)
+        XCTAssertEqual(DiscoveryCacheStore.load(defaults: defaults), snapshot)
+        DiscoveryCacheStore.clear(defaults: defaults)
+        XCTAssertNil(DiscoveryCacheStore.load(defaults: defaults))
+    }
+
+    func testDiscoveryCopyStatesExplicitlyForbidInstallation() {
+        XCTAssertTrue(AppCopy.text("discoveryNoInstallHint", language: .english).contains("does not install software"))
+        XCTAssertTrue(AppCopy.text("discoverySettingsHint", language: .simplifiedChinese).contains("不会自动联网"))
+    }
+}
+
+
+extension ToolWorkflowTests {
+    func testDiscoveryDiagnosticsUseFixedPrivacySafeCategories() throws {
+        let suiteName = "TermiPadTests-DiscoveryDiagnostics-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = DiagnosticsStore(defaults: defaults, storageKey: "events", now: { Date(timeIntervalSince1970: 123) })
+
+        store.record(.discoveryRefreshed, itemCount: 7)
+        store.record(.discoveryCacheReused, itemCount: 7)
+        store.record(.discoveryRefreshFailed)
+
+        XCTAssertEqual(store.events.map(\.kind), [.discoveryRefreshed, .discoveryCacheReused, .discoveryRefreshFailed])
+        XCTAssertEqual(store.events.first?.itemCount, 7)
+        let report = try XCTUnwrap(String(data: try JSONEncoder().encode(store.makePrivacyReport()), encoding: .utf8))
+        XCTAssertFalse(report.contains("repositoryFullName"))
+        XCTAssertFalse(report.contains("commandTemplate"))
+        XCTAssertFalse(report.contains("api.github.com"))
+    }
+}

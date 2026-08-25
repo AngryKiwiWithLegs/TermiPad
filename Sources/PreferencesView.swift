@@ -15,6 +15,7 @@ struct PreferencesView: View {
     @AppStorage("TermiPad.terminalTarget") private var terminalTargetRawValue = TerminalTarget.systemTerminal.rawValue
     @AppStorage("TermiPad.autoEnrich") private var autoEnrich = false
     @AppStorage("TermiPad.showIgnoredCandidates") private var showIgnoredCandidates = false
+    @AppStorage("TermiPad.discoveryPreviewEnabled") private var discoveryPreviewEnabled = false
     @AppStorage(AIService.baseURLDefaultsKey) private var aiBaseURL = "https://api.openai.com/v1"
     @AppStorage(AIService.modelDefaultsKey) private var aiModel = "gpt-4o-mini"
     @AppStorage("TermiPad.updateChecksEnabled") private var updateChecksEnabled = false
@@ -109,6 +110,20 @@ struct PreferencesView: View {
                 Toggle(AppCopy.text("autoEnrich", language: language), isOn: $autoEnrich)
                 Toggle(AppCopy.text("showIgnored", language: language), isOn: $showIgnoredCandidates)
                 Text(AppCopy.text("scanPreferenceHint", language: language))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section(AppCopy.text("discoveryPreview", language: language)) {
+                Toggle(AppCopy.text("enableDiscoveryPreview", language: language), isOn: $discoveryPreviewEnabled)
+                    .accessibilityIdentifier("settings-discovery-preview-enabled")
+                if discoveryPreviewEnabled {
+                    Button(AppCopy.text("clearDiscoveryCache", language: language)) {
+                        DiscoveryCacheStore.clear()
+                    }
+                    .accessibilityIdentifier("settings-clear-discovery-cache")
+                }
+                Text(AppCopy.text("discoverySettingsHint", language: language))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

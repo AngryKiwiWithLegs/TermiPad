@@ -63,6 +63,7 @@ struct LaunchpadView: View {
     private var isFavorites: Bool { selectedSidebarItem == SidebarItem.favorites.rawValue }
     private var isRecent: Bool { selectedSidebarItem == SidebarItem.recent.rawValue }
     private var isHiddenLibrary: Bool { selectedSidebarItem == SidebarItem.hidden.rawValue }
+    private var isDiscoveryPreview: Bool { selectedSidebarItem == SidebarItem.discovery.rawValue }
     private var isSettings: Bool { selectedSidebarItem == SidebarItem.settings.rawValue }
 
     private var selectedCategory: ToolCategory? {
@@ -234,6 +235,12 @@ struct LaunchpadView: View {
                     .tag(SidebarItem.hidden.rawValue)
             }
 
+            Section(AppCopy.text("discoverySection", language: language)) {
+                Label(AppCopy.text("discoveryPreview", language: language), systemImage: "safari")
+                    .tag(SidebarItem.discovery.rawValue)
+                    .accessibilityIdentifier("sidebar-discovery-preview")
+            }
+
             Section(AppCopy.text("categories", language: language)) {
                 ForEach(ToolCategory.allCases) { category in
                     Label(category.displayName(language), systemImage: category.iconName)
@@ -260,6 +267,8 @@ struct LaunchpadView: View {
             PreferencesView(embeddedInNavigation: true)
                 .navigationTitle(AppCopy.text("settings", language: language))
                 .accessibilityIdentifier("sidebar-settings-detail")
+        } else if isDiscoveryPreview {
+            DiscoveryPreviewView(language: language)
         } else if isInbox {
             CandidateInboxView(
                 candidates: filteredCandidates,
@@ -503,6 +512,7 @@ private enum SidebarItem: String {
     case favorites = "__favorite_tools__"
     case recent = "__recent_tools__"
     case hidden = "__hidden_tools__"
+    case discovery = "__discovery_preview__"
     case settings = "__settings__"
 }
 

@@ -47,6 +47,33 @@ final class TermiPadUITests: XCTestCase {
         attachScreenshot(named: "termipad-library")
     }
 
+    func testDiscoveryPreviewIsDisabledByDefault() throws {
+        launchApp()
+        completeOnboarding()
+
+        let discoverySidebarItem = element("sidebar-discovery-preview")
+        XCTAssertTrue(
+            discoverySidebarItem.waitForExistence(timeout: 5),
+            "TermiPad 应在侧边栏提供项目发现预览入口。"
+        )
+        discoverySidebarItem.click()
+
+        XCTAssertTrue(
+            element("discovery-preview").waitForExistence(timeout: 5),
+            "项目发现预览应显示独立页面，而非混入候选收件箱。"
+        )
+        XCTAssertTrue(
+            element("discovery-enable-preview").waitForExistence(timeout: 5),
+            "项目发现预览默认应保持关闭，并要求用户明确启用。"
+        )
+        XCTAssertFalse(
+            element("discovery-refresh").exists,
+            "默认关闭的项目发现预览不应显示或触发刷新操作。"
+        )
+
+        attachScreenshot(named: "termipad-discovery-preview-disabled")
+    }
+
     func testRecoveryLaunchOffersBackupImport() throws {
         launchApp(forceRecovery: true)
 

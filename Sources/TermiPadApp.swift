@@ -41,6 +41,8 @@ struct TermiPadApp: App {
 
         if isUITest {
             UserDefaults.standard.set(false, forKey: "TermiPad.hasCompletedOnboarding")
+            UserDefaults.standard.set(false, forKey: "TermiPad.discoveryPreviewEnabled")
+            DiscoveryCacheStore.clear()
         }
         WindowPlacementCoordinator.shared.installIfNeeded()
     }
