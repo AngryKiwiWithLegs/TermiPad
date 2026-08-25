@@ -109,11 +109,25 @@ GitHub Actions 工作流包含：
 
 当前 GitHub Actions 的云端运行受账户级账单/额度限制拦截；恢复后，工作流会自动继续执行上述验证。
 
+### 发行工件检查
+
+`./scripts/verify-macos.sh` 只验证开发构建，不会也不能代替 Developer ID 签名与 Apple 公证。在已归档、签名后的 `.app` 上，可运行以下脚本归档签名、Hardened Runtime、entitlement 与（可选）Gatekeeper/票据检查证据：
+
+```bash
+cd ~/TermiPad
+./scripts/verify-release-artifact.sh "/path/to/TermiPad.app"
+# 已完成公证并 staple 票据后：
+./scripts/verify-release-artifact.sh "/path/to/TermiPad.app" --require-notarization
+```
+
+该脚本**不会**签名、上传公证或发布软件；它只审计已经生成的发行工件并把证据写入 `release-evidence/`。正式放行要求见 [`docs/private-beta-release-audit.md`](docs/private-beta-release-audit.md)。
+
 ## 项目结构
 
 ```text
 TermiPad/
 ├── scripts/verify-macos.sh      # 一键执行本机 macOS 验证
+├── scripts/verify-release-artifact.sh # 已签名发行工件的证据检查
 ├── Sources/
 │   ├── TerminalTool.swift       # SwiftData 工具与候选模型
 │   ├── ToolScanner.swift        # PATH 与常见生态路径扫描
