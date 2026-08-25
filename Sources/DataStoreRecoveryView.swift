@@ -87,10 +87,10 @@ struct DataStoreRecoveryView: View {
             try modelContext.save()
             recoveryMessage = String(
                 format: AppCopy.text("restoreSummary", language: language),
-                summary.toolsAdded,
-                summary.toolsUpdated,
-                summary.candidatesAdded,
-                summary.candidatesUpdated
+                summary.addedTools,
+                summary.updatedTools,
+                summary.addedCandidates,
+                summary.updatedCandidates
             )
         } catch {
             recoveryMessage = AppCopy.text("backupImportFailed", language: language)

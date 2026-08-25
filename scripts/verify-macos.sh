@@ -75,6 +75,10 @@ swift_source_guard() {
     echo '检测到 ToolHealth 二元元组被错误写成三元 case。' >&2
     return 1
   fi
+  if grep -RInE 'summary\.(toolsAdded|toolsUpdated|candidatesAdded|candidatesUpdated)' Sources; then
+    echo '检测到 BackupRestoreSummary 已废弃字段名。' >&2
+    return 1
+  fi
 }
 
 run_step toolchain bash -c 'xcodebuild -version && swift --version && xcodegen --version'
