@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import Combine
+import UniformTypeIdentifiers
 
 /// macOS 原生风格的终端工具启动器主界面。
 struct LaunchpadView: View {
@@ -793,6 +794,8 @@ struct ToolEditView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var tool: TerminalTool
     let onDeleted: () -> Void
+    @State private var isImportingCustomIcon = false
+    @State private var customIconMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -817,6 +820,19 @@ struct ToolEditView: View {
                     TextField(AppCopy.text("toolDescription", language: language), text: $tool.toolDescription, axis: .vertical)
                         .lineLimit(2...4)
                 }
+                Section(AppCopy.text("customIcon", language: language)) {
+                    HStack {
+                        Button(AppCopy.text("replaceCustomIcon", language: language)) {
+                            isImportingCustomIcon = true
+                        }
+                        .accessibilityIdentifier("tool-replace-custom-icon")
+                        Button(AppCopy.text("removeCustomIcon", language: language), role: .destructive, action: removeCustomIcon)
+                            .disabled(tool.customIconFilename == nil)
+                    }
+                    Text(AppCopy.text("customIconHint", language: language))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Section(AppCopy.text("toolTrust", language: language)) {
                     LabeledContent(AppCopy.text("installationSource", language: language), value: tool.installationSource.displayName(language))
                     LabeledContent(AppCopy.text("metadataSource", language: language), value: tool.metadataProvenance.displayName(language))
@@ -829,10 +845,16 @@ struct ToolEditView: View {
                 }
                 Section {
                     Button(AppCopy.text("delete", language: language), role: .destructive) {
+                        let customIconFilename = tool.customIconFilename
                         modelContext.delete(tool)
-                        try? modelContext.save()
-                        dismiss()
-                        onDeleted()
+                        do {
+                            try modelContext.save()
+                            ToolIconStore.shared.removeImage(named: customIconFilename)
+                            dismiss()
+                            onDeleted()
+                        } catch {
+                            customIconMessage = AppCopy.text("customIconImportFailed", language: language)
+                        }
                     }
                 }
             }
@@ -850,6 +872,62 @@ struct ToolEditView: View {
             }
         }
         .frame(minWidth: 500, minHeight: 420)
+        .alert(AppCopy.text("customIcon", language: language), isPresented: Binding(
+            get: { customIconMessage != nil },
+            set: { if !$0 { customIconMessage = nil } }
+        )) {
+            Button(AppCopy.text("ok", language: language), role: .cancel) { customIconMessage = nil }
+        } message: {
+            Text(customIconMessage ?? "")
+        }
+        .fileImporter(
+            isPresented: $isImportingCustomIcon,
+            allowedContentTypes: ToolIconStore.supportedContentTypes
+        ) { result in
+            replaceCustomIcon(with: result)
+        }
+    }
+
+    private func replaceCustomIcon(with result: Result<URL, Error>) {
+        guard case .success(let sourceURL) = result else {
+            customIconMessage = AppCopy.text("customIconImportFailed", language: language)
+            return
+        }
+        let didAccess = sourceURL.startAccessingSecurityScopedResource()
+        defer {
+            if didAccess { sourceURL.stopAccessingSecurityScopedResource() }
+        }
+
+        let previousFilename = tool.customIconFilename
+        do {
+            let filename = try ToolIconStore.shared.storeImage(from: sourceURL)
+            tool.customIconFilename = filename
+            tool.isUserCustomized = true
+            do {
+                try modelContext.save()
+            } catch {
+                tool.customIconFilename = previousFilename
+                ToolIconStore.shared.removeImage(named: filename)
+                throw error
+            }
+            ToolIconStore.shared.removeImage(named: previousFilename)
+            customIconMessage = AppCopy.text("customIconReady", language: language)
+        } catch {
+            customIconMessage = AppCopy.text("customIconImportFailed", language: language)
+        }
+    }
+
+    private func removeCustomIcon() {
+        let previousFilename = tool.customIconFilename
+        tool.customIconFilename = nil
+        do {
+            try modelContext.save()
+            ToolIconStore.shared.removeImage(named: previousFilename)
+            customIconMessage = AppCopy.text("customIconReady", language: language)
+        } catch {
+            tool.customIconFilename = previousFilename
+            customIconMessage = AppCopy.text("customIconImportFailed", language: language)
+        }
     }
 }
 

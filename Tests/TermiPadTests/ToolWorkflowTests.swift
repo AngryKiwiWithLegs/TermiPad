@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 import Foundation
 import SwiftData
 @testable import TermiPad
@@ -343,6 +344,7 @@ extension ToolWorkflowTests {
             installationSource: .homebrew
         )
         existingTool.variableValuesJSON = "{\"token\":\"keep-local\"}"
+        existingTool.customIconFilename = "keep-local.png"
         let existingToolID = existingTool.id
         context.insert(existingTool)
         try context.save()
@@ -358,6 +360,7 @@ extension ToolWorkflowTests {
         incomingTool.metadataProvenance = .githubOfficial
         incomingTool.metadataMatchConfidence = 100
         incomingTool.variableValuesJSON = "{\"token\":\"should-not-import\"}"
+        incomingTool.customIconFilename = "not-exported.png"
 
         let incomingCandidate = CandidateTool(
             name: "restored-candidate",
@@ -389,6 +392,7 @@ extension ToolWorkflowTests {
         XCTAssertEqual(existingTool.metadataProvenance, .githubOfficial)
         XCTAssertEqual(existingTool.metadataMatchConfidence, 100)
         XCTAssertEqual(existingTool.variableValuesJSON, "{\"token\":\"keep-local\"}")
+        XCTAssertEqual(existingTool.customIconFilename, "keep-local.png")
 
         let tools = try context.fetch(FetchDescriptor<TerminalTool>())
         let candidates = try context.fetch(FetchDescriptor<CandidateTool>())
@@ -518,5 +522,45 @@ extension ToolWorkflowTests {
             AppCopy.format("foundCandidates", 3, language: .simplifiedChinese),
             "发现 3 个候选工具。请在“候选收件箱”中确认要收录的项目。"
         )
+    }
+}
+
+
+extension ToolWorkflowTests {
+    func testCustomIconStoreCopiesPNGRejectsPathsAndRemovesLocalFile() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TermiPadTests-IconStore-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let sourceURL = directory.appendingPathComponent("source.png")
+        let sourceImage = NSImage(size: NSSize(width: 16, height: 16))
+        sourceImage.lockFocus()
+        NSColor.systemBlue.setFill()
+        NSBezierPath(rect: NSRect(x: 0, y: 0, width: 16, height: 16)).fill()
+        sourceImage.unlockFocus()
+        let tiffData = try XCTUnwrap(sourceImage.tiffRepresentation)
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(data: tiffData))
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: sourceURL)
+
+        let store = ToolIconStore(directoryURL: directory.appendingPathComponent("stored", isDirectory: true))
+        let filename = try store.storeImage(from: sourceURL)
+        let storedURL = try XCTUnwrap(store.url(for: filename))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: storedURL.path))
+        XCTAssertNotNil(store.image(named: filename))
+        XCTAssertNil(store.url(for: "../outside.png"))
+        XCTAssertNil(store.url(for: "not-an-image.txt"))
+
+        store.removeImage(named: filename)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: storedURL.path))
+    }
+
+    func testBackupDoesNotEncodeCustomIconFilename() throws {
+        let tool = TerminalTool(name: "custom-icon", executablePath: "/usr/local/bin/custom-icon", commandTemplate: "custom-icon")
+        tool.customIconFilename = "local-only.png"
+        let backup = TermiPadBackup.make(tools: [tool], candidates: [], includeSavedVariableValues: false)
+        let json = try XCTUnwrap(String(data: try BackupService.encode(backup), encoding: .utf8))
+        XCTAssertFalse(json.contains("customIconFilename"))
+        XCTAssertFalse(json.contains("local-only.png"))
     }
 }

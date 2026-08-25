@@ -424,6 +424,8 @@ final class TerminalTool {
     var toolDescription: String
     var categoryRawValue: String
     var iconSymbol: String
+    /// 仅保存由 ToolIconStore 创建的受控本地 PNG 文件名；旧记录缺失该字段时为 nil。
+    var customIconFilename: String?
     var iconURLString: String?
     var repositoryFullName: String?
     var installationSourceRawValue: String?
@@ -475,6 +477,7 @@ final class TerminalTool {
         self.toolDescription = toolDescription
         categoryRawValue = category.rawValue
         self.iconSymbol = iconSymbol
+        customIconFilename = nil
         iconURLString = nil
         repositoryFullName = nil
         installationSourceRawValue = (installationSource ?? ToolInstallationSource.detect(for: executablePath)).rawValue

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// 图标策略：已识别的常用工具使用专属语义图标；未知工具从稳定的图形与色彩组合中派生回退图标。
@@ -72,18 +73,30 @@ struct ToolIconView: View {
         ToolIconCatalog.definition(for: tool.name, category: tool.category)
     }
 
+    private var customImage: NSImage? {
+        ToolIconStore.shared.image(named: tool.customIconFilename)
+    }
+
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [definition.primaryColor, definition.secondaryColor],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+            if let customImage {
+                Image(nsImage: customImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [definition.primaryColor, definition.secondaryColor],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     )
-                )
 
-            fallbackSymbol
+                fallbackSymbol
+            }
         }
         .frame(width: size, height: size)
         .shadow(color: definition.primaryColor.opacity(0.20), radius: 5, y: 2)
