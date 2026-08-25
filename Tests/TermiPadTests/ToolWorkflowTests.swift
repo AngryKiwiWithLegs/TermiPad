@@ -470,3 +470,18 @@ extension ToolWorkflowTests {
         XCTAssertTrue(store.events.isEmpty)
     }
 }
+
+
+extension ToolWorkflowTests {
+    func testAppActionsRoundTripUsingOnlyFixedIdentifiers() {
+        let notification = Notification(
+            name: .termiPadAppAction,
+            object: nil,
+            userInfo: ["action": TermiPadAppAction.showFavorites.rawValue]
+        )
+        XCTAssertEqual(TermiPadAppAction.from(notification), .showFavorites)
+
+        let malformed = Notification(name: .termiPadAppAction, object: nil, userInfo: ["action": "unknown-action"])
+        XCTAssertNil(TermiPadAppAction.from(malformed))
+    }
+}

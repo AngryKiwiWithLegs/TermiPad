@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Combine
 
 /// macOS 原生风格的终端工具启动器主界面。
 struct LaunchpadView: View {
@@ -113,6 +114,21 @@ struct LaunchpadView: View {
             }
         }
         .searchable(text: $searchText, placement: .toolbar, prompt: isInbox ? AppCopy.text("searchCandidates", language: language) : AppCopy.text("searchTools", language: language))
+        .onReceive(NotificationCenter.default.publisher(for: .termiPadAppAction)) { notification in
+            guard let action = TermiPadAppAction.from(notification) else { return }
+            switch action {
+            case .openLibrary:
+                selectedSidebarItem = SidebarItem.all.rawValue
+            case .showFavorites:
+                selectedSidebarItem = SidebarItem.favorites.rawValue
+            case .showRecent:
+                selectedSidebarItem = SidebarItem.recent.rawValue
+            case .discoverTools:
+                performScan()
+            case .addManualTool:
+                isPresentingManualTool = true
+            }
+        }
         .toolbar {
             if !isSettings {
                 ToolbarItem(placement: .primaryAction) {

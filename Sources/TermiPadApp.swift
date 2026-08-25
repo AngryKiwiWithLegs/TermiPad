@@ -32,6 +32,9 @@ struct TermiPadApp: App {
         }
         .defaultSize(width: 920, height: 720)
         .modelContainer(sharedModelContainer)
+        .commands {
+            TermiPadMenuCommands()
+        }
 
         Settings {
             PreferencesView()
@@ -39,5 +42,7 @@ struct TermiPadApp: App {
                 .softMacWindow(appearanceKey: appearanceRawValue)
         }
         .modelContainer(sharedModelContainer)
+
+        TermiPadMenuBarExtra()
     }
 }

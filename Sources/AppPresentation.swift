@@ -63,7 +63,7 @@ enum AppCopy {
     static func text(_ key: String, language: AppLanguage) -> String {
         let chinese: [String: String] = [
             "allTools": "所有工具", "inbox": "候选收件箱", "favorites": "收藏", "recent": "最近使用", "hidden": "已隐藏", "categories": "分类", "toolLibrary": "工具库", "settings": "设置",
-            "discover": "发现工具", "discovering": "正在发现", "addTool": "手动添加", "searchTools": "搜索工具", "searchCandidates": "筛选候选工具",
+            "discover": "发现工具", "discovering": "正在发现", "addTool": "手动添加", "searchTools": "搜索工具", "searchCandidates": "筛选候选工具", "toolsMenu": "工具", "openLibrary": "打开工具库", "showFavorites": "显示收藏", "showRecent": "显示最近使用",
             "noTools": "尚未收录工具", "noMatches": "未找到匹配工具", "noFavorites": "还没有收藏工具", "noRecent": "还没有最近使用的工具", "noHidden": "没有已隐藏工具", "emptyInbox": "候选收件箱为空",
             "scanDescription": "使用“发现工具”扫描 PATH 中的交互式命令行工具；扫描结果会先进入候选收件箱。",
             "inboxDescription": "扫描后发现的新命令会先显示在这里；确认收录后才进入工具库。",
@@ -88,7 +88,7 @@ enum AppCopy {
         ]
         let english: [String: String] = [
             "allTools": "All Tools", "inbox": "Review Inbox", "favorites": "Favorites", "recent": "Recent", "hidden": "Hidden", "categories": "Categories", "toolLibrary": "Library", "settings": "Settings",
-            "discover": "Discover Tools", "discovering": "Discovering", "addTool": "Add Manually", "searchTools": "Search tools", "searchCandidates": "Filter candidates",
+            "discover": "Discover Tools", "discovering": "Discovering", "addTool": "Add Manually", "searchTools": "Search tools", "searchCandidates": "Filter candidates", "toolsMenu": "Tools", "openLibrary": "Open Library", "showFavorites": "Show Favorites", "showRecent": "Show Recent",
             "noTools": "No tools collected", "noMatches": "No matching tools", "noFavorites": "No favorite tools yet", "noRecent": "No recently used tools yet", "noHidden": "No hidden tools", "emptyInbox": "Your review inbox is empty",
             "scanDescription": "Use Discover Tools to scan interactive CLI commands in PATH. New results are reviewed before entering your library.",
             "inboxDescription": "New commands found by scanning appear here first. Accept them to add them to your library.",
