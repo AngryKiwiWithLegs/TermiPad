@@ -1,6 +1,6 @@
 # iCloud 同步前置条件研究记录
 
-**日期：** 2026-08-25  
+**日期：** 2026-08-25
 **用途：** TermiPad P1 iCloud 同步的设计闸门，不是实现说明。
 
 Apple 的 SwiftData 文档明确指出，自动 iCloud 同步需要 iCloud 与 Background Modes 两项 capability；其中 iCloud capability 需要具有管理员权限的有效 Apple Developer 账户。[1] 应用还需要启用 CloudKit、选择或创建 CloudKit 容器，并开启 Remote notifications 以接收服务器变更。[1]

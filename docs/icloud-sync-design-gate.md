@@ -1,7 +1,7 @@
 # TermiPad iCloud 同步设计闸门
 
-**状态：** 未实现，默认显式禁用。  
-**适用阶段：** 获得具备管理员权限的 Apple Developer 账户并创建 CloudKit 容器之后。  
+**状态：** 未实现，默认显式禁用。
+**适用阶段：** 获得具备管理员权限的 Apple Developer 账户并创建 CloudKit 容器之后。
 **目的：** 防止把“打开 iCloud capability”误当成可安全交付的同步功能。
 
 ## 1. 当前边界
