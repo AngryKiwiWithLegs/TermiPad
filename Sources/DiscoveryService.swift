@@ -120,7 +120,7 @@ enum DiscoveryService {
             fetchedAt: fetchedAt,
             query: query,
             entityTag: entityTag,
-            isIncomplete: response.isIncomplete,
+            isIncomplete: response.incomplete,
             items: DiscoveryRanking.visibleItems(from: decoded, now: fetchedAt)
         )
     }

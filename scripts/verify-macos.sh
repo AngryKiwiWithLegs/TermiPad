@@ -83,6 +83,10 @@ swift_source_guard() {
     echo '检测到 Discovery Preview 触及命令执行、安装或工具库写入边界。' >&2
     return 1
   fi
+  if grep -RInF 'response.isIncomplete' Sources/DiscoveryService.swift; then
+    echo '检测到 GitHub 搜索 DTO 的错误 isIncomplete 字段引用。' >&2
+    return 1
+  fi
 }
 
 run_step toolchain bash -c 'xcodebuild -version && swift --version && xcodegen --version'
