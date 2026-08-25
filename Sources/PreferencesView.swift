@@ -26,6 +26,9 @@ struct PreferencesView: View {
     @State private var isImportingBackup = false
     @State private var pendingImportedBackup: TermiPadBackup?
     @State private var backupMessage: String?
+    @State private var diagnosticDocument: DiagnosticFileDocument?
+    @State private var isExportingDiagnostics = false
+    @State private var diagnosticMessage: String?
 
     init(embeddedInNavigation: Bool = false) {
         self.embeddedInNavigation = embeddedInNavigation
@@ -146,6 +149,17 @@ struct PreferencesView: View {
                 }
             }
 
+            Section(AppCopy.text("diagnostics", language: language)) {
+                HStack {
+                    Button(AppCopy.text("exportDiagnostics", language: language), action: prepareDiagnosticsExport)
+                        .accessibilityIdentifier("settings-export-diagnostics")
+                    Button(AppCopy.text("clearDiagnostics", language: language), role: .destructive, action: clearDiagnostics)
+                }
+                Text(AppCopy.text("diagnosticsHint", language: language))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(AppCopy.text("dataPrivacy", language: language)) {
                 Text(AppCopy.text("privacyHint", language: language))
                     .font(.caption)
@@ -173,6 +187,14 @@ struct PreferencesView: View {
         } message: {
             Text(backupMessage ?? "")
         }
+        .alert(AppCopy.text("diagnostics", language: language), isPresented: Binding(
+            get: { diagnosticMessage != nil },
+            set: { if !$0 { diagnosticMessage = nil } }
+        )) {
+            Button(AppCopy.text("ok", language: language), role: .cancel) { diagnosticMessage = nil }
+        } message: {
+            Text(diagnosticMessage ?? "")
+        }
         .confirmationDialog(AppCopy.text("restorePreview", language: language), isPresented: Binding(
             get: { pendingImportedBackup != nil },
             set: { if !$0 { pendingImportedBackup = nil } }
@@ -190,6 +212,7 @@ struct PreferencesView: View {
         ) { result in
             switch result {
             case .success:
+                DiagnosticsStore.shared.record(.backupExported, itemCount: tools.count + candidates.count)
                 backupMessage = AppCopy.text("backupExported", language: language)
             case .failure(let error):
                 backupMessage = backupFailureMessage(error)
@@ -198,6 +221,20 @@ struct PreferencesView: View {
         }
         .fileImporter(isPresented: $isImportingBackup, allowedContentTypes: [.json]) { result in
             handleBackupImport(result)
+        }
+        .fileExporter(
+            isPresented: $isExportingDiagnostics,
+            document: diagnosticDocument,
+            contentType: .json,
+            defaultFilename: "TermiPad-diagnostics-\(diagnosticFileTimestamp())"
+        ) { result in
+            switch result {
+            case .success:
+                diagnosticMessage = AppCopy.text("diagnosticsExported", language: language)
+            case .failure:
+                diagnosticMessage = AppCopy.text("diagnosticsExportFailed", language: language)
+            }
+            diagnosticDocument = nil
         }
         .scrollContentBackground(.hidden)
         .background(theme.contentSurface)
@@ -241,6 +278,29 @@ struct PreferencesView: View {
         return "This backup contains \(backup.tools.count) tools and \(backup.candidates.count) candidates. \(valuesText) \(restoreHint)"
     }
 
+    private func prepareDiagnosticsExport() {
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            diagnosticDocument = DiagnosticFileDocument(data: try encoder.encode(DiagnosticsStore.shared.makePrivacyReport()))
+            isExportingDiagnostics = true
+        } catch {
+            diagnosticMessage = AppCopy.text("diagnosticsExportFailed", language: language)
+        }
+    }
+
+    private func clearDiagnostics() {
+        DiagnosticsStore.shared.clear()
+        diagnosticMessage = AppCopy.text("diagnosticsCleared", language: language)
+    }
+
+    private func diagnosticFileTimestamp() -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd-HHmm"
+        return formatter.string(from: Date())
+    }
+
     private func prepareBackupExport() {
         do {
             let backup = TermiPadBackup.make(
@@ -282,6 +342,10 @@ struct PreferencesView: View {
         )
         do {
             try modelContext.save()
+            DiagnosticsStore.shared.record(
+                .backupRestored,
+                itemCount: summary.addedTools + summary.updatedTools + summary.addedCandidates + summary.updatedCandidates
+            )
             pendingImportedBackup = nil
             backupMessage = restoreSummaryMessage(summary)
         } catch {
@@ -290,6 +354,7 @@ struct PreferencesView: View {
     }
 
     private func backupFailureMessage(_ error: Error) -> String {
+        DiagnosticsStore.shared.record(.backupFailed)
         let prefix = AppCopy.text("backupImportFailed", language: language)
         return "\(prefix) \(error.localizedDescription)"
     }

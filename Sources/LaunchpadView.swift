@@ -342,6 +342,7 @@ struct LaunchpadView: View {
                     modelContext.insert(CandidateTool(name: item.name, executablePath: item.path, category: category))
                 }
                 try? modelContext.save()
+                DiagnosticsStore.shared.record(.scanCompleted, itemCount: freshItems.count)
                 isScanning = false
                 scanMessage = freshItems.isEmpty
                     ? AppCopy.text("noNewCandidates", language: language)
@@ -414,6 +415,7 @@ struct LaunchpadView: View {
             let result = try TerminalLauncher.launch(command: command, target: terminalTarget)
             switch result {
             case .launched(let target):
+                DiagnosticsStore.shared.record(.launchSucceeded, terminalTarget: target)
                 tool.lastLaunchedAt = Date()
                 try? modelContext.save()
                 let message = target == .iTerm
@@ -421,17 +423,20 @@ struct LaunchpadView: View {
                     : AppCopy.text("terminalLaunched", language: language)
                 launchNotice = LaunchNotice(title: AppCopy.text("operationComplete", language: language), message: message)
             case .copied(let target):
+                DiagnosticsStore.shared.record(.commandCopied, terminalTarget: target)
                 let message = target == .warp
                     ? AppCopy.text("warpCopied", language: language)
                     : AppCopy.text("copied", language: language)
                 launchNotice = LaunchNotice(title: AppCopy.text("operationComplete", language: language), message: message)
             case .copiedAfterAutomationPermissionDenied(let target):
+                DiagnosticsStore.shared.record(.automationFallback, terminalTarget: target)
                 launchNotice = LaunchNotice(
                     title: AppCopy.text("automationPermissionNeeded", language: language),
                     message: automationPermissionCopiedMessage(for: target)
                 )
             }
         } catch {
+            DiagnosticsStore.shared.record(.launchFailed, terminalTarget: terminalTarget)
             let message = (error as? TerminalLauncherError)?.message(language: language) ?? error.localizedDescription
             launchNotice = LaunchNotice(title: "\(AppCopy.text("cannotLaunch", language: language)) \(tool.name)", message: message)
         }

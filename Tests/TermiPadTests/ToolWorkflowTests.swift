@@ -1,4 +1,5 @@
 import XCTest
+import Foundation
 import SwiftData
 @testable import TermiPad
 
@@ -430,5 +431,42 @@ extension ToolWorkflowTests {
 
         let ordered = ToolLibraryOrdering.recentFirst([older, newer, neverLaunched, sameTime])
         XCTAssertEqual(ordered.map(\.name), ["alpha", "bravo", "zulu", "charlie"])
+    }
+}
+
+
+extension ToolWorkflowTests {
+    func testDiagnosticsStoreCreatesPrivacyReportWithoutSensitiveFields() throws {
+        let suiteName = "TermiPadTests.diagnostics.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        var timestamp = Date(timeIntervalSince1970: 100)
+        let store = DiagnosticsStore(
+            defaults: defaults,
+            storageKey: "events",
+            maximumEventCount: 2,
+            now: { timestamp }
+        )
+
+        store.record(.scanCompleted, itemCount: 4)
+        timestamp = Date(timeIntervalSince1970: 200)
+        store.record(.launchSucceeded, terminalTarget: .iTerm)
+        timestamp = Date(timeIntervalSince1970: 300)
+        store.record(.backupExported, itemCount: 2)
+
+        XCTAssertEqual(store.events.map(\.kind), [.launchSucceeded, .backupExported])
+        XCTAssertEqual(store.events.first?.terminalTargetRawValue, TerminalTarget.iTerm.rawValue)
+        XCTAssertEqual(store.events.last?.itemCount, 2)
+
+        let reportData = try JSONEncoder().encode(store.makePrivacyReport())
+        let reportJSON = try XCTUnwrap(String(data: reportData, encoding: .utf8))
+        XCTAssertFalse(reportJSON.contains("executablePath"))
+        XCTAssertFalse(reportJSON.contains("variableValuesJSON"))
+        XCTAssertFalse(reportJSON.contains("repositoryFullName"))
+        XCTAssertFalse(reportJSON.contains("apiKey"))
+
+        store.clear()
+        XCTAssertTrue(store.events.isEmpty)
     }
 }
