@@ -7,6 +7,26 @@ import SwiftData
 enum TermiPadDataStore {
     static let schema = Schema([TerminalTool.self, CandidateTool.self])
 
+    static func makeRecoveryContainer(
+        applicationSupportDirectory: URL? = nil,
+        fileManager: FileManager = .default
+    ) throws -> ModelContainer {
+        let rootDirectory: URL
+        if let applicationSupportDirectory {
+            rootDirectory = applicationSupportDirectory
+        } else {
+            rootDirectory = try fileManager.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            ).appendingPathComponent("TermiPad", isDirectory: true)
+        }
+        let recoveryDirectory = rootDirectory.appendingPathComponent("Recovery", isDirectory: true)
+        try fileManager.createDirectory(at: recoveryDirectory, withIntermediateDirectories: true)
+        return try makeContainer(storeURL: recoveryDirectory.appendingPathComponent("TermiPad-recovery.store"))
+    }
+
     static func makeContainer(
         storeURL: URL? = nil,
         isStoredInMemoryOnly: Bool = false
@@ -23,7 +43,8 @@ enum TermiPadDataStore {
         } else if isStoredInMemoryOnly {
             configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         } else {
-            configuration = ModelConfiguration(schema: schema)
+            // iCloud 同步必须经过独立的账户、容器、冲突与迁移设计；不能因未来出现 entitlement 而隐式开启。
+            configuration = ModelConfiguration(schema: schema, cloudKitDatabase: .none)
         }
         return try ModelContainer(for: schema, configurations: [configuration])
     }

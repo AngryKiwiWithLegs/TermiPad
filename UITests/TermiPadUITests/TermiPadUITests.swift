@@ -44,6 +44,21 @@ final class TermiPadUITests: XCTestCase {
         attachScreenshot(named: "termipad-library")
     }
 
+    func testRecoveryLaunchOffersBackupImport() throws {
+        launchApp(forceRecovery: true)
+
+        XCTAssertTrue(
+            app.buttons["data-recovery-import-backup"].waitForExistence(timeout: 10),
+            "默认数据容器无法打开时，恢复模式应提供用户主动导入 JSON 备份的入口。"
+        )
+        XCTAssertFalse(
+            app.buttons["discover-tools-button"].exists,
+            "恢复模式不应假装默认工具库可用。"
+        )
+
+        attachScreenshot(named: "termipad-data-recovery")
+    }
+
     func testSettingsLaunchShowsSharedPreferences() throws {
         launchApp(openSettings: true)
         completeOnboarding()
@@ -72,11 +87,14 @@ final class TermiPadUITests: XCTestCase {
         attachScreenshot(named: "termipad-settings")
     }
 
-    private func launchApp(openSettings: Bool = false) {
+    private func launchApp(openSettings: Bool = false, forceRecovery: Bool = false) {
         app = XCUIApplication()
         app.launchEnvironment["TERMIPAD_UI_TEST_MODE"] = "1"
         if openSettings {
             app.launchEnvironment["TERMIPAD_UI_TEST_OPEN_SETTINGS"] = "1"
+        }
+        if forceRecovery {
+            app.launchEnvironment["TERMIPAD_UI_TEST_FORCE_RECOVERY"] = "1"
         }
         app.launch()
     }

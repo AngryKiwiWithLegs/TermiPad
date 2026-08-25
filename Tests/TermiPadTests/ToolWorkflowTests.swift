@@ -220,6 +220,27 @@ extension ToolWorkflowTests {
 
         let candidate = try XCTUnwrap(backup.candidates.first).makeCandidate()
         XCTAssertEqual(candidate.installationSource, .cargo)
+
+        let recoveryRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TermiPadTests-LegacyRecovery-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: recoveryRoot) }
+        let recoveryContainer = try TermiPadDataStore.makeRecoveryContainer(applicationSupportDirectory: recoveryRoot)
+        let recoveryContext = ModelContext(recoveryContainer)
+        let summary = BackupService.restore(
+            backup,
+            existingTools: [],
+            existingCandidates: [],
+            modelContext: recoveryContext
+        )
+        XCTAssertEqual(summary.toolsAdded, 1)
+        XCTAssertEqual(summary.candidatesAdded, 1)
+        try recoveryContext.save()
+
+        let reopenedContainer = try TermiPadDataStore.makeRecoveryContainer(applicationSupportDirectory: recoveryRoot)
+        let reopenedContext = ModelContext(reopenedContainer)
+        let recoveredTools = try reopenedContext.fetch(FetchDescriptor<TerminalTool>())
+        XCTAssertEqual(recoveredTools.first?.name, "legacy-cli")
+        XCTAssertNil(recoveredTools.first?.iconURLString)
     }
 }
 
@@ -615,5 +636,33 @@ extension ToolWorkflowTests {
         let json = try XCTUnwrap(String(data: try BackupService.encode(backup), encoding: .utf8))
         XCTAssertFalse(json.contains("workingDirectoryPath"))
         XCTAssertFalse(json.contains("private-project"))
+    }
+}
+
+
+extension ToolWorkflowTests {
+    func testRecoveryContainerUsesDedicatedPersistentStore() throws {
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TermiPadTests-Recovery-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: rootDirectory) }
+
+        let firstContainer = try TermiPadDataStore.makeRecoveryContainer(applicationSupportDirectory: rootDirectory)
+        let firstContext = ModelContext(firstContainer)
+        firstContext.insert(TerminalTool(
+            name: "recovered-cli",
+            executablePath: "/usr/local/bin/recovered-cli",
+            commandTemplate: "recovered-cli"
+        ))
+        try firstContext.save()
+
+        let recoveryStoreURL = rootDirectory
+            .appendingPathComponent("Recovery", isDirectory: true)
+            .appendingPathComponent("TermiPad-recovery.store")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: recoveryStoreURL.path))
+
+        let secondContainer = try TermiPadDataStore.makeRecoveryContainer(applicationSupportDirectory: rootDirectory)
+        let secondContext = ModelContext(secondContainer)
+        let tools = try secondContext.fetch(FetchDescriptor<TerminalTool>())
+        XCTAssertEqual(tools.map(\.name), ["recovered-cli"])
     }
 }
