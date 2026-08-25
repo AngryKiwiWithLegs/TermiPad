@@ -95,7 +95,7 @@ final class TermiPadUITests: XCTestCase {
     }
 
     private func launchApp(openSettings: Bool = false, forceRecovery: Bool = false) {
-        app = XCUIApplication()
+        app = XCUIApplication(bundleIdentifier: "com.termipad.app")
         app.launchEnvironment["TERMIPAD_UI_TEST_MODE"] = "1"
         if openSettings {
             app.launchEnvironment["TERMIPAD_UI_TEST_OPEN_SETTINGS"] = "1"
@@ -104,8 +104,13 @@ final class TermiPadUITests: XCTestCase {
             app.launchEnvironment["TERMIPAD_UI_TEST_FORCE_RECOVERY"] = "1"
         }
         app.launch()
+        let reachedForeground = app.wait(for: .runningForeground, timeout: 10)
+        attachTextDiagnostic(
+            named: "termipad-launch-state",
+            text: "bundleIdentifier=com.termipad.app\nstate=\(app.state.rawValue)\n\(app.debugDescription)"
+        )
         XCTAssertTrue(
-            app.wait(for: .runningForeground, timeout: 10),
+            reachedForeground,
             "TermiPad 未能在 10 秒内进入前台。当前 UI 层级：\n\(app.debugDescription)"
         )
     }
@@ -125,6 +130,13 @@ final class TermiPadUITests: XCTestCase {
 
     private func element(_ identifier: String) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
+    }
+
+    private func attachTextDiagnostic(named name: String, text: String) {
+        let attachment = XCTAttachment(string: text)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     private func attachScreenshot(named name: String) {

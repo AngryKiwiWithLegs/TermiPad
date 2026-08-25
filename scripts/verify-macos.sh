@@ -112,13 +112,23 @@ if [[ "$SKIP_UI" -eq 0 ]]; then
   fi
   run_step ui-runner-signature codesign --verify --deep --strict --verbose=2 "$UI_RUNNER"
 
-  run_step ui-smoke-test xcodebuild \
+  if ! run_step ui-smoke-test xcodebuild \
     -project TermiPad.xcodeproj \
     -scheme TermiPad \
     -destination 'platform=macOS' \
     -derivedDataPath "$UI_DERIVED_DATA" \
     -resultBundlePath "$RESULT_BUNDLE" \
-    test-without-building
+    test-without-building; then
+    if [[ -d "$RESULT_BUNDLE" ]]; then
+      mkdir -p "$LOG_DIR/ui-attachments"
+      xcrun xcresulttool export attachments \
+        --path "$RESULT_BUNDLE" \
+        --output-path "$LOG_DIR/ui-attachments" >/dev/null 2>&1 || true
+      echo "UI 失败附件：$LOG_DIR/ui-attachments" >&2
+      find "$LOG_DIR/ui-attachments" -maxdepth 1 -type f -print 2>/dev/null || true
+    fi
+    exit 1
+  fi
 
   if [[ -d "$RESULT_BUNDLE" ]]; then
     mkdir -p "$LOG_DIR/ui-attachments"
