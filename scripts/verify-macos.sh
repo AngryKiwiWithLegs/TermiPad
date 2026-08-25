@@ -67,6 +67,7 @@ write_summary() {
 trap write_summary EXIT
 
 run_step toolchain bash -c 'xcodebuild -version && swift --version && xcodegen --version'
+run_step scripts-syntax bash -c 'bash -n scripts/verify-macos.sh && bash -n scripts/verify-release-artifact.sh'
 run_step package-manifest swift package dump-package
 run_step unit-tests swift test
 
