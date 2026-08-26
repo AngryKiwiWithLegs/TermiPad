@@ -78,7 +78,7 @@ struct TaskPolicyWorkbenchView: View {
                 ForEach(scopes) { scope in
                     HStack(spacing: 12) {
                         Image(systemName: scope.isRevoked ? "folder.badge.minus" : (scope.directoryIsAvailable ? "folder" : "folder.badge.questionmark"))
-                            .foregroundStyle(scope.isRevoked ? .secondary : (scope.directoryIsAvailable ? .accent : .orange))
+                            .foregroundStyle(scope.isRevoked ? Color.secondary : (scope.directoryIsAvailable ? Color.accentColor : Color.orange))
                         VStack(alignment: .leading, spacing: 2) {
                             Text(scope.displayName)
                             Text(scopeStatus(scope))
