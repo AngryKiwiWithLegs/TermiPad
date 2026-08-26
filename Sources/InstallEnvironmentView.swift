@@ -97,6 +97,8 @@ struct InstallEnvironmentView: View {
             }
         }
         .listStyle(.inset)
+        .scrollContentBackground(.hidden)
+        .background(.clear)
         .navigationTitle(AppCopy.text("installAndEnvironment", language: language))
         .accessibilityIdentifier("install-environment")
         .sheet(item: $selectedPlan) { plan in
@@ -196,7 +198,7 @@ private struct InstallPlanReviewSheet: View {
                     .textSelection(.enabled)
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
 
             Text(plan.safetySummary(language: language))

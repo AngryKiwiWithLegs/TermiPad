@@ -106,6 +106,7 @@ struct LaunchpadView: View {
             sidebar
         } detail: {
             detailContent
+                .termiPadWorkspacePanel()
         }
         .navigationSplitViewStyle(.balanced)
         .onAppear {
@@ -327,7 +328,7 @@ struct LaunchpadView: View {
                             )
                         }
                     }
-                    .padding(24)
+                    .padding(20)
                 }
                 .background(theme.contentSurface)
             }
@@ -608,26 +609,28 @@ struct ToolTile: View {
         ToolDescriptionPresentation.hoverContent(for: tool, language: language)
     }
 
+    private var theme: SoftMacTheme { SoftMacTheme(colorScheme: colorScheme) }
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 8) {
-                ToolIconView(tool: tool, size: 64)
+            VStack(spacing: 10) {
+                ToolIconView(tool: tool, size: 68)
                 Text(tool.name)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 14, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity)
             }
-            .padding(.vertical, 14)
-            .padding(.horizontal, 11)
-            .frame(maxWidth: .infinity, minHeight: 116)
-            .background(SoftMacTheme(colorScheme: colorScheme).cardSurface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .padding(.vertical, 16)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 128)
+            .background(isHovering ? theme.workspacePanelSurface : theme.cardSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(SoftMacTheme(colorScheme: colorScheme).cardStroke, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(isHovering ? theme.workspacePanelStroke : theme.cardStroke, lineWidth: 1)
             }
-            .shadow(color: SoftMacTheme(colorScheme: colorScheme).cardShadow, radius: 4, y: 2)
+            .shadow(color: theme.cardShadow, radius: isHovering ? 8 : 4, y: isHovering ? 4 : 2)
+            .scaleEffect(isHovering && !reduceMotion ? 1.015 : 1)
         }
         .buttonStyle(.plain)
         .onHover { hovering in

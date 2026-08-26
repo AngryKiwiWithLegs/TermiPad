@@ -40,6 +40,25 @@ struct SoftMacTheme {
             : Color.white.opacity(0.58)
     }
 
+    /// iPad 式工作区只借用柔和玻璃面板层次，不模拟设备机身、状态栏或触控系统控件。
+    var workspacePanelSurface: Color {
+        colorScheme == .dark
+            ? Color(red: 0.178, green: 0.190, blue: 0.224).opacity(0.94)
+            : Color(red: 0.988, green: 0.991, blue: 0.998).opacity(0.88)
+    }
+
+    var workspacePanelStroke: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.115)
+            : Color(red: 0.22, green: 0.29, blue: 0.42).opacity(0.12)
+    }
+
+    var workspacePanelShadow: Color {
+        colorScheme == .dark
+            ? Color.black.opacity(0.28)
+            : Color(red: 0.17, green: 0.25, blue: 0.39).opacity(0.14)
+    }
+
     /// 悬浮提示采用 macOS 式中性灰材质；在深色界面中保留足够层次而非反差刺目的浅色块。
     var hoverSurface: Color {
         colorScheme == .dark

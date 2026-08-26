@@ -75,6 +75,8 @@ struct DiscoveryPreviewView: View {
                     }
                 }
                 .listStyle(.inset)
+                .scrollContentBackground(.hidden)
+                .background(.clear)
             }
         }
         .navigationTitle(AppCopy.text("discoveryPreview", language: language))

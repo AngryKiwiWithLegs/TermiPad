@@ -60,11 +60,14 @@ struct TermiPadApp: App {
                     LaunchpadView()
                 }
             }
-            .frame(minWidth: 680, minHeight: 560)
+            .frame(minWidth: TermiPadWorkspaceMetrics.minimumSize.width, minHeight: TermiPadWorkspaceMetrics.minimumSize.height)
             .preferredColorScheme(appearance.colorScheme)
             .softMacWindow(appearanceKey: appearanceRawValue)
         }
-        .defaultSize(width: 920, height: 720)
+        .defaultSize(
+            width: TermiPadWorkspaceMetrics.iPadReferenceSize.width,
+            height: TermiPadWorkspaceMetrics.iPadReferenceSize.height
+        )
         .modelContainer(sharedModelContainer)
         .commands {
             TermiPadMenuCommands()
