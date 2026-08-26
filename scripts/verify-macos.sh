@@ -124,6 +124,16 @@ swift_source_guard() {
     echo '本地图标系统必须保留受控本地 PNG 优先字段。' >&2
     return 1
   fi
+  local task_policy_code
+  task_policy_code="$(sed '/^[[:space:]]*\/\//d' Sources/TaskIntent.swift Sources/TaskIntentPolicy.swift Sources/TaskPolicyWorkbenchView.swift)"
+  if printf '%s\n' "$task_policy_code" | grep -En 'URLSession|URLRequest|NWConnection|NWListener|WebSocket|NSAppleScript|TerminalLauncher|Process\(|forkpty|posix_openpt|/bin/sh|https?://|stdin|stdout|stderr'; then
+    echo '检测到 T0 任务策略触及网络、终端自动化、进程执行、PTY 或远程输入输出边界。' >&2
+    return 1
+  fi
+  if ! printf '%s\n' "$task_policy_code" | grep -qF 'static let definitions'; then
+    echo 'T0 任务策略必须保留随应用发布的固定任务目录。' >&2
+    return 1
+  fi
 }
 
 run_step toolchain bash -c 'xcodebuild -version && swift --version && xcodegen --version'

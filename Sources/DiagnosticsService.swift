@@ -23,6 +23,12 @@ enum DiagnosticEventKind: String, Codable, CaseIterable {
     case installPlanReviewed
     case installPlanHandedOff
     case installPlanHandoffFailed
+    case taskProposalCreated
+    case taskReviewWindowOpened
+    case taskPolicyApproved
+    case taskPolicyRejected
+    case taskCancelled
+    case taskScopeRevoked
 }
 
 struct DiagnosticEvent: Codable, Equatable, Identifiable {

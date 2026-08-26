@@ -98,6 +98,33 @@ final class TermiPadUITests: XCTestCase {
         attachScreenshot(named: "termipad-install-environment-idle")
     }
 
+    func testTaskWorkbenchShowsLocalPolicyBoundaryWithoutExecution() throws {
+        launchApp()
+        completeOnboarding()
+
+        let taskWorkbenchSidebarItem = element("sidebar-task-workbench")
+        XCTAssertTrue(
+            taskWorkbenchSidebarItem.waitForExistence(timeout: 5),
+            "TermiPad 应在侧边栏提供独立的本地任务工作台入口。"
+        )
+        taskWorkbenchSidebarItem.click()
+
+        XCTAssertTrue(
+            element("task-policy-workbench").waitForExistence(timeout: 5),
+            "本地任务策略应显示独立工作台，而不混入工具终端启动界面。"
+        )
+        XCTAssertTrue(
+            element("task-policy-boundary").waitForExistence(timeout: 5),
+            "任务工作台应明确显示仅本地策略边界。"
+        )
+        XCTAssertFalse(
+            element("discover-tools-button").exists,
+            "任务工作台不应显示工具扫描操作，也不应暗中开始执行任务。"
+        )
+
+        attachScreenshot(named: "termipad-task-policy-workbench")
+    }
+
     func testRecoveryLaunchOffersBackupImport() throws {
         launchApp(forceRecovery: true)
 

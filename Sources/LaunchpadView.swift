@@ -65,6 +65,7 @@ struct LaunchpadView: View {
     private var isHiddenLibrary: Bool { selectedSidebarItem == SidebarItem.hidden.rawValue }
     private var isDiscoveryPreview: Bool { selectedSidebarItem == SidebarItem.discovery.rawValue }
     private var isInstallEnvironment: Bool { selectedSidebarItem == SidebarItem.installEnvironment.rawValue }
+    private var isTaskWorkbench: Bool { selectedSidebarItem == SidebarItem.taskWorkbench.rawValue }
     private var isSettings: Bool { selectedSidebarItem == SidebarItem.settings.rawValue }
 
     private var selectedCategory: ToolCategory? {
@@ -135,7 +136,7 @@ struct LaunchpadView: View {
             }
         }
         .toolbar {
-            if !isSettings {
+            if !isSettings && !isTaskWorkbench {
                 ToolbarItem(placement: .primaryAction) {
                     Button(action: performScan) {
                         Label(isScanning ? AppCopy.text("discovering", language: language) : AppCopy.text("discover", language: language), systemImage: isScanning ? "arrow.triangle.2.circlepath" : "plus.viewfinder")
@@ -246,6 +247,9 @@ struct LaunchpadView: View {
                 Label(AppCopy.text("installAndEnvironment", language: language), systemImage: "checklist")
                     .tag(SidebarItem.installEnvironment.rawValue)
                     .accessibilityIdentifier("sidebar-install-environment")
+                Label(language == .simplifiedChinese ? "本地任务工作台" : "Local Task Workbench", systemImage: "checkmark.shield")
+                    .tag(SidebarItem.taskWorkbench.rawValue)
+                    .accessibilityIdentifier("sidebar-task-workbench")
             }
 
             Section(AppCopy.text("categories", language: language)) {
@@ -278,6 +282,9 @@ struct LaunchpadView: View {
             DiscoveryPreviewView(language: language)
         } else if isInstallEnvironment {
             InstallEnvironmentView(language: language)
+        } else if isTaskWorkbench {
+            TaskPolicyWorkbenchView(language: language)
+                .accessibilityIdentifier("task-policy-workbench")
         } else if isInbox {
             CandidateInboxView(
                 candidates: filteredCandidates,
@@ -530,6 +537,7 @@ private enum SidebarItem: String {
     case hidden = "__hidden_tools__"
     case discovery = "__discovery_preview__"
     case installEnvironment = "__install_environment__"
+    case taskWorkbench = "__task_workbench__"
     case settings = "__settings__"
 }
 

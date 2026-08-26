@@ -5,7 +5,13 @@ import SwiftData
 ///
 /// 生产环境使用系统默认位置；测试可传入固定 store URL，以验证旧数据在重新打开容器后仍可读取。
 enum TermiPadDataStore {
-    static let schema = Schema([TerminalTool.self, CandidateTool.self])
+    static let schema = Schema([
+        TerminalTool.self,
+        CandidateTool.self,
+        TaskProjectScope.self,
+        TaskReviewWindow.self,
+        TaskIntent.self
+    ])
 
     static func makeRecoveryContainer(
         applicationSupportDirectory: URL? = nil,
