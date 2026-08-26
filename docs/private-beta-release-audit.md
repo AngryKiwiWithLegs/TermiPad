@@ -2,15 +2,15 @@
 
 **审计范围：** 私有开发与受控 beta 候选，不包含 Mac App Store 或外部分发。
 
-**当前已验证仓库基线：** `70d9d40`（`Refine TermiPad workspace visual language`）。
+**当前已验证功能基线：** `0265caf`（`Build persistent local icon system`），包含此前的 Mendocino 工作区视觉基线 `70d9d40`。
 
-**审计日期：** 2026-08-25。
+**审计日期：** 2026-08-26。
 
 > 本文是发布闸门，而不是发布说明。它记录已完成的本地工程收口，以及任何外部测试者获得安装包前仍必须满足的独立条件。
 
 ## 1. 已完成并在真实 Mac 验证的基线
 
-在用户的 Apple Silicon Mac（Xcode 26.6、Swift 6.3.3、XcodeGen 2.46.0）上，提交 `70d9d40` 已通过 `./scripts/verify-macos.sh` 的一次完整集中验证。该流程通过工具链与脚本语法检查、Swift 源码回归防护、Swift Package 清单检查、**59 个单元测试**、XcodeGen 工程生成、原生 macOS 构建、UI Runner 签名校验以及**5 个 UI 冒烟测试**。该批次以 11 英寸 iPad Pro 纵向工作区为首次窗口的视觉基准，并按 macOS 可见区域自适应；它仅强化原生工作区面板、工具卡片和辅助页面层级，不模拟 iPad 设备机身或改变功能/安全行为。UI 测试显式隔离内存数据容器，并在 macOS 仅恢复菜单栏而未恢复窗口时创建主窗口；失败时会自动导出启动状态、界面层级和截图附件。
+在用户的 Apple Silicon Mac（Xcode 26.6、Swift 6.3.3、XcodeGen 2.46.0）上，Mendocino 工作区基线 `70d9d40` 与其后的本地图标系统批次 `0265caf` 均已通过 `./scripts/verify-macos.sh` 的完整集中验证。最近一次验证于 2026-08-26 17:51 完成，输出 `TEST EXECUTE SUCCEEDED`；`TermiPadUITests.xctest` 的 **5 个 UI 测试**全部通过，`ui-smoke-test` 通过。该流程还覆盖工具链与脚本语法检查、Swift 源码回归防护、Swift Package 清单检查、XcodeGen 工程生成、原生 macOS 构建、UI Runner 签名校验及单元测试。该批次以 11 英寸 iPad Pro 纵向工作区为首次窗口的视觉基准，并按 macOS 可见区域自适应；它仅强化原生工作区面板、工具卡片和辅助页面层级，不模拟 iPad 设备机身或改变功能/安全行为。UI 测试显式隔离内存数据容器，并在 macOS 仅恢复菜单栏而未恢复窗口时创建主窗口；失败时会自动导出启动状态、界面层级和截图附件。
 
 | 已验证或已实现的控制项 | 当前结论 | 证据或实现位置 |
 |---|---|---|
@@ -27,6 +27,7 @@
 | P2-B 受控安装审查 | 已实现并在真实 macOS 验证 | 仅内置静态审核的 Homebrew core formula 目录；精确仓库映射；显示预期 CLI、审核修订、日期与固定命令；明确勾选和用户手动确认 Homebrew 后，才可交给已选终端或复制。不会应用内安装、读取 README 命令、支持 tap/cask 或自动收录。 |
 | P2-C 只读环境报告 | 已实现并在真实 macOS 验证 | 仅用户点击后在固定绝对路径中以 `--version` 检查 Homebrew、Cargo、npm、pnpm、Bun、Python；不用 shell、不联网、不保存路径/版本；不会安装、升级、卸载或裁决冲突。 |
 | Mendocino 工作区视觉强化 | 已实现并在真实 macOS 验证 | 11 英寸 iPad Pro 纵向工作区作为首次窗口视觉基准；macOS 可见区域自适应、原生侧边栏、柔和工作区面板、工具卡片与辅助页面统一层级；不模拟设备外壳或触控系统控件。 |
+| 二期本地图标系统 | 已实现并在真实 macOS 验证 | 扩展本地 SF Symbol 目录；未知工具回退样式持久化、确定性分配与碰撞消解；用户手动选择/恢复自动图标；本地 PNG 最高优先级；备份恢复保留样式标识；验证脚本禁止网络图标资源。 |
 
 ## 2. 当前阻塞项：不能直接公开或外部分发
 
