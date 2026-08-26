@@ -1,44 +1,70 @@
 import AppKit
 import SwiftUI
 
-/// 图标策略：已识别的常用工具使用专属语义图标；未知工具从稳定的图形与色彩组合中派生回退图标。
+/// 图标策略：已识别的常用工具使用专属语义图标；未知工具保存本地回退样式标识；用户本地 PNG 始终优先。
 struct ToolIconDefinition {
+    let styleIdentifier: String
     let symbol: String
     let primaryColor: Color
     let secondaryColor: Color
 
     static let neutral = ToolIconDefinition(
+        styleIdentifier: "neutral.terminal",
         symbol: "terminal",
         primaryColor: .gray,
         secondaryColor: Color(nsColor: .controlAccentColor)
     )
 }
 
+struct ToolIconChoice: Identifiable {
+    let id: String
+    let definition: ToolIconDefinition
+    let chineseName: String
+    let englishName: String
+
+    func displayName(language: AppLanguage) -> String {
+        language == .simplifiedChinese ? chineseName : englishName
+    }
+}
+
 enum ToolIconCatalog {
     private static let knownTools: [String: ToolIconDefinition] = [
-        "claude": .init(symbol: "brain.head.profile", primaryColor: .orange, secondaryColor: .red),
-        "codex": .init(symbol: "wand.and.stars", primaryColor: .green, secondaryColor: .teal),
-        "gemini": .init(symbol: "sparkles", primaryColor: .blue, secondaryColor: .purple),
-        "ollama": .init(symbol: "circle.hexagongrid.fill", primaryColor: .black, secondaryColor: .gray),
-        "aider": .init(symbol: "hammer.fill", primaryColor: .indigo, secondaryColor: .purple),
-        "gh": .init(symbol: "chevron.left.forwardslash.chevron.right", primaryColor: .black, secondaryColor: .gray),
-        "lazygit": .init(symbol: "arrow.triangle.branch", primaryColor: .orange, secondaryColor: .yellow),
-        "gitui": .init(symbol: "arrow.triangle.branch", primaryColor: .red, secondaryColor: .orange),
-        "ffmpeg": .init(symbol: "film.fill", primaryColor: .purple, secondaryColor: .pink),
-        "yt-dlp": .init(symbol: "arrow.down.to.line.compact", primaryColor: .red, secondaryColor: .orange),
-        "imagemagick": .init(symbol: "wand.and.rays", primaryColor: .blue, secondaryColor: .purple),
-        "fzf": .init(symbol: "scope", primaryColor: .blue, secondaryColor: .cyan),
-        "ripgrep": .init(symbol: "magnifyingglass", primaryColor: .red, secondaryColor: .orange),
-        "eza": .init(symbol: "folder.fill", primaryColor: .cyan, secondaryColor: .blue),
-        "bat": .init(symbol: "doc.text.fill", primaryColor: .orange, secondaryColor: .brown),
-        "btop": .init(symbol: "chart.bar.xaxis", primaryColor: .green, secondaryColor: .mint),
-        "htop": .init(symbol: "waveform.path.ecg", primaryColor: .green, secondaryColor: .teal),
-        "tmux": .init(symbol: "rectangle.split.3x1", primaryColor: .green, secondaryColor: .cyan),
-        "kubectl": .init(symbol: "cube.transparent", primaryColor: .blue, secondaryColor: .indigo),
-        "terraform": .init(symbol: "square.stack.3d.up.fill", primaryColor: .purple, secondaryColor: .indigo),
-        "aws": .init(symbol: "cloud.fill", primaryColor: .orange, secondaryColor: .yellow),
-        "vercel": .init(symbol: "triangle.fill", primaryColor: .black, secondaryColor: .gray),
-        "netlify": .init(symbol: "network", primaryColor: .teal, secondaryColor: .cyan)
+        "claude": definition("known.claude", "brain.head.profile", .orange, .red),
+        "codex": definition("known.codex", "wand.and.stars", .green, .teal),
+        "gemini": definition("known.gemini", "sparkles", .blue, .purple),
+        "ollama": definition("known.ollama", "circle.hexagongrid.fill", .black, .gray),
+        "aider": definition("known.aider", "hammer.fill", .indigo, .purple),
+        "gh": definition("known.gh", "chevron.left.forwardslash.chevron.right", .black, .gray),
+        "lazygit": definition("known.lazygit", "arrow.triangle.branch", .orange, .yellow),
+        "gitui": definition("known.gitui", "arrow.triangle.branch", .red, .orange),
+        "git": definition("known.git", "arrow.triangle.branch", .red, .brown),
+        "delta": definition("known.delta", "text.line.first.and.arrowtriangle.forward", .purple, .indigo),
+        "ffmpeg": definition("known.ffmpeg", "film.fill", .purple, .pink),
+        "yt-dlp": definition("known.yt-dlp", "arrow.down.to.line.compact", .red, .orange),
+        "imagemagick": definition("known.imagemagick", "wand.and.rays", .blue, .purple),
+        "magick": definition("known.magick", "wand.and.rays", .blue, .purple),
+        "fzf": definition("known.fzf", "scope", .blue, .cyan),
+        "ripgrep": definition("known.ripgrep", "magnifyingglass", .red, .orange),
+        "rg": definition("known.rg", "magnifyingglass", .red, .orange),
+        "eza": definition("known.eza", "folder.fill", .cyan, .blue),
+        "bat": definition("known.bat", "doc.text.fill", .orange, .brown),
+        "btop": definition("known.btop", "chart.bar.xaxis", .green, .mint),
+        "htop": definition("known.htop", "waveform.path.ecg", .green, .teal),
+        "tmux": definition("known.tmux", "rectangle.split.3x1", .green, .cyan),
+        "kubectl": definition("known.kubectl", "cube.transparent", .blue, .indigo),
+        "terraform": definition("known.terraform", "square.stack.3d.up.fill", .purple, .indigo),
+        "aws": definition("known.aws", "cloud.fill", .orange, .yellow),
+        "vercel": definition("known.vercel", "triangle.fill", .black, .gray),
+        "netlify": definition("known.netlify", "network", .teal, .cyan),
+        "act": definition("known.act", "play.rectangle.fill", .blue, .indigo),
+        "glow": definition("known.glow", "text.book.closed.fill", .orange, .pink),
+        "httpie": definition("known.httpie", "network.badge.shield.half.filled", .blue, .cyan),
+        "just": definition("known.just", "checklist", .green, .mint),
+        "task": definition("known.task", "checkmark.circle.fill", .teal, .cyan),
+        "nvim": definition("known.nvim", "text.cursor", .green, .teal),
+        "vim": definition("known.vim", "text.cursor", .green, .teal),
+        "zed": definition("known.zed", "text.and.command.macwindow", .indigo, .blue),
+        "code": definition("known.code", "chevron.left.forwardslash.chevron.right", .blue, .indigo)
     ]
 
     private static let fallbackSymbols = [
@@ -52,25 +78,163 @@ enum ToolIconCatalog {
         (.pink, .purple), (.green, .teal), (.brown, .orange), (.indigo, .blue)
     ]
 
-    static func definition(for toolName: String, category: ToolCategory) -> ToolIconDefinition {
-        let normalizedName = toolName.lowercased()
-        if let directMatch = knownTools[normalizedName] { return directMatch }
-        if let partialMatch = knownTools.first(where: { normalizedName.contains($0.key) })?.value { return partialMatch }
+    static let manualChoices: [ToolIconChoice] = [
+        choice("manual.terminal", "terminal.fill", .gray, .blue, "终端", "Terminal"),
+        choice("manual.command", "command", .indigo, .blue, "命令", "Command"),
+        choice("manual.code", "chevron.left.forwardslash.chevron.right", .blue, .indigo, "代码", "Code"),
+        choice("manual.ai", "brain.head.profile", .orange, .red, "智能体", "Agent"),
+        choice("manual.git", "arrow.triangle.branch", .red, .orange, "版本控制", "Version control"),
+        choice("manual.search", "magnifyingglass", .blue, .cyan, "搜索", "Search"),
+        choice("manual.media", "film.fill", .purple, .pink, "媒体", "Media"),
+        choice("manual.image", "photo.fill", .teal, .mint, "图像", "Image"),
+        choice("manual.folder", "folder.fill", .cyan, .blue, "文件夹", "Folder"),
+        choice("manual.cloud", "cloud.fill", .orange, .yellow, "云", "Cloud"),
+        choice("manual.package", "shippingbox.fill", .brown, .orange, "包", "Package"),
+        choice("manual.system", "gearshape.2.fill", .gray, .indigo, "系统", "System"),
+        choice("manual.health", "waveform.path.ecg", .green, .teal, "状态", "Status"),
+        choice("manual.security", "lock.shield.fill", .indigo, .purple, "安全", "Security"),
+        choice("manual.network", "network", .teal, .cyan, "网络", "Network"),
+        choice("manual.document", "doc.text.fill", .orange, .brown, "文档", "Document")
+    ]
 
-        let stableIndex = abs(normalizedName.unicodeScalars.reduce(0) { $0 &* 31 &+ Int($1.value) })
-        let symbol = fallbackSymbols[stableIndex % fallbackSymbols.count]
-        let palette = fallbackPalettes[(stableIndex / fallbackSymbols.count) % fallbackPalettes.count]
-        return ToolIconDefinition(symbol: symbol, primaryColor: palette.0, secondaryColor: palette.1)
+    static func definition(for toolName: String, category: ToolCategory) -> ToolIconDefinition {
+        if let directMatch = knownDefinition(for: toolName) { return directMatch }
+        return definition(forFallbackStyleIdentifier: fallbackStyleIdentifier(for: toolName))
+    }
+
+    static func definition(for tool: TerminalTool) -> ToolIconDefinition {
+        if let styleIdentifier = tool.iconStyleIdentifier,
+           let choice = manualChoices.first(where: { $0.id == styleIdentifier }) {
+            return choice.definition
+        }
+        if let directMatch = knownDefinition(for: tool.name) { return directMatch }
+        if let styleIdentifier = tool.iconStyleIdentifier,
+           isFallbackStyleIdentifier(styleIdentifier) {
+            return definition(forFallbackStyleIdentifier: styleIdentifier)
+        }
+        return definition(forFallbackStyleIdentifier: fallbackStyleIdentifier(for: tool.name))
+    }
+
+    static func automaticStyleIdentifier(for toolName: String) -> String? {
+        knownDefinition(for: toolName) == nil ? fallbackStyleIdentifier(for: toolName) : nil
+    }
+
+    static func isAutomaticFallbackTool(_ tool: TerminalTool) -> Bool {
+        knownDefinition(for: tool.name) == nil
+            && !manualChoices.contains(where: { $0.id == tool.iconStyleIdentifier })
+    }
+
+    /// 对未知工具使用名称稳定哈希；若已有组合被占用，按固定顺序选择下一个组合。
+    static func fallbackStyleIdentifier(for toolName: String, occupiedIdentifiers: Set<String> = []) -> String {
+        let seed = stableHash(normalizedToolName(toolName))
+        for offset in 0..<fallbackCombinationCount {
+            let identifier = fallbackStyleIdentifier(at: (seed + offset) % fallbackCombinationCount)
+            if !occupiedIdentifiers.contains(identifier) { return identifier }
+        }
+        return fallbackStyleIdentifier(at: seed % fallbackCombinationCount)
+    }
+
+    /// 旧记录可能没有样式字段。该方法只为自动回退图标写入稳定标识，并以 UUID 作为同名记录的确定性并列顺序。
+    @discardableResult
+    static func normalizeFallbackAssignments(for tools: [TerminalTool]) -> Bool {
+        let automaticTools = tools
+            .filter { isAutomaticFallbackTool($0) }
+            .sorted {
+                let leftHasExistingStyle = $0.iconStyleIdentifier.map(isFallbackStyleIdentifier) ?? false
+                let rightHasExistingStyle = $1.iconStyleIdentifier.map(isFallbackStyleIdentifier) ?? false
+                if leftHasExistingStyle != rightHasExistingStyle { return leftHasExistingStyle }
+                if $0.createdAt != $1.createdAt { return $0.createdAt < $1.createdAt }
+                let nameOrder = normalizedToolName($0.name).localizedCompare(normalizedToolName($1.name))
+                return nameOrder == .orderedSame ? $0.id.uuidString < $1.id.uuidString : nameOrder == .orderedAscending
+            }
+        var occupied: Set<String> = []
+        var changed = false
+
+        for tool in automaticTools {
+            let currentIdentifier = tool.iconStyleIdentifier
+            let identifier: String
+            if let currentIdentifier,
+               isFallbackStyleIdentifier(currentIdentifier),
+               !occupied.contains(currentIdentifier) {
+                identifier = currentIdentifier
+            } else {
+                identifier = fallbackStyleIdentifier(for: tool.name, occupiedIdentifiers: occupied)
+            }
+            let expectedSymbol = definition(forFallbackStyleIdentifier: identifier).symbol
+            if tool.iconStyleIdentifier != identifier || tool.iconSymbol != expectedSymbol {
+                tool.iconStyleIdentifier = identifier
+                tool.iconSymbol = expectedSymbol
+                changed = true
+            }
+            occupied.insert(identifier)
+        }
+        return changed
+    }
+
+    private static var fallbackCombinationCount: Int { fallbackSymbols.count * fallbackPalettes.count }
+
+    private static func knownDefinition(for toolName: String) -> ToolIconDefinition? {
+        let normalizedName = normalizedToolName(toolName)
+        if let directMatch = knownTools[normalizedName] { return directMatch }
+        return knownTools.first { normalizedName.contains($0.key) }?.value
+    }
+
+    private static func definition(forFallbackStyleIdentifier identifier: String) -> ToolIconDefinition {
+        let parts = identifier.split(separator: ".")
+        guard parts.count == 3,
+              parts[0] == "fallback",
+              let symbolIndex = Int(parts[1]),
+              let paletteIndex = Int(parts[2]),
+              fallbackSymbols.indices.contains(symbolIndex),
+              fallbackPalettes.indices.contains(paletteIndex) else {
+            return .neutral
+        }
+        let palette = fallbackPalettes[paletteIndex]
+        return definition(identifier, fallbackSymbols[symbolIndex], palette.0, palette.1)
+    }
+
+    private static func fallbackStyleIdentifier(at index: Int) -> String {
+        let symbolIndex = index % fallbackSymbols.count
+        let paletteIndex = (index / fallbackSymbols.count) % fallbackPalettes.count
+        return "fallback.\(symbolIndex).\(paletteIndex)"
+    }
+
+    private static func isFallbackStyleIdentifier(_ identifier: String) -> Bool {
+        definition(forFallbackStyleIdentifier: identifier).styleIdentifier == identifier
+    }
+
+    private static func normalizedToolName(_ toolName: String) -> String {
+        toolName.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func stableHash(_ value: String) -> Int {
+        let hash = value.unicodeScalars.reduce(0) { partial, scalar in
+            partial &* 31 &+ Int(scalar.value)
+        }
+        return hash & Int.max
+    }
+
+    private static func definition(_ identifier: String, _ symbol: String, _ primary: Color, _ secondary: Color) -> ToolIconDefinition {
+        ToolIconDefinition(styleIdentifier: identifier, symbol: symbol, primaryColor: primary, secondaryColor: secondary)
+    }
+
+    private static func choice(_ identifier: String, _ symbol: String, _ primary: Color, _ secondary: Color, _ chineseName: String, _ englishName: String) -> ToolIconChoice {
+        ToolIconChoice(
+            id: identifier,
+            definition: definition(identifier, symbol, primary, secondary),
+            chineseName: chineseName,
+            englishName: englishName
+        )
     }
 }
 
-/// 图标渲染只使用内置的工具专属图形与具有稳定差异的语义回退；不会从网络加载品牌或所有者头像。
+/// 图标渲染只使用受控本地 PNG、内置 SF Symbol 和本地颜色；不会从网络加载品牌或所有者头像。
 struct ToolIconView: View {
     let tool: TerminalTool
     let size: CGFloat
 
     private var definition: ToolIconDefinition {
-        ToolIconCatalog.definition(for: tool.name, category: tool.category)
+        ToolIconCatalog.definition(for: tool)
     }
 
     private var customImage: NSImage? {
@@ -86,26 +250,33 @@ struct ToolIconView: View {
                     .frame(width: size, height: size)
                     .clipShape(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
             } else {
-                RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [definition.primaryColor, definition.secondaryColor],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-
-                fallbackSymbol
+                ToolIconDefinitionView(definition: definition, size: size)
             }
         }
         .frame(width: size, height: size)
         .shadow(color: definition.primaryColor.opacity(0.20), radius: 5, y: 2)
         .accessibilityLabel("\(tool.name) 图标")
     }
+}
 
-    private var fallbackSymbol: some View {
-        Image(systemName: definition.symbol)
-            .font(.system(size: size * 0.42, weight: .semibold))
-            .foregroundStyle(.white)
+struct ToolIconDefinitionView: View {
+    let definition: ToolIconDefinition
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [definition.primaryColor, definition.secondaryColor],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Image(systemName: definition.symbol)
+                .font(.system(size: size * 0.42, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: size, height: size)
     }
 }

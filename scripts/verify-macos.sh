@@ -114,6 +114,16 @@ swift_source_guard() {
     echo '安装审查只能将静态计划命令交给用户选择的终端。' >&2
     return 1
   fi
+  local icon_code
+  icon_code="$(sed '/^[[:space:]]*\/\//d' Sources/ToolIconView.swift Sources/ToolIconStore.swift)"
+  if printf '%s\n' "$icon_code" | grep -En 'URLSession|AsyncImage|https?://|NSImage\(contentsOf: URL\(string:'; then
+    echo '检测到本地图标系统尝试加载网络图像或远程资源。' >&2
+    return 1
+  fi
+  if ! printf '%s\n' "$icon_code" | grep -qF 'customIconFilename'; then
+    echo '本地图标系统必须保留受控本地 PNG 优先字段。' >&2
+    return 1
+  fi
 }
 
 run_step toolchain bash -c 'xcodebuild -version && swift --version && xcodegen --version'

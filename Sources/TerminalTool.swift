@@ -426,6 +426,8 @@ final class TerminalTool {
     var toolDescription: String
     var categoryRawValue: String
     var iconSymbol: String
+    /// 内置图标的持久化样式标识；nil 兼容旧记录并表示按工具名自动派生。
+    var iconStyleIdentifier: String?
     /// 仅保存由 ToolIconStore 创建的受控本地 PNG 文件名；旧记录缺失该字段时为 nil。
     var customIconFilename: String?
     var iconURLString: String?
@@ -480,6 +482,8 @@ final class TerminalTool {
         self.toolDescription = toolDescription
         categoryRawValue = category.rawValue
         self.iconSymbol = iconSymbol
+        // 新记录由工具库归一化流程分配空闲回退组合，避免新增工具改变已有未知工具的图标。
+        iconStyleIdentifier = nil
         customIconFilename = nil
         iconURLString = nil
         repositoryFullName = nil

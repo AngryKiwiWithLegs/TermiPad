@@ -21,6 +21,7 @@ struct TermiPadBackup: Codable {
         let toolDescription: String
         let categoryRawValue: String
         let iconSymbol: String
+        let iconStyleIdentifier: String?
         let iconURLString: String?
         let repositoryFullName: String?
         let installationSourceRawValue: String?
@@ -42,6 +43,7 @@ struct TermiPadBackup: Codable {
             toolDescription = tool.toolDescription
             categoryRawValue = tool.categoryRawValue
             iconSymbol = tool.iconSymbol
+            iconStyleIdentifier = tool.iconStyleIdentifier
             // 旧版可能存有 GitHub owner 头像；它不是可验证的工具图标，不能继续导出。
             iconURLString = nil
             repositoryFullName = tool.repositoryFullName
@@ -64,6 +66,7 @@ struct TermiPadBackup: Codable {
             tool.toolDescription = toolDescription
             tool.categoryRawValue = categoryRawValue
             tool.iconSymbol = iconSymbol
+            tool.iconStyleIdentifier = iconStyleIdentifier
             // 忽略旧备份中的远程图标 URL，防止历史 owner 头像重新进入工具墙。
             tool.iconURLString = nil
             tool.repositoryFullName = repositoryFullName
@@ -93,6 +96,7 @@ struct TermiPadBackup: Codable {
                 isUserCustomized: isUserCustomized
             )
             tool.id = id
+            tool.iconStyleIdentifier = iconStyleIdentifier
             // 兼容 schema 1 的旧备份，但不恢复当时无验证来源的远程图标 URL。
             tool.iconURLString = nil
             tool.repositoryFullName = repositoryFullName

@@ -66,6 +66,40 @@ final class ToolIconCatalogTests: XCTestCase {
 
         XCTAssertEqual(first.symbol, second.symbol)
     }
+
+    func testExpandedKnownToolDirectoryUsesSemanticSymbols() {
+        XCTAssertEqual(ToolIconCatalog.definition(for: "nvim", category: .development).symbol, "text.cursor")
+        XCTAssertEqual(ToolIconCatalog.definition(for: "httpie", category: .system).symbol, "network.badge.shield.half.filled")
+        XCTAssertEqual(ToolIconCatalog.definition(for: "act", category: .development).symbol, "play.rectangle.fill")
+    }
+
+    func testManualChoiceOverridesKnownToolSemanticDefinition() {
+        let tool = TerminalTool(name: "gh", executablePath: "/opt/homebrew/bin/gh", commandTemplate: "gh")
+        tool.iconStyleIdentifier = "manual.media"
+
+        XCTAssertEqual(ToolIconCatalog.definition(for: tool).symbol, "film.fill")
+    }
+
+    func testFallbackAssignmentsResolvePersistedCollisionsDeterministically() {
+        let first = TerminalTool(name: "private-alpha", executablePath: "/usr/local/bin/private-alpha", commandTemplate: "private-alpha")
+        let second = TerminalTool(name: "private-bravo", executablePath: "/usr/local/bin/private-bravo", commandTemplate: "private-bravo")
+        first.iconStyleIdentifier = "fallback.0.0"
+        second.iconStyleIdentifier = "fallback.0.0"
+
+        XCTAssertTrue(ToolIconCatalog.normalizeFallbackAssignments(for: [first, second]))
+        XCTAssertNotEqual(first.iconStyleIdentifier, second.iconStyleIdentifier)
+        XCTAssertFalse(ToolIconCatalog.normalizeFallbackAssignments(for: [first, second]))
+    }
+
+    func testNewUnknownToolDoesNotChangeExistingPersistedFallbackStyle() {
+        let existing = TerminalTool(name: "existing-private-cli", executablePath: "/usr/local/bin/existing-private-cli", commandTemplate: "existing-private-cli")
+        existing.iconStyleIdentifier = "fallback.0.0"
+        let newTool = TerminalTool(name: "new-private-cli", executablePath: "/usr/local/bin/new-private-cli", commandTemplate: "new-private-cli")
+
+        XCTAssertTrue(ToolIconCatalog.normalizeFallbackAssignments(for: [existing, newTool]))
+        XCTAssertEqual(existing.iconStyleIdentifier, "fallback.0.0")
+        XCTAssertNotNil(newTool.iconStyleIdentifier)
+    }
 }
 
 final class GitHubServiceTests: XCTestCase {
@@ -118,6 +152,7 @@ final class ToolTrustModelTests: XCTestCase {
         tool.metadataMatchConfidence = 100
         tool.metadataUpdatedAt = Date(timeIntervalSince1970: 1_700_000_000)
         tool.favorite = true
+        tool.iconStyleIdentifier = "manual.git"
 
         let candidate = CandidateTool(
             name: "aider",
@@ -131,6 +166,7 @@ final class ToolTrustModelTests: XCTestCase {
         XCTAssertEqual(backup.tools.first?.metadataProvenanceRawValue, ToolMetadataProvenance.githubOfficial.rawValue)
         XCTAssertEqual(backup.tools.first?.metadataMatchConfidence, 100)
         XCTAssertEqual(backup.tools.first?.isFavorite, true)
+        XCTAssertEqual(backup.tools.first?.iconStyleIdentifier, "manual.git")
         XCTAssertEqual(backup.candidates.first?.installationSourceRawValue, ToolInstallationSource.cargo.rawValue)
     }
 }

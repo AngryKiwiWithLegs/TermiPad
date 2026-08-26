@@ -110,6 +110,7 @@ struct LaunchpadView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .onAppear {
+            normalizeIconAssignments()
             if ProcessInfo.processInfo.environment["TERMIPAD_UI_TEST_OPEN_SETTINGS"] == "1" {
                 selectedSidebarItem = SidebarItem.settings.rawValue
             }
@@ -207,6 +208,7 @@ struct LaunchpadView: View {
         .sheet(isPresented: $isPresentingManualTool) {
             ManualToolSheet(language: language) { tool in
                 modelContext.insert(tool)
+                normalizeIconAssignments(in: tools + [tool])
                 try? modelContext.save()
             }
         }
@@ -396,6 +398,7 @@ struct LaunchpadView: View {
         let tool = candidate.makeToolForAcceptance()
         modelContext.insert(tool)
         candidate.status = .accepted
+        normalizeIconAssignments(in: tools + [tool])
         try? modelContext.save()
 
         if autoEnrich {
@@ -421,6 +424,12 @@ struct LaunchpadView: View {
     private func toggleVisibility(for tool: TerminalTool) {
         tool.isHidden.toggle()
         try? modelContext.save()
+    }
+
+    private func normalizeIconAssignments(in library: [TerminalTool]? = nil) {
+        if ToolIconCatalog.normalizeFallbackAssignments(for: library ?? tools) {
+            try? modelContext.save()
+        }
     }
 
     @MainActor
@@ -792,6 +801,7 @@ struct ManualToolSheet: View {
     @State private var commandTemplate = ""
     @State private var toolDescription = ""
     @State private var category = ToolCategory.other
+    @State private var iconStyleIdentifier: String?
 
     var body: some View {
         NavigationStack {
@@ -813,6 +823,12 @@ struct ManualToolSheet: View {
                     TextField(AppCopy.text("description", language: language), text: $toolDescription, axis: .vertical)
                         .lineLimit(2...4)
                 }
+                ToolIconSelectionSection(
+                    toolName: name,
+                    category: category,
+                    styleIdentifier: $iconStyleIdentifier,
+                    language: language
+                )
             }
             .formStyle(.grouped)
             .navigationTitle(AppCopy.text("addTool", language: language))
@@ -821,8 +837,9 @@ struct ManualToolSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(AppCopy.text("save", language: language)) {
                         let command = commandTemplate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? name : commandTemplate
+                        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
                         let tool = TerminalTool(
-                            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                            name: normalizedName,
                             executablePath: executablePath.trimmingCharacters(in: .whitespacesAndNewlines),
                             commandTemplate: command,
                             toolDescription: toolDescription.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -831,6 +848,11 @@ struct ManualToolSheet: View {
                             installationSource: .manual,
                             isUserCustomized: true
                         )
+                        if let iconStyleIdentifier,
+                           let choice = ToolIconCatalog.manualChoices.first(where: { $0.id == iconStyleIdentifier }) {
+                            tool.iconStyleIdentifier = choice.id
+                            tool.iconSymbol = choice.definition.symbol
+                        }
                         onSave(tool)
                         dismiss()
                     }
@@ -929,6 +951,13 @@ struct ToolEditView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                ToolIconSelectionSection(
+                    toolName: tool.name,
+                    category: tool.category,
+                    styleIdentifier: $tool.iconStyleIdentifier,
+                    language: language,
+                    onStyleChanged: applyBuiltInIconStyle
+                )
                 Section(AppCopy.text("toolTrust", language: language)) {
                     LabeledContent(AppCopy.text("installationSource", language: language), value: tool.installationSource.displayName(language))
                     LabeledContent(AppCopy.text("metadataSource", language: language), value: tool.metadataProvenance.displayName(language))
@@ -1066,6 +1095,94 @@ struct ToolEditView: View {
         } catch {
             tool.customIconFilename = previousFilename
             customIconMessage = AppCopy.text("customIconImportFailed", language: language)
+        }
+    }
+
+    private func applyBuiltInIconStyle(_ styleIdentifier: String?) {
+        if let styleIdentifier,
+           let choice = ToolIconCatalog.manualChoices.first(where: { $0.id == styleIdentifier }) {
+            tool.iconSymbol = choice.definition.symbol
+        } else {
+            tool.iconStyleIdentifier = nil
+            tool.iconSymbol = ToolIconCatalog.definition(for: tool.name, category: tool.category).symbol
+        }
+    }
+}
+
+/// 内置图标选择只改变本地 SwiftData 字段；自定义 PNG 仍由 ToolIconStore 单独优先保存。
+private struct ToolIconSelectionSection: View {
+    let toolName: String
+    let category: ToolCategory
+    @Binding var styleIdentifier: String?
+    let language: AppLanguage
+    var onStyleChanged: ((String?) -> Void)? = nil
+
+    private var automaticTitle: String {
+        language == .simplifiedChinese ? "自动匹配" : "Automatic match"
+    }
+
+    private var pickerTitle: String {
+        language == .simplifiedChinese ? "内置图标" : "Built-in Icons"
+    }
+
+    private var resetTitle: String {
+        language == .simplifiedChinese ? "恢复自动图标" : "Restore automatic icon"
+    }
+
+    private var automaticHint: String {
+        language == .simplifiedChinese
+            ? "自动图标只由本地工具名称和已保存的回退组合决定；不会访问网络。"
+            : "Automatic icons are derived only from the local tool name and its saved fallback combination; they never access the network."
+    }
+
+    private var previewDefinition: ToolIconDefinition {
+        if let styleIdentifier,
+           let choice = ToolIconCatalog.manualChoices.first(where: { $0.id == styleIdentifier }) {
+            return choice.definition
+        }
+        return ToolIconCatalog.definition(for: toolName, category: category)
+    }
+
+    var body: some View {
+        Section(pickerTitle) {
+            HStack(spacing: 12) {
+                ToolIconDefinitionView(definition: previewDefinition, size: 42)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(styleIdentifier == nil ? automaticTitle : pickerTitle)
+                        .font(.subheadline.weight(.medium))
+                    Text(automaticHint)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Button(resetTitle) {
+                styleIdentifier = nil
+                onStyleChanged?(nil)
+            }
+            .disabled(styleIdentifier == nil)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 88), spacing: 8)], spacing: 8) {
+                ForEach(ToolIconCatalog.manualChoices) { choice in
+                    Button {
+                        styleIdentifier = choice.id
+                        onStyleChanged?(choice.id)
+                    } label: {
+                        VStack(spacing: 5) {
+                            ToolIconDefinitionView(definition: choice.definition, size: 32)
+                            Text(choice.displayName(language: language))
+                                .font(.caption2)
+                                .lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background(styleIdentifier == choice.id ? Color.accentColor.opacity(0.16) : Color.clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(choice.displayName(language: language))
+                    .accessibilityAddTraits(styleIdentifier == choice.id ? .isSelected : [])
+                }
+            }
+            .accessibilityIdentifier("tool-built-in-icon-picker")
         }
     }
 }
