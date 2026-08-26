@@ -87,6 +87,29 @@ swift_source_guard() {
     echo '检测到 GitHub 搜索 DTO 的错误 isIncomplete 字段引用。' >&2
     return 1
   fi
+  local controlled_install_code environment_report_code
+  controlled_install_code="$(sed '/^[[:space:]]*\/\//d' Sources/ControlledInstallPlan.swift)"
+  environment_report_code="$(sed '/^[[:space:]]*\/\//d' Sources/EnvironmentReport.swift)"
+  if printf '%s\n' "$controlled_install_code" | grep -En 'URLSession|Process\(|NSAppleScript|TerminalLauncher|modelContext\.insert|tap |cask |npm install|pip install|cargo install|brew upgrade|brew uninstall'; then
+    echo '检测到受控安装目录触及网络、应用内执行、第三方渠道或修改性包管理器命令。' >&2
+    return 1
+  fi
+  if ! printf '%s\n' "$controlled_install_code" | grep -qF 'command: "brew install \\(formula)"'; then
+    echo '受控安装目录缺少固定 Homebrew core formula 命令模板。' >&2
+    return 1
+  fi
+  if printf '%s\n' "$environment_report_code" | grep -En 'URLSession|NSAppleScript|/bin/sh|modelContext\.insert|install|upgrade|uninstall|remove'; then
+    echo '检测到环境报告触及网络、shell、持久化或修改性操作。' >&2
+    return 1
+  fi
+  if ! printf '%s\n' "$environment_report_code" | grep -qF 'task.arguments = ["--version"]'; then
+    echo '环境报告必须限定为固定 --version 参数。' >&2
+    return 1
+  fi
+  if grep -nF 'TerminalLauncher.launch(command:' Sources/InstallEnvironmentView.swift | grep -vF 'TerminalLauncher.launch(command: plan.command'; then
+    echo '安装审查只能将静态计划命令交给用户选择的终端。' >&2
+    return 1
+  fi
 }
 
 run_step toolchain bash -c 'xcodebuild -version && swift --version && xcodegen --version'

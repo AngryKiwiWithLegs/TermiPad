@@ -19,6 +19,10 @@ enum DiagnosticEventKind: String, Codable, CaseIterable {
     case discoveryRefreshed
     case discoveryCacheReused
     case discoveryRefreshFailed
+    case environmentReportRequested
+    case installPlanReviewed
+    case installPlanHandedOff
+    case installPlanHandoffFailed
 }
 
 struct DiagnosticEvent: Codable, Equatable, Identifiable {

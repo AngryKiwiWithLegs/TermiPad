@@ -64,6 +64,7 @@ struct LaunchpadView: View {
     private var isRecent: Bool { selectedSidebarItem == SidebarItem.recent.rawValue }
     private var isHiddenLibrary: Bool { selectedSidebarItem == SidebarItem.hidden.rawValue }
     private var isDiscoveryPreview: Bool { selectedSidebarItem == SidebarItem.discovery.rawValue }
+    private var isInstallEnvironment: Bool { selectedSidebarItem == SidebarItem.installEnvironment.rawValue }
     private var isSettings: Bool { selectedSidebarItem == SidebarItem.settings.rawValue }
 
     private var selectedCategory: ToolCategory? {
@@ -239,6 +240,9 @@ struct LaunchpadView: View {
                 Label(AppCopy.text("discoveryPreview", language: language), systemImage: "safari")
                     .tag(SidebarItem.discovery.rawValue)
                     .accessibilityIdentifier("sidebar-discovery-preview")
+                Label(AppCopy.text("installAndEnvironment", language: language), systemImage: "checklist")
+                    .tag(SidebarItem.installEnvironment.rawValue)
+                    .accessibilityIdentifier("sidebar-install-environment")
             }
 
             Section(AppCopy.text("categories", language: language)) {
@@ -269,6 +273,8 @@ struct LaunchpadView: View {
                 .accessibilityIdentifier("sidebar-settings-detail")
         } else if isDiscoveryPreview {
             DiscoveryPreviewView(language: language)
+        } else if isInstallEnvironment {
+            InstallEnvironmentView(language: language)
         } else if isInbox {
             CandidateInboxView(
                 candidates: filteredCandidates,
@@ -513,6 +519,7 @@ private enum SidebarItem: String {
     case recent = "__recent_tools__"
     case hidden = "__hidden_tools__"
     case discovery = "__discovery_preview__"
+    case installEnvironment = "__install_environment__"
     case settings = "__settings__"
 }
 

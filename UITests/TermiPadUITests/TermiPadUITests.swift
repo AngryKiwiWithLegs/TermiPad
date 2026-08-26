@@ -71,6 +71,33 @@ final class TermiPadUITests: XCTestCase {
         attachScreenshot(named: "termipad-discovery-preview-disabled")
     }
 
+    func testInstallEnvironmentRequiresUserAction() throws {
+        launchApp()
+        completeOnboarding()
+
+        let installEnvironmentSidebarItem = element("sidebar-install-environment")
+        XCTAssertTrue(
+            installEnvironmentSidebarItem.waitForExistence(timeout: 5),
+            "TermiPad 应在侧边栏提供独立的安装审查与环境报告入口。"
+        )
+        installEnvironmentSidebarItem.click()
+
+        XCTAssertTrue(
+            element("install-environment").waitForExistence(timeout: 5),
+            "安装审查与环境报告应显示独立页面，而非混入工具启动界面。"
+        )
+        XCTAssertTrue(
+            element("environment-report-check").waitForExistence(timeout: 5),
+            "环境报告必须提供由用户主动触发的检查操作。"
+        )
+        XCTAssertFalse(
+            element("install-plan-review").exists,
+            "初始状态不应自动打开安装计划审查或交接任何命令。"
+        )
+
+        attachScreenshot(named: "termipad-install-environment-idle")
+    }
+
     func testRecoveryLaunchOffersBackupImport() throws {
         launchApp(forceRecovery: true)
 

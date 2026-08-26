@@ -807,3 +807,76 @@ extension ToolWorkflowTests {
         XCTAssertFalse(report.contains("api.github.com"))
     }
 }
+
+
+extension ToolWorkflowTests {
+    func testControlledInstallCatalogUsesReviewedFixedHomebrewPlansOnly() {
+        let plan = ControlledInstallCatalog.plan(forRepositoryFullName: "cli/cli")
+        XCTAssertEqual(plan?.formula, "gh")
+        XCTAssertEqual(plan?.command, "brew install gh")
+        XCTAssertEqual(plan?.channel, .homebrewCore)
+        XCTAssertEqual(plan?.expectedExecutableNames, ["gh"])
+        XCTAssertEqual(plan?.catalogRevision, "2026.08.25.1")
+        XCTAssertEqual(plan?.auditedAt, "2026-08-25")
+        XCTAssertTrue(ControlledInstallCatalog.isValidFormula("git-delta"))
+        XCTAssertFalse(ControlledInstallCatalog.isValidFormula("gh --formula evil"))
+        XCTAssertFalse(ControlledInstallCatalog.isValidFormula("gh\nevil"))
+        XCTAssertFalse(ControlledInstallCatalog.isValidFormula("gh;evil"))
+        XCTAssertNil(ControlledInstallCatalog.plan(forRepositoryFullName: "cli/cli-fork"))
+        XCTAssertNil(ControlledInstallCatalog.plan(forFormula: "gh --formula evil"))
+        XCTAssertTrue(ControlledInstallBoundary.doesNotRunInApp)
+        XCTAssertTrue(ControlledInstallBoundary.doesNotAutoCollectResult)
+        XCTAssertTrue(ControlledInstallBoundary.doesNotUseRemoteCommands)
+        XCTAssertTrue(ControlledInstallBoundary.doesNotSupportThirdPartyTaps)
+    }
+
+    func testEnvironmentReportUsesOnlyResolvedFixedPathsAndVersionReader() {
+        var inspectedPaths: [String] = []
+        let report = EnvironmentReporter.inspect(
+            now: Date(timeIntervalSince1970: 1_700_000_000),
+            pathLookup: { component in
+                component == .homebrew ? "/controlled/homebrew/bin/brew" : nil
+            },
+            versionReader: { path in
+                inspectedPaths.append(path)
+                return .available(version: "Homebrew 4.0.0")
+            }
+        )
+
+        XCTAssertEqual(inspectedPaths, ["/controlled/homebrew/bin/brew"])
+        XCTAssertEqual(report.availableCount, 1)
+        XCTAssertEqual(report.entries.first?.component, .homebrew)
+        XCTAssertEqual(report.entries.first?.status, .available(version: "Homebrew 4.0.0"))
+        XCTAssertEqual(report.entries.dropFirst().map(\.status), Array(repeating: .unavailable, count: 5))
+        XCTAssertTrue(EnvironmentReportBoundary.onlyRunsOnExplicitUserAction)
+        XCTAssertTrue(EnvironmentReportBoundary.onlyUsesFixedAbsolutePaths)
+        XCTAssertTrue(EnvironmentReportBoundary.onlyUsesVersionArgument)
+        XCTAssertTrue(EnvironmentReportBoundary.doesNotUseShell)
+        XCTAssertTrue(EnvironmentReportBoundary.doesNotInstallOrModify)
+        XCTAssertTrue(EnvironmentReportBoundary.doesNotPersistPathsOrResults)
+    }
+
+    func testInstallAndEnvironmentDiagnosticsStayFixedAndPrivate() throws {
+        let defaults = UserDefaults(suiteName: "TermiPadTests.install-environment-diagnostics")!
+        defer { defaults.removePersistentDomain(forName: "TermiPadTests.install-environment-diagnostics") }
+        let store = DiagnosticsStore(defaults: defaults, storageKey: "events", now: { Date(timeIntervalSince1970: 1_700_000_000) })
+        store.record(.environmentReportRequested)
+        store.record(.installPlanReviewed)
+        store.record(.installPlanHandedOff, terminalTarget: .copyOnly)
+
+        XCTAssertEqual(store.events.map(\.kind), [.environmentReportRequested, .installPlanReviewed, .installPlanHandedOff])
+        let reportData = try JSONEncoder().encode(store.makePrivacyReport())
+        let reportText = try XCTUnwrap(String(data: reportData, encoding: .utf8))
+        XCTAssertFalse(reportText.contains("brew install"))
+        XCTAssertFalse(reportText.contains("cli/cli"))
+        XCTAssertFalse(reportText.contains("/controlled/"))
+    }
+
+    func testInstallAndEnvironmentSafetyCopyIsLocalized() {
+        XCTAssertEqual(AppCopy.text("installAndEnvironment", language: .simplifiedChinese), "安装审查与环境报告")
+        XCTAssertEqual(AppCopy.text("installAndEnvironment", language: .english), "Install Review & Environment")
+        XCTAssertTrue(AppCopy.text("environmentReportHint", language: .simplifiedChinese).contains("不会使用 shell"))
+        XCTAssertTrue(AppCopy.text("installReviewHint", language: .english).contains("cannot create or alter"))
+        XCTAssertTrue(AppCopy.text("installRequiresHomebrewCheck", language: .simplifiedChinese).contains("Homebrew"))
+    }
+}
