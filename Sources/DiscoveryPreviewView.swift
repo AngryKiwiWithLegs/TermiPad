@@ -28,6 +28,7 @@ struct DiscoveryPreviewView: View {
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("discovery-enable-preview")
                 }
+                .accessibilityIdentifier("discovery-preview-disabled")
             } else if snapshot == nil {
                 ContentUnavailableView {
                     Label(AppCopy.text("discoveryPreview", language: language), systemImage: "safari")

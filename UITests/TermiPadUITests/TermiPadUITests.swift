@@ -63,7 +63,7 @@ final class TermiPadUITests: XCTestCase {
             "项目发现预览应显示独立页面，而非混入候选收件箱。"
         )
         XCTAssertTrue(
-            element("discovery-enable-preview").waitForExistence(timeout: 5),
+            element("discovery-preview-disabled").waitForExistence(timeout: 5),
             "项目发现预览默认应保持关闭，并要求用户明确启用。"
         )
         XCTAssertFalse(
