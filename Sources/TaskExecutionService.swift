@@ -113,6 +113,7 @@ final class TaskExecutionCoordinator: ObservableObject {
 
     @Published private(set) var runningIntentIDs: Set<UUID> = []
     private var activeProcesses: [UUID: Process] = [:]
+    private var activeIntents: [UUID: TaskIntent] = [:]
     private var completionHandlers: [UUID: () -> Void] = [:]
 
     @discardableResult
@@ -138,10 +139,11 @@ final class TaskExecutionCoordinator: ObservableObject {
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
-        process.terminationHandler = { [weak self, weak intent] completedProcess in
-            Task { @MainActor [weak self, weak intent] in
-                guard let self, let intent else { return }
-                self.finish(intent: intent, process: completedProcess)
+        let intentID = intent.id
+        process.terminationHandler = { [weak self, intentID] completedProcess in
+            let exitCode = completedProcess.terminationStatus
+            Task { @MainActor [weak self, intentID, exitCode] in
+                self?.finish(intentID: intentID, exitCode: exitCode)
             }
         }
 
@@ -155,10 +157,11 @@ final class TaskExecutionCoordinator: ObservableObject {
 
         TaskExecutionPolicy.markStarted(intent)
         activeProcesses[intent.id] = process
+        activeIntents[intent.id] = intent
         completionHandlers[intent.id] = onCompletion
         runningIntentIDs.insert(intent.id)
         DiagnosticsStore.shared.record(.taskExecutionStarted)
-        scheduleTimeout(for: intent, process: process, after: request.timeout)
+        scheduleTimeout(for: intent.id, after: request.timeout)
         return decision
     }
 
@@ -169,27 +172,31 @@ final class TaskExecutionCoordinator: ObservableObject {
         process.terminate()
     }
 
-    private func scheduleTimeout(for intent: TaskIntent, process: Process, after timeout: TimeInterval) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { [weak self, weak intent, weak process] in
-            Task { @MainActor [weak self, weak intent, weak process] in
-                guard let self, let intent, let process,
-                      self.activeProcesses[intent.id] === process,
-                      process.isRunning else { return }
-                TaskExecutionPolicy.markTimedOut(intent)
-                DiagnosticsStore.shared.record(.taskExecutionTimedOut)
-                process.terminate()
-            }
+    private func scheduleTimeout(for intentID: UUID, after timeout: TimeInterval) {
+        Task { @MainActor [weak self, intentID] in
+            try? await Task.sleep(for: .seconds(timeout))
+            self?.timeout(intentID: intentID)
         }
     }
 
-    private func finish(intent: TaskIntent, process: Process) {
-        activeProcesses.removeValue(forKey: intent.id)
-        runningIntentIDs.remove(intent.id)
+    private func timeout(intentID: UUID) {
+        guard let intent = activeIntents[intentID],
+              let process = activeProcesses[intentID],
+              process.isRunning else { return }
+        TaskExecutionPolicy.markTimedOut(intent)
+        DiagnosticsStore.shared.record(.taskExecutionTimedOut)
+        process.terminate()
+    }
+
+    private func finish(intentID: UUID, exitCode: Int) {
+        guard let intent = activeIntents.removeValue(forKey: intentID) else { return }
+        activeProcesses.removeValue(forKey: intentID)
+        runningIntentIDs.remove(intentID)
         if intent.executionState == .running {
-            TaskExecutionPolicy.markExited(intent, exitCode: process.terminationStatus)
-            DiagnosticsStore.shared.record(process.terminationStatus == 0 ? .taskExecutionSucceeded : .taskExecutionFailed)
+            TaskExecutionPolicy.markExited(intent, exitCode: exitCode)
+            DiagnosticsStore.shared.record(exitCode == 0 ? .taskExecutionSucceeded : .taskExecutionFailed)
         }
-        let completion = completionHandlers.removeValue(forKey: intent.id)
+        let completion = completionHandlers.removeValue(forKey: intentID)
         completion?()
     }
 }
