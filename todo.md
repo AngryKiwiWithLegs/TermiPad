@@ -105,3 +105,8 @@
 
 - [x] 将 `Process` 终止与超时回调改为只向主线程执行协调器传递 Sendable 的任务 ID、进程身份和退出信息，不跨域捕获 SwiftData `TaskIntent` 或非 Sendable `Process`。
 - [ ] 完成静态审计、提交推送，并请求一次集中 macOS 回归验证；不改变固定任务目录、项目范围、空输入输出或网络边界。
+
+## T1 退出码类型修复
+
+- [x] 在 `Process.terminationStatus` 的回调边界显式转换 `Int32` 为任务最小结果模型使用的 `Int`。
+- [ ] 完成静态审计、提交推送，并请求一次集中 macOS 回归验证；不改动并发回流、固定目录或执行范围。

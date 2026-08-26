@@ -141,7 +141,7 @@ final class TaskExecutionCoordinator: ObservableObject {
         process.standardError = FileHandle.nullDevice
         let intentID = intent.id
         process.terminationHandler = { [weak self, intentID] completedProcess in
-            let exitCode = completedProcess.terminationStatus
+            let exitCode = Int(completedProcess.terminationStatus)
             Task { @MainActor [weak self, intentID, exitCode] in
                 self?.finish(intentID: intentID, exitCode: exitCode)
             }
