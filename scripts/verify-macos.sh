@@ -94,7 +94,7 @@ swift_source_guard() {
     echo '检测到受控安装目录触及网络、应用内执行、第三方渠道或修改性包管理器命令。' >&2
     return 1
   fi
-  if ! printf '%s\n' "$controlled_install_code" | grep -qF 'command: "brew install \\(formula)"'; then
+  if ! printf '%s\n' "$controlled_install_code" | grep -qF 'command: "brew install \(formula)"'; then
     echo '受控安装目录缺少固定 Homebrew core formula 命令模板。' >&2
     return 1
   fi
