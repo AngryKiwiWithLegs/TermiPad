@@ -98,7 +98,7 @@ final class TermiPadUITests: XCTestCase {
         attachScreenshot(named: "termipad-install-environment-idle")
     }
 
-    func testTaskWorkbenchShowsLocalPolicyBoundaryWithoutExecution() throws {
+    func testTaskWorkbenchShowsLocalExecutionBoundary() throws {
         launchApp()
         completeOnboarding()
 
@@ -115,14 +115,14 @@ final class TermiPadUITests: XCTestCase {
         )
         XCTAssertTrue(
             element("task-policy-boundary").waitForExistence(timeout: 5),
-            "任务工作台应明确显示仅本地策略边界。"
+            "任务工作台应明确显示受限本地执行边界。"
         )
         XCTAssertFalse(
             element("discover-tools-button").exists,
-            "任务工作台不应显示工具扫描操作，也不应暗中开始执行任务。"
+            "任务工作台不应显示工具扫描操作，也不应暴露远程终端入口。"
         )
 
-        attachScreenshot(named: "termipad-task-policy-workbench")
+        attachScreenshot(named: "termipad-task-execution-workbench")
     }
 
     func testRecoveryLaunchOffersBackupImport() throws {

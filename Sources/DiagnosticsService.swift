@@ -29,6 +29,13 @@ enum DiagnosticEventKind: String, Codable, CaseIterable {
     case taskPolicyRejected
     case taskCancelled
     case taskScopeRevoked
+    case taskExecutionStarted
+    case taskExecutionSucceeded
+    case taskExecutionFailed
+    case taskExecutionStopped
+    case taskExecutionTimedOut
+    case taskExecutionRejected
+    case taskExecutionStartFailed
 }
 
 struct DiagnosticEvent: Codable, Equatable, Identifiable {

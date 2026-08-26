@@ -31,6 +31,27 @@ enum TaskIntentState: String, Codable, CaseIterable, Sendable {
     case cancelled
 }
 
+/// T1 只保存执行生命周期和退出码；绝不保存、展示或回传终端输出。
+enum TaskExecutionState: String, Codable, CaseIterable, Sendable {
+    case notStarted
+    case running
+    case succeeded
+    case failed
+    case timedOut
+    case stopped
+    case startRejected
+    case startFailed
+}
+
+enum TaskExecutionRejectionReason: String, Codable, CaseIterable, Sendable {
+    case intentNotApproved
+    case intentExpired
+    case taskAlreadyStarted
+    case projectScopeUnavailable
+    case taskDefinitionUnavailable
+    case taskPreflightFailed
+}
+
 enum TaskRejectionReason: String, Codable, CaseIterable, Sendable {
     case unknownTaskKind
     case projectScopeUnavailable
@@ -116,6 +137,11 @@ final class TaskIntent {
     var approvedAt: Date?
     var resolvedAt: Date?
     var rejectionReasonRawValue: String?
+    var executionStateRawValue: String?
+    var executionStartedAt: Date?
+    var executionFinishedAt: Date?
+    var executionExitCode: Int?
+    var executionRejectionReasonRawValue: String?
 
     init(
         projectScopeID: UUID,
@@ -136,6 +162,11 @@ final class TaskIntent {
         approvedAt = nil
         resolvedAt = nil
         rejectionReasonRawValue = nil
+        executionStateRawValue = TaskExecutionState.notStarted.rawValue
+        executionStartedAt = nil
+        executionFinishedAt = nil
+        executionExitCode = nil
+        executionRejectionReasonRawValue = nil
     }
 
     var kind: TaskKind? {
@@ -155,12 +186,26 @@ final class TaskIntent {
         get { rejectionReasonRawValue.flatMap(TaskRejectionReason.init(rawValue:)) }
         set { rejectionReasonRawValue = newValue?.rawValue }
     }
+
+    var executionState: TaskExecutionState {
+        get { executionStateRawValue.flatMap(TaskExecutionState.init(rawValue:)) ?? .notStarted }
+        set { executionStateRawValue = newValue.rawValue }
+    }
+
+    var executionRejectionReason: TaskExecutionRejectionReason? {
+        get { executionRejectionReasonRawValue.flatMap(TaskExecutionRejectionReason.init(rawValue:)) }
+        set { executionRejectionReasonRawValue = newValue?.rawValue }
+    }
 }
 
 /// 只读固定目录。T0 不接受并不保存任意命令、参数、环境变量或网络地址。
 struct FixedTaskDefinition: Equatable, Identifiable {
     let kind: TaskKind
     let commandPreview: String
+    let executable: FixedTaskExecutable
+    let arguments: [String]
+    let requiredRelativePaths: [String]
+    let timeout: TimeInterval
     let purposeChinese: String
     let purposeEnglish: String
     let risk: TaskRiskLevel
@@ -175,11 +220,21 @@ struct FixedTaskDefinition: Equatable, Identifiable {
     }
 }
 
+/// 仅允许固定绝对路径候选或项目范围内固定相对可执行文件，禁止 Shell 和 PATH 搜索。
+enum FixedTaskExecutable: Equatable {
+    case absoluteCandidates([String])
+    case projectRelative(String)
+}
+
 enum FixedTaskCatalog {
     static let definitions: [FixedTaskDefinition] = [
         .init(
             kind: .swiftPackageTests,
             commandPreview: "swift test",
+            executable: .absoluteCandidates(["/usr/bin/xcrun"]),
+            arguments: ["swift", "test"],
+            requiredRelativePaths: ["Package.swift"],
+            timeout: 120,
             purposeChinese: "运行项目的 Swift Package 单元测试。",
             purposeEnglish: "Run the project's Swift Package unit tests.",
             risk: .low
@@ -187,6 +242,10 @@ enum FixedTaskCatalog {
         .init(
             kind: .macOSVerification,
             commandPreview: "./scripts/verify-macos.sh",
+            executable: .projectRelative("scripts/verify-macos.sh"),
+            arguments: [],
+            requiredRelativePaths: ["Package.swift", "project.yml", "scripts/verify-macos.sh"],
+            timeout: 300,
             purposeChinese: "运行 TermiPad 的集中 macOS 验证脚本。",
             purposeEnglish: "Run TermiPad's one-shot macOS verification script.",
             risk: .standard
@@ -194,6 +253,10 @@ enum FixedTaskCatalog {
         .init(
             kind: .xcodegenGeneration,
             commandPreview: "xcodegen generate",
+            executable: .absoluteCandidates(["/opt/homebrew/bin/xcodegen", "/usr/local/bin/xcodegen"]),
+            arguments: ["generate"],
+            requiredRelativePaths: ["project.yml"],
+            timeout: 60,
             purposeChinese: "从项目定义生成本地 Xcode 工程。",
             purposeEnglish: "Generate the local Xcode project from the project definition.",
             risk: .low

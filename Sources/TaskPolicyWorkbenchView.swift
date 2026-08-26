@@ -2,7 +2,8 @@ import AppKit
 import SwiftData
 import SwiftUI
 
-/// T0 设计提示：原生 macOS 任务工作台只管理本地策略；不显示交互式终端，也不执行或传输命令。
+/// T1 设计提示：原生 macOS 任务工作台只执行已批准固定任务；不显示交互式终端，也不传输命令或输出。
+@MainActor
 struct TaskPolicyWorkbenchView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
@@ -11,6 +12,7 @@ struct TaskPolicyWorkbenchView: View {
     @Query(sort: \TaskIntent.proposedAt, order: .reverse) private var intents: [TaskIntent]
 
     let language: AppLanguage
+    @StateObject private var taskExecutor = TaskExecutionCoordinator.shared
     @State private var selectedScopeID: UUID?
     @State private var selectedTaskKind: TaskKind = .swiftPackageTests
     @State private var notice: String?
@@ -49,8 +51,8 @@ struct TaskPolicyWorkbenchView: View {
             Label(copy("localPolicyOnly", english: "Local policy only"), systemImage: "checkmark.shield")
                 .font(.headline)
             Text(copy(
-                "T0 只创建、审阅、批准、取消或撤销一次性本地任务。它不执行命令、不打开终端、不连接网络，也不接受远程输入。",
-                english: "T0 only creates, reviews, approves, cancels, or revokes one-time local tasks. It does not execute commands, open a terminal, connect to a network, or accept remote input."
+                "T1 只执行已按本地策略批准的固定任务。它不显示交互式终端、不接受远程输入、不保存输出，也不连接网络服务。",
+                english: "T1 only executes fixed tasks approved by local policy. It does not show an interactive terminal, accept remote input, retain output, or connect to a network service."
             ))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -137,7 +139,7 @@ struct TaskPolicyWorkbenchView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(selectedScope == nil)
             }
-            Text(copy("审阅窗口只在这台 Mac 上生效；T0 仍不会执行任务。", english: "A review window is local to this Mac; T0 still does not execute the task."))
+            Text(copy("审阅窗口只在这台 Mac 上生效；只有批准后的固定任务可由 T1 执行。", english: "A review window is local to this Mac; only approved fixed tasks can be executed by T1."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -192,16 +194,34 @@ struct TaskPolicyWorkbenchView: View {
                     Button(copy("按本地策略批准", english: "Approve by Local Policy")) { approve(intent) }
                     Button(copy("取消", english: "Cancel"), role: .cancel) { cancel(intent) }
                 }
-                if intent.state == .approved {
-                    Text(copy("已批准，等待后续 T1 执行器。", english: "Approved; awaiting the future T1 runner."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                if intent.state == .approved { executionControls(intent, scope: scope) }
             }
         }
         .padding(14)
         .background(.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .accessibilityIdentifier("task-intent-\(intent.id.uuidString)")
+    }
+
+    @ViewBuilder
+    private func executionControls(_ intent: TaskIntent, scope: TaskProjectScope?) -> some View {
+        switch intent.executionState {
+        case .notStarted:
+            Button(copy("开始本地任务", english: "Start Local Task")) { start(intent, scope: scope) }
+                .buttonStyle(.borderedProminent)
+        case .running:
+            HStack {
+                ProgressView().controlSize(.small)
+                Text(copy("正在本机运行；不会显示或保存终端输出。", english: "Running locally; terminal output is neither shown nor retained."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button(copy("停止", english: "Stop"), role: .destructive) { stop(intent) }
+                    .buttonStyle(.bordered)
+            }
+        default:
+            Text(executionSummary(intent))
+                .font(.caption)
+                .foregroundStyle(intent.executionState == .succeeded ? Color.secondary : Color.orange)
+        }
     }
 
     private func chooseProjectFolder() {
@@ -259,12 +279,25 @@ struct TaskPolicyWorkbenchView: View {
     }
 
     private func cancel(_ intent: TaskIntent) {
+        taskExecutor.stop(intent: intent)
         TaskIntentPolicy.cancel(intent)
         DiagnosticsStore.shared.record(.taskCancelled)
         save()
     }
 
+    private func start(_ intent: TaskIntent, scope: TaskProjectScope?) {
+        let decision = taskExecutor.start(intent: intent, scope: scope) { save() }
+        if case .rejected = decision { notice = executionSummary(intent) }
+        save()
+    }
+
+    private func stop(_ intent: TaskIntent) {
+        taskExecutor.stop(intent: intent)
+        save()
+    }
+
     private func revoke(_ scope: TaskProjectScope) {
+        for intent in intents where intent.projectScopeID == scope.id { taskExecutor.stop(intent: intent) }
         TaskIntentPolicy.revoke(scope: scope, intents: intents)
         for window in windows where window.projectScopeID == scope.id {
             TaskIntentPolicy.revoke(window: window)
@@ -301,6 +334,27 @@ struct TaskPolicyWorkbenchView: View {
         case (.expired, .english): return "Expired"
         case (.revoked, .english): return "Revoked"
         case (.cancelled, .english): return "Cancelled"
+        }
+    }
+
+    private func executionSummary(_ intent: TaskIntent) -> String {
+        switch (intent.executionState, language) {
+        case (.notStarted, .simplifiedChinese): return "尚未开始。"
+        case (.running, .simplifiedChinese): return "正在本机运行。"
+        case (.succeeded, .simplifiedChinese): return "已完成（退出码 0）。"
+        case (.failed, .simplifiedChinese): return "未完成（非零退出码）。"
+        case (.timedOut, .simplifiedChinese): return "已达到时限并向直接任务进程发送停止请求。"
+        case (.stopped, .simplifiedChinese): return "已向直接任务进程发送停止请求。"
+        case (.startRejected, .simplifiedChinese): return "开始被本地执行策略拒绝。"
+        case (.startFailed, .simplifiedChinese): return "本地任务进程无法启动。"
+        case (.notStarted, .english): return "Not started."
+        case (.running, .english): return "Running locally."
+        case (.succeeded, .english): return "Completed (exit code 0)."
+        case (.failed, .english): return "Did not complete (non-zero exit code)."
+        case (.timedOut, .english): return "Timed out; a stop request was sent to the direct task process."
+        case (.stopped, .english): return "A stop request was sent to the direct task process."
+        case (.startRejected, .english): return "Start was rejected by local execution policy."
+        case (.startFailed, .english): return "The local task process could not start."
         }
     }
 

@@ -134,6 +134,20 @@ swift_source_guard() {
     echo 'T0 任务策略必须保留随应用发布的固定任务目录。' >&2
     return 1
   fi
+  local task_execution_code
+  task_execution_code="$(sed '/^[[:space:]]*\/\//d' Sources/TaskExecutionService.swift Sources/TaskIntent.swift Sources/TaskPolicyWorkbenchView.swift)"
+  if printf '%s\n' "$task_execution_code" | grep -En 'URLSession|URLRequest|NWConnection|NWListener|WebSocket|NSAppleScript|TerminalLauncher|forkpty|posix_openpt|/bin/sh|https?://|stdin|stdout|stderr|Pipe\('; then
+    echo '检测到 T1 执行器触及网络、终端自动化、PTY、Shell 或进程输出边界。' >&2
+    return 1
+  fi
+  if ! printf '%s\n' "$task_execution_code" | grep -qF 'process.standardInput = FileHandle.nullDevice' || ! printf '%s\n' "$task_execution_code" | grep -qF 'process.standardOutput = FileHandle.nullDevice' || ! printf '%s\n' "$task_execution_code" | grep -qF 'process.standardError = FileHandle.nullDevice'; then
+    echo 'T1 执行器必须使用空输入输出，禁止保留或回传终端内容。' >&2
+    return 1
+  fi
+  if grep -RInE 'Process\(' Sources | grep -vE 'Sources/(EnvironmentReport|TaskExecutionService)\.swift'; then
+    echo '检测到 T1 之外新增的进程执行入口。' >&2
+    return 1
+  fi
 }
 
 run_step toolchain bash -c 'xcodebuild -version && swift --version && xcodegen --version'
