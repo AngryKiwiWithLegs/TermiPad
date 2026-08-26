@@ -85,8 +85,20 @@ enum EnvironmentReporter {
         pathLookup: ((EnvironmentComponent) -> String?)? = nil,
         versionReader: ((String) -> EnvironmentComponentStatus)? = nil
     ) -> EnvironmentReport {
-        let lookup = pathLookup ?? executablePath(for:)
-        let reader = versionReader ?? readVersion(at:)
+        let lookup: (EnvironmentComponent) -> String?
+        if let pathLookup {
+            lookup = pathLookup
+        } else {
+            lookup = { component in executablePath(for: component) }
+        }
+
+        let reader: (String) -> EnvironmentComponentStatus
+        if let versionReader {
+            reader = versionReader
+        } else {
+            reader = { path in readVersion(at: path) }
+        }
+
         let entries = EnvironmentComponent.allCases.map { component in
             guard let path = lookup(component) else {
                 return EnvironmentReportEntry(component: component, status: .unavailable)

@@ -106,6 +106,10 @@ swift_source_guard() {
     echo '环境报告必须限定为固定 --version 参数。' >&2
     return 1
   fi
+  if grep -En 'pathLookup \?\? executablePath\(for:\)|versionReader \?\? readVersion\(at:\)' Sources/EnvironmentReport.swift; then
+    echo '检测到 Swift 6.3 无法稳定推断的环境报告默认函数引用合并写法。' >&2
+    return 1
+  fi
   if grep -nF 'TerminalLauncher.launch(command:' Sources/InstallEnvironmentView.swift | grep -vF 'TerminalLauncher.launch(command: plan.command'; then
     echo '安装审查只能将静态计划命令交给用户选择的终端。' >&2
     return 1
