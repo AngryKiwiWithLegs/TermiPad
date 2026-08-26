@@ -2,7 +2,7 @@ import AppKit
 import SwiftData
 import SwiftUI
 
-/// T1 设计提示：原生 macOS 任务工作台只执行已批准固定任务；不显示交互式终端，也不传输命令或输出。
+/// T2 设计提示：原生 macOS 工作台仅执行已批准固定任务；可默认关闭地许可同机 MCP 提出待审阅任务，但不显示交互式终端，也不传输命令或输出。
 @MainActor
 struct TaskPolicyWorkbenchView: View {
     @Environment(\.modelContext) private var modelContext
@@ -13,6 +13,7 @@ struct TaskPolicyWorkbenchView: View {
 
     let language: AppLanguage
     @StateObject private var taskExecutor = TaskExecutionCoordinator.shared
+    @AppStorage(TaskMCPSettings.localMCPEnabledKey) private var localMCPEnabled = false
     @State private var selectedScopeID: UUID?
     @State private var selectedTaskKind: TaskKind = .swiftPackageTests
     @State private var notice: String?
@@ -25,6 +26,7 @@ struct TaskPolicyWorkbenchView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 policyHeader
+                localMCPSection
                 scopeSection
                 proposalSection
                 intentsSection
@@ -60,6 +62,20 @@ struct TaskPolicyWorkbenchView: View {
         .padding(16)
         .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityIdentifier("task-policy-boundary")
+    }
+
+    private var localMCPSection: some View {
+        GroupBox {
+            Toggle(copy("允许本机 MCP 提出任务", english: "Allow Local MCP Task Proposals"), isOn: $localMCPEnabled)
+                .accessibilityIdentifier("task-mcp-toggle")
+            Text(copy(
+                "默认关闭。开启后，只有同一台 Mac 上以 --termipad-mcp-stdio 启动的本机客户端可查询固定任务、提出待本机审阅的任务、读取最小状态或取消任务。它不能批准、执行、读取路径或终端输出。",
+                english: "Off by default. When enabled, only a client launched on this Mac with --termipad-mcp-stdio can list fixed tasks, propose tasks for local review, read minimum state, or cancel tasks. It cannot approve, execute, read paths, or read terminal output."
+            ))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .accessibilityIdentifier("task-mcp-local-section")
     }
 
     private var scopeSection: some View {

@@ -148,6 +148,24 @@ swift_source_guard() {
     echo '检测到 T1 之外新增的进程执行入口。' >&2
     return 1
   fi
+  local mcp_code
+  mcp_code="$(sed '/^[[:space:]]*\/\//d' Sources/MCPStdIORuntime.swift Sources/TaskMCPBridge.swift Sources/TaskMCPSettings.swift Sources/TaskPolicyWorkbenchView.swift)"
+  if printf '%s\n' "$mcp_code" | grep -En 'URLSession|URLRequest|NWConnection|NWListener|WebSocket|NSAppleScript|TerminalLauncher|forkpty|posix_openpt|/bin/sh|https?://|NSXPC|XPCListener|XPCSession|socket|Process\(|Pipe\('; then
+    echo '本机 MCP 目录出现网络、XPC、进程、终端交接、PTY 或输出管道入口。' >&2
+    return 1
+  fi
+  if ! printf '%s\n' "$mcp_code" | grep -qF 'FileHandle.standardOutput.write(data)' || ! printf '%s\n' "$mcp_code" | grep -qE '"additionalProperties": false'; then
+    echo '本机 MCP 缺少 stdio 协议输出或严格工具 schema 防护。' >&2
+    return 1
+  fi
+  if grep -En 'ModelContainer|ModelContext|FetchDescriptor|TaskIntentPolicy' Sources/MCPStdIORuntime.swift; then
+    echo 'stdio MCP 子进程不得直接打开或操作 TermiPad SwiftData store。' >&2
+    return 1
+  fi
+  if ! grep -qF 'CFMessagePortCreateRemote' Sources/TaskMCPBridge.swift || ! grep -qF 'CFMessagePortCreateLocal' Sources/TaskMCPBridge.swift; then
+    echo '本机 MCP 必须通过应用内 CFMessagePort 桥接，而非让 stdio 子进程直接竞争 store。' >&2
+    return 1
+  fi
 }
 
 run_step toolchain bash -c 'xcodebuild -version && swift --version && xcodegen --version'

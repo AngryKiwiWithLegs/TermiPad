@@ -36,6 +36,10 @@ enum DiagnosticEventKind: String, Codable, CaseIterable {
     case taskExecutionTimedOut
     case taskExecutionRejected
     case taskExecutionStartFailed
+    case mcpToolListed
+    case mcpTaskProposed
+    case mcpTaskStatusRead
+    case mcpTaskCancelled
 }
 
 struct DiagnosticEvent: Codable, Equatable, Identifiable {

@@ -2,7 +2,18 @@ import SwiftUI
 import SwiftData
 
 @main
-struct TermiPadApp: App {
+@MainActor
+enum TermiPadBootstrap {
+    static func main() {
+        if ProcessInfo.processInfo.arguments.contains("--termipad-mcp-stdio") {
+            TermiPadMCPStdIORuntime.run()
+            return
+        }
+        TermiPadApplication.main()
+    }
+}
+
+struct TermiPadApplication: App {
     @AppStorage("TermiPad.appearance") private var appearanceRawValue = AppAppearance.system.rawValue
     private let sharedModelContainer: ModelContainer
     private let primaryStoreErrorDescription: String?
@@ -42,7 +53,11 @@ struct TermiPadApp: App {
         if isUITest {
             UserDefaults.standard.set(false, forKey: "TermiPad.hasCompletedOnboarding")
             UserDefaults.standard.set(false, forKey: "TermiPad.discoveryPreviewEnabled")
+            UserDefaults.standard.set(false, forKey: TaskMCPSettings.localMCPEnabledKey)
             DiscoveryCacheStore.clear()
+        }
+        if primaryStoreErrorDescription == nil {
+            TaskMCPBridge.install(modelContainer: sharedModelContainer)
         }
         WindowPlacementCoordinator.shared.installIfNeeded()
     }

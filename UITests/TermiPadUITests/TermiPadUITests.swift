@@ -117,6 +117,14 @@ final class TermiPadUITests: XCTestCase {
             element("task-policy-boundary").waitForExistence(timeout: 5),
             "任务工作台应明确显示受限本地执行边界。"
         )
+        XCTAssertTrue(
+            element("task-mcp-local-section").waitForExistence(timeout: 5),
+            "任务工作台应显示默认关闭的本机 MCP 许可说明，而不自动启动任何本机客户端。"
+        )
+        XCTAssertTrue(
+            element("task-mcp-toggle").exists,
+            "用户应能在 Mac 本机明确选择是否允许受限 MCP 提出待审阅任务。"
+        )
         XCTAssertFalse(
             element("discover-tools-button").exists,
             "任务工作台不应显示工具扫描操作，也不应暴露远程终端入口。"
