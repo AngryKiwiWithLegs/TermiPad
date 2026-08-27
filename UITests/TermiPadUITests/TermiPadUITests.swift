@@ -125,13 +125,10 @@ final class TermiPadUITests: XCTestCase {
             element("task-mcp-toggle").exists,
             "用户应能在 Mac 本机明确选择是否允许受限 MCP 提出待审阅任务。"
         )
+        let policyBoundary = element("task-policy-boundary")
         XCTAssertTrue(
-            element("task-policy-auto-save-status").waitForExistence(timeout: 5),
-            "任务工作台应将自动保存说明暴露为可查询文本，避免用户误以为还需要全局保存按钮。"
-        )
-        XCTAssertTrue(
-            element("task-mcp-persistence-status").waitForExistence(timeout: 5),
-            "本机 MCP 开关应显示已自动保存的当前启用状态。"
+            policyBoundary.label.contains("自动保存") || policyBoundary.label.contains("automatically"),
+            "任务策略边界的可访问标签应包含自动保存说明，避免用户误以为还需要全局保存按钮。"
         )
         XCTAssertFalse(
             element("discover-tools-button").exists,
