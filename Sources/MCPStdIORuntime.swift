@@ -2,7 +2,8 @@ import Foundation
 
 /// T2 仅实现同一台 Mac 上的 JSON-RPC stdio 子集。它不打开 store、不执行任务；所有状态操作必须经由已运行的 TermiPad 主应用桥接。
 final class TermiPadMCPStdIORuntime {
-    private static let protocolVersion = "2025-03-26"
+    /// 仅接受已逐项核验过的 stdio MCP 协议版本；拒绝任何未知版本，避免以宽松协商掩盖协议差异。
+    private static let supportedProtocolVersions: Set<String> = ["2025-03-26", "2025-11-25"]
     private let bridge: LocalMCPBridgeTransport
     private var didInitialize = false
     private var requestDates: [Date] = []
@@ -51,11 +52,12 @@ final class TermiPadMCPStdIORuntime {
 
     private func initialize(id: Any, request: [String: Any]) -> [String: Any] {
         let params = request["params"] as? [String: Any] ?? [:]
-        guard let version = params["protocolVersion"] as? String, version == Self.protocolVersion else {
-            return protocolError(id: id, code: -32602, message: "Unsupported protocol version. Supported: \(Self.protocolVersion).")
+        guard let version = params["protocolVersion"] as? String, Self.supportedProtocolVersions.contains(version) else {
+            let supported = Self.supportedProtocolVersions.sorted().joined(separator: ", ")
+            return protocolError(id: id, code: -32602, message: "Unsupported protocol version. Supported: \(supported).")
         }
         return result(id: id, value: [
-            "protocolVersion": Self.protocolVersion,
+            "protocolVersion": version,
             "capabilities": ["tools": [:]],
             "serverInfo": ["name": "termipad-local", "version": "0.1"],
             "instructions": "This is a local-only, user-enabled TermiPad service. It never accepts shell commands, paths, variables, files, or terminal output. Task proposals require local Mac review before approval or execution."

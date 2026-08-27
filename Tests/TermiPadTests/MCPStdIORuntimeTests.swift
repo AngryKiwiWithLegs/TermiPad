@@ -8,6 +8,18 @@ final class MCPStdIORuntimeTests: XCTestCase {
         XCTAssertEqual(errorCode(response), -32002)
     }
 
+    func testProtocolNegotiatesVerifiedOpenCodeVersionBeforeToolOperations() {
+        let runtime = TermiPadMCPStdIORuntime(bridge: MockBridge())
+        let response = runtime.respond(to: request(
+            id: 1,
+            method: "initialize",
+            params: ["protocolVersion": "2025-11-25", "capabilities": [:], "clientInfo": ["name": "opencode", "version": "1.14.33"]]
+        ))
+        XCTAssertEqual((response?["result"] as? [String: Any])?["protocolVersion"] as? String, "2025-11-25")
+        XCTAssertNil(runtime.respond(to: ["jsonrpc": "2.0", "method": "notifications/initialized"]))
+        XCTAssertNotNil(runtime.respond(to: request(id: 2, method: "tools/list")))
+    }
+
     func testLocalBridgeRejectionSurfacesWithoutDirectStoreAccess() {
         let bridge = MockBridge(response: .failure(code: "local_mcp_disabled", message: "Local MCP is disabled in TermiPad on this Mac."))
         let runtime = initialize(TermiPadMCPStdIORuntime(bridge: bridge))

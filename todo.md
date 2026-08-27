@@ -160,3 +160,16 @@
 - [x] 核验 OpenCode 官方文档中本机 `stdio` MCP 的配置文件、字段形状、启动方式及工具权限行为。
 - [x] 将 OpenCode 配置模型与 TermiPad 的固定 `command + args`、无 URL/密钥/环境变量和本机审阅边界逐项比对。
 - [x] 已补充无密钥最小配置与只读演练步骤；不创建 Manus 连接器、不执行任务、不接入手机或网络服务。
+
+## T2 OpenCode 一次性只读接入演练
+
+- [x] 确认用户本机 OpenCode 1.14.33、TermiPad 可执行文件绝对路径、正常运行的主应用，以及由用户明确开启的本机 MCP 状态。
+- [ ] 在用户本机准备可撤销的最小 OpenCode `type: "local"` 配置，显式拒绝 OpenCode 的 Shell、编辑、网络和子代理工具；不写入 URL、密钥或环境变量。
+- [ ] 仅在用户于 TermiPad 本机开启 MCP 后检查 OpenCode 服务状态，并只读列出项目范围与固定任务。
+- [ ] 演练结束后关闭 TermiPad MCP 开关并在 OpenCode 配置中禁用该服务；不创建、批准、执行或取消任务。
+
+## T2 OpenCode MCP 协议版本兼容修复
+
+- [x] 核验 OpenCode 1.14.33 发出的 MCP `initialize.protocolVersion` 为 `2025-11-25`，确认其与 TermiPad 当前固定 `2025-03-26` 的不匹配原因。
+- [x] 实现仅接受已核验 `2025-03-26` 与 `2025-11-25` 的精确版本协商及 OpenCode 初始化单元测试；未改动五个工具、严格 schema、CFMessagePort、SwiftData 隔离、请求限速或本机审阅/执行边界。
+- [ ] 完成静态审计、提交推送，并仅请求一次 OpenCode 只读连接重试；不创建、批准、执行或取消任务。
