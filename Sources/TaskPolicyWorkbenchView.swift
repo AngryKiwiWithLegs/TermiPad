@@ -68,7 +68,7 @@ struct TaskPolicyWorkbenchView: View {
         .padding(16)
         .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text(verbatim: "\(copy(\"仅本地策略\", english: \"Local policy only\"))。\(persistenceStatus)"))
+        .accessibilityLabel(policyAccessibilityLabel)
         .accessibilityIdentifier("task-policy-boundary")
     }
 
@@ -355,6 +355,11 @@ struct TaskPolicyWorkbenchView: View {
         localMCPEnabled
             ? copy("已自动保存并已开启：只允许本机受限 MCP 提出待审阅任务。", english: "Saved automatically and enabled: only the restricted local MCP may propose tasks for review.")
             : copy("已自动保存：本机 MCP 当前关闭。", english: "Saved automatically: Local MCP is currently disabled.")
+    }
+
+    private var policyAccessibilityLabel: Text {
+        let title = copy("仅本地策略", english: "Local policy only")
+        return Text(verbatim: title + "。 " + persistenceStatus)
     }
 
     private func scopeStatus(_ scope: TaskProjectScope) -> String {
