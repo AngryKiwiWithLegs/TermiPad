@@ -181,6 +181,12 @@
 - [x] 保留自动保存，增加符合原生 macOS 习惯的“已自动保存”与本机 MCP 当前启用/关闭状态反馈；未改动任务或 MCP 安全边界。
 - [ ] 增加最小 UI 回归断言，完成静态审计、提交推送并请求一次集中 macOS 验证后，再恢复 OpenCode 只读演练。
 
+## 自动保存反馈 UI 可访问性修复
+
+- [x] 修复 macOS XCTest 未暴露 `Label` identifier 导致 `task-policy-auto-save-status` 断言失败的问题，将状态控件改为稳定的可访问文本元素。
+- [x] 将工作台的单参数 `onChange` 改为 macOS 14+ 兼容签名，消除弃用警告；不改变开关保存语义。
+- [ ] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
+
 ## T2 OpenCode MCP 协议版本兼容修复
 
 - [x] 核验 OpenCode 1.14.33 发出的 MCP `initialize.protocolVersion` 为 `2025-11-25`，确认其与 TermiPad 当前固定 `2025-03-26` 的不匹配原因。

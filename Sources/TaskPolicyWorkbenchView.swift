@@ -60,7 +60,7 @@ struct TaskPolicyWorkbenchView: View {
             ))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
-            Label(persistenceStatus, systemImage: "checkmark.circle")
+            Text(persistenceStatus)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .accessibilityIdentifier("task-policy-auto-save-status")
@@ -75,7 +75,7 @@ struct TaskPolicyWorkbenchView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Toggle(copy("允许本机 MCP 提出任务", english: "Allow Local MCP Task Proposals"), isOn: $localMCPEnabled)
                     .accessibilityIdentifier("task-mcp-toggle")
-                Label(localMCPStatus, systemImage: localMCPEnabled ? "checkmark.circle.fill" : "minus.circle")
+                Text(localMCPStatus)
                     .font(.caption)
                     .foregroundStyle(localMCPEnabled ? Color.green : Color.secondary)
                     .accessibilityIdentifier("task-mcp-persistence-status")
@@ -87,7 +87,7 @@ struct TaskPolicyWorkbenchView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
         }
-        .onChange(of: localMCPEnabled) { enabled in
+        .onChange(of: localMCPEnabled) { _, enabled in
             persistenceStatus = enabled
                 ? copy("已自动保存：本机 MCP 已开启。", english: "Saved automatically: Local MCP is enabled.")
                 : copy("已自动保存：本机 MCP 已关闭。", english: "Saved automatically: Local MCP is disabled.")

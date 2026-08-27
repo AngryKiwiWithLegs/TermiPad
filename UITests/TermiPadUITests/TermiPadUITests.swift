@@ -127,7 +127,7 @@ final class TermiPadUITests: XCTestCase {
         )
         XCTAssertTrue(
             element("task-policy-auto-save-status").waitForExistence(timeout: 5),
-            "任务工作台应说明本地设置会自动保存，避免用户误以为还需要全局保存按钮。"
+            "任务工作台应将自动保存说明暴露为可查询文本，避免用户误以为还需要全局保存按钮。"
         )
         XCTAssertTrue(
             element("task-mcp-persistence-status").waitForExistence(timeout: 5),
