@@ -144,8 +144,79 @@ T2 已在用户真实 Apple Silicon Mac、Xcode 26.6、Swift 6.3.3 与 XcodeGen 
 
 在下一步实际连接某个 MCP 客户端前，应先确认该客户端支持“command + args”的本机 stdio 配置，并在不调用 `propose_task` 的情况下完成 `tools/list`、`list_task_scopes` 与 `list_fixed_tasks` 的只读演练。只有这些步骤符合预期后，才考虑提出一项低风险、可由用户在 Mac 本地审阅的固定任务。
 
+## 9. OpenCode：已兼容的本机客户端接入方式
+
+**结论：OpenCode 可以作为 T2 的 MCP 客户端。** OpenCode 官方支持本地 MCP 服务；它要求在 `mcp` 对象中使用 `type: "local"`，并将可执行文件与固定参数写成一个 `command` 数组。[4] 这与 TermiPad 的唯一入口“绝对可执行文件路径 + `--termipad-mcp-stdio`”严格匹配，不需要 URL、远程服务器、OAuth、header、token 或环境变量。
+
+OpenCode 同时拥有自己的 `bash`、读写文件和网络工具。**TermiPad 的受限 MCP 边界不会自动限制这些 OpenCode 内置工具。** OpenCode 默认允许大部分工具，因此本节的权限配置把 OpenCode 的 Shell 与文件修改能力显式拒绝，并让其余操作默认要求确认。[5] 不要使用 OpenCode 的 `--auto` 模式；该模式会自动批准未被明确拒绝的操作。[5]
+
+### 9.1 最小配置文件
+
+建议把这项个人本机配置放在 `~/.config/opencode/opencode.jsonc`，而不是提交到任何项目的 Git 仓库。OpenCode 会合并全局与项目配置；编辑时只添加或合并下方的 `mcp` 与 `permission` 字段，不能覆盖你已有的 provider 或个人设置。[4]
+
+初始状态将 `enabled` 保持为 `false`。只有在 TermiPad 已正常运行、范围已准备好且你本人准备做只读演练时，才把它临时改为 `true`；演练结束后改回 `false`。
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "termipad-local": {
+      "type": "local",
+      "command": [
+        "/Users/你的账户名/TermiPad/.mcp-derived-data/Build/Products/Debug/TermiPad.app/Contents/MacOS/TermiPad",
+        "--termipad-mcp-stdio"
+      ],
+      "enabled": false,
+      "timeout": 6000
+    }
+  },
+  "permission": {
+    "*": "ask",
+    "bash": "deny",
+    "edit": "deny",
+    "webfetch": "deny",
+    "websearch": "deny",
+    "task": "deny"
+  }
+}
+```
+
+将示例中的 `/Users/你的账户名` 替换为 Mac 的真实账户目录，并确认该路径指向你在第 2 节构建得到的 `TermiPad.app/Contents/MacOS/TermiPad`。`command` 必须保持为数组：不要改成 `zsh -c`、`bash -c`、字符串拼接或包装脚本；也不要添加 `cwd`、`environment`、`url`、`headers`、OAuth 字段或任何秘密值。`timeout: 6000` 只是为 OpenCode 的工具发现预留略高于 TermiPad 本机桥接请求上限的时间，不会扩大 TermiPad 能力。
+
+### 9.2 只读优先演练
+
+先正常打开 TermiPad，在“本地任务工作台”确认已有可用项目范围，并打开“允许本机 MCP 提出任务”。然后把上面 `enabled` 临时改为 `true`，重新启动 OpenCode，并运行：
+
+```bash
+opencode mcp list
+```
+
+该命令用于显示已配置 MCP 服务及其连接状态。[4] 如果 `termipad-local` 可用，再在 OpenCode 的普通对话中输入以下**只读提示**：
+
+```text
+仅使用 termipad-local MCP 工具，依次调用 list_task_scopes 和 list_fixed_tasks。
+不要调用 propose_task、get_task_status 或 cancel_task；不要使用 bash、编辑、文件、网络、子代理或其他工具。
+只概述返回的显示名、状态、固定任务用途和风险等级；不要猜测路径、命令或参数。
+```
+
+预期结果仅包含不透明范围 ID、范围显示名和状态，以及固定任务种类、用途与风险等级。它不应显示项目路径、命令正文、参数、环境变量、终端输出或文件内容。确认这一轮只读结果符合预期后，应将 `enabled` 改回 `false`，并在 TermiPad 工作台关闭“允许本机 MCP 提出任务”。
+
+### 9.3 不要这样配置或使用
+
+| 不安全或不兼容做法 | 原因 | 正确替代 |
+|---|---|---|
+| 将服务写成 `type: "remote"` 或填写 URL。 | T2 没有 HTTP/Streamable HTTP 服务，也不会认证远程客户端。 | 使用 `type: "local"` 与本机绝对路径。 |
+| 为 TermiPad 填写 token、OAuth、headers 或 `environment`。 | T2 不需要、也不会读取这些值；额外秘密会扩大不必要的暴露面。 | 配置中不写任何秘密或环境变量。 |
+| 用 `zsh -c`、`bash -c`、`npx` 或包装脚本启动服务。 | 会引入额外 Shell 解析、PATH 依赖或 stdout 污染风险。 | `command` 数组只含 TermiPad 可执行文件绝对路径与唯一固定参数。 |
+| 在 OpenCode 使用 `--auto`，或维持默认宽松权限。 | OpenCode 的其他内置工具可能独立执行 Shell、编辑或网络动作；这不受 TermiPad MCP 限制。 | 使用本节 `permission` 配置，保持确认模式。 |
+| 第一次演练就请求 `propose_task`。 | 容易跳过对连接、范围和最小返回的观察。 | 先只读列出范围和固定任务；以后另行确认低风险提案。 |
+
+OpenCode 的 `opencode serve`、`opencode web`、`--hostname`、`--mdns` 与远程 attach 是 OpenCode 的独立功能，不是启用 TermiPad T2 所必需的步骤。它们不应出现在此演练中，也不应被当作将 TermiPad 暴露到局域网或公网的手段。
+
 ## 参考资料
 
 [1]: https://modelcontextprotocol.io/specification/2025-03-26/basic/transports "Model Context Protocol：Transports（stdio）"
 [2]: https://modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle "Model Context Protocol：Lifecycle"
 [3]: https://developer.apple.com/documentation/corefoundation/cfmessageport "Apple：CFMessagePort"
+[4]: https://opencode.ai/docs/mcp-servers/ "OpenCode：MCP servers"
+[5]: https://opencode.ai/docs/permissions/ "OpenCode：Permissions"
