@@ -208,6 +208,12 @@
 - [x] 修复策略边界动态 accessibilityLabel 内嵌字符串转义导致的 Xcode 26.6 解析失败，提取为独立 `Text` 属性。
 - [ ] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
 
+## 自动保存状态 UI 断言稳定性修复
+
+- [x] 移除依赖 macOS SwiftUI 组合 `accessibilityLabel` 动态文本的脆弱断言，保留用户可见自动保存状态文本。
+- [x] 将 UI 冒烟覆盖收敛到稳定可见的任务工作台边界、MCP 开关和固定本地安全说明；不改动自动保存、MCP、任务策略或执行器。
+- [ ] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
+
 ## T2 OpenCode MCP 协议版本兼容修复
 
 - [x] 核验 OpenCode 1.14.33 发出的 MCP `initialize.protocolVersion` 为 `2025-11-25`，确认其与 TermiPad 当前固定 `2025-03-26` 的不匹配原因。

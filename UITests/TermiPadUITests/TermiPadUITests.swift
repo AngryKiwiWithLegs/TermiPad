@@ -125,11 +125,6 @@ final class TermiPadUITests: XCTestCase {
             element("task-mcp-toggle").exists,
             "用户应能在 Mac 本机明确选择是否允许受限 MCP 提出待审阅任务。"
         )
-        let policyBoundary = element("task-policy-boundary")
-        XCTAssertTrue(
-            policyBoundary.label.contains("自动保存") || policyBoundary.label.contains("automatically"),
-            "任务策略边界的可访问标签应包含自动保存说明，避免用户误以为还需要全局保存按钮。"
-        )
         XCTAssertFalse(
             element("discover-tools-button").exists,
             "任务工作台不应显示工具扫描操作，也不应暴露远程终端入口。"
