@@ -128,3 +128,8 @@
 
 - [x] 将 `CFMessagePortSendRequest` 的 `replyMode` 从 `CFRunLoopMode?` 显式转换为 API 所需的 `CFString?`。
 - [ ] 完成静态审计、提交推送，并请求一次集中 macOS 回归验证；不改动 JSON-RPC、CFMessagePort 桥接、任务策略或网络边界。
+
+## T2 现代 CFRunLoop API 修复
+
+- [x] 移除已废弃的 `kCFRunLoopDefaultMode`，改用 `CFRunLoopMode.defaultMode.rawValue` 生成 CFMessagePort 所需的默认 replyMode。
+- [ ] 完成静态审计、提交推送，并请求一次集中 macOS 回归验证；不改动 JSON-RPC、CFMessagePort 桥接、任务策略或网络边界。
