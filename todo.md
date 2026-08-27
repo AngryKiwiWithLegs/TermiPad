@@ -133,3 +133,8 @@
 
 - [x] 移除已废弃的 `kCFRunLoopDefaultMode`，改用 `CFRunLoopMode.defaultMode.rawValue` 生成 CFMessagePort 所需的默认 replyMode。
 - [ ] 完成静态审计、提交推送，并请求一次集中 macOS 回归验证；不改动 JSON-RPC、CFMessagePort 桥接、任务策略或网络边界。
+
+## T2 CFData 桥接修复
+
+- [x] 将本机 CFMessagePort 回调请求从 `CFData` 显式桥接为 Foundation `Data`，并核对回复数据的反向转换保持兼容。
+- [ ] 完成静态审计、提交推送，并请求一次集中 macOS 回归验证；不改动 JSON-RPC、CFMessagePort 桥接语义、任务策略或网络边界。

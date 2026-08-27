@@ -93,7 +93,8 @@ final class TaskMCPBridge {
             { _, _, data, info in
                 guard let data, let info else { return nil }
                 let bridge = Unmanaged<TaskMCPBridge>.fromOpaque(info).takeUnretainedValue()
-                let response = bridge.handle(Data(data))
+                let request = data as Data
+                let response = bridge.handle(request)
                 return Unmanaged.passRetained(response as CFData)
             },
             &context,
