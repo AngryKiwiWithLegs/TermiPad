@@ -68,7 +68,7 @@ struct TaskPolicyWorkbenchView: View {
         .padding(16)
         .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("\(copy(\"仅本地策略\", english: \"Local policy only\"))。\(persistenceStatus)"))
+        .accessibilityLabel(Text(verbatim: "\(copy(\"仅本地策略\", english: \"Local policy only\"))。\(persistenceStatus)"))
         .accessibilityIdentifier("task-policy-boundary")
     }
 
