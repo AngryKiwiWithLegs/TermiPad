@@ -122,29 +122,29 @@
 - [x] 冻结 MCP 初始化、工具 schema、客户端身份、请求映射、拒绝类别和最小响应契约；不暴露命令、路径、变量、文件内容或完整输出。
 - [x] 实现受限 stdio MCP 服务端和 Mac 主应用的本地桥接，只支持查询固定工具、提出任务、读取最小状态与取消任务。
 - [x] 增加协议/工具 schema/拒绝/撤销测试和静态防护，并提供最小本机 MCP 管理状态；禁止 HTTP、WebSocket、网络监听和任意 Shell。
-- [ ] 完成静态审计、提交推送，并在本批次结束后请求一次集中 macOS 验证；静态审计已通过，待真实 macOS 验证。
+- [x] 完成静态审计、提交推送，并在本批次结束后通过一次集中 macOS 验证（2026-08-26，归档 `20260826-212137`）。
 
 ## T2 Core Foundation 类型修复
 
 - [x] 将 `CFMessagePortSendRequest` 的 `replyMode` 从 `CFRunLoopMode?` 显式转换为 API 所需的 `CFString?`。
-- [ ] 完成静态审计、提交推送，并请求一次集中 macOS 回归验证；不改动 JSON-RPC、CFMessagePort 桥接、任务策略或网络边界。
+- [x] 完成静态审计、提交推送，并通过一次集中 macOS 回归验证（2026-08-26，归档 `20260826-212137`）；未改动 JSON-RPC、CFMessagePort 桥接、任务策略或网络边界。
 
 ## T2 现代 CFRunLoop API 修复
 
 - [x] 移除已废弃的 `kCFRunLoopDefaultMode`，改用 `CFRunLoopMode.defaultMode.rawValue` 生成 CFMessagePort 所需的默认 replyMode。
-- [ ] 完成静态审计、提交推送，并请求一次集中 macOS 回归验证；不改动 JSON-RPC、CFMessagePort 桥接、任务策略或网络边界。
+- [x] 完成静态审计、提交推送，并通过一次集中 macOS 回归验证（2026-08-26，归档 `20260826-212137`）；未改动 JSON-RPC、CFMessagePort 桥接、任务策略或网络边界。
 
 ## T2 CFData 桥接修复
 
 - [x] 将本机 CFMessagePort 回调请求从 `CFData` 显式桥接为 Foundation `Data`，并核对回复数据的反向转换保持兼容。
-- [ ] 完成静态审计、提交推送，并请求一次集中 macOS 回归验证；不改动 JSON-RPC、CFMessagePort 桥接语义、任务策略或网络边界。
+- [x] 完成静态审计、提交推送，并通过一次集中 macOS 回归验证（2026-08-26，归档 `20260826-212137`）；未改动 JSON-RPC、CFMessagePort 桥接语义、任务策略或网络边界。
 
 ## T2 SwiftData 主线程隔离修复
 
 - [x] 将持有 `ModelContainer.mainContext` 的本机 MCP 桥接类型和安装路径显式隔离到主执行上下文。
-- [ ] 完成静态审计、提交推送，并请求一次集中 macOS 回归验证；不改动 JSON-RPC、CFMessagePort、任务策略、固定目录或网络边界。
+- [x] 完成静态审计、提交推送，并通过一次集中 macOS 回归验证（2026-08-26，归档 `20260826-212137`）；未改动 JSON-RPC、CFMessagePort、任务策略、固定目录或网络边界。
 
 ## T2 MCP 测试返回修复
 
 - [x] 补齐测试辅助桥接中返回 `LocalMCPBridgeResponse` 的显式 `return`，保持既有模拟响应与协议断言语义不变。
-- [ ] 完成静态审计、提交推送，并请求一次集中 macOS 回归验证；不改动 MCP 运行时、CFMessagePort、任务策略或网络边界。
+- [x] 完成静态审计、提交推送，并通过一次集中 macOS 回归验证（2026-08-26，归档 `20260826-212137`）；未改动 MCP 运行时、CFMessagePort、任务策略或网络边界。
