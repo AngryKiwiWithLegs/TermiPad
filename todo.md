@@ -138,3 +138,8 @@
 
 - [x] 将本机 CFMessagePort 回调请求从 `CFData` 显式桥接为 Foundation `Data`，并核对回复数据的反向转换保持兼容。
 - [ ] 完成静态审计、提交推送，并请求一次集中 macOS 回归验证；不改动 JSON-RPC、CFMessagePort 桥接语义、任务策略或网络边界。
+
+## T2 SwiftData 主线程隔离修复
+
+- [x] 将持有 `ModelContainer.mainContext` 的本机 MCP 桥接类型和安装路径显式隔离到主执行上下文。
+- [ ] 完成静态审计、提交推送，并请求一次集中 macOS 回归验证；不改动 JSON-RPC、CFMessagePort、任务策略、固定目录或网络边界。
