@@ -143,3 +143,8 @@
 
 - [x] 将持有 `ModelContainer.mainContext` 的本机 MCP 桥接类型和安装路径显式隔离到主执行上下文。
 - [ ] 完成静态审计、提交推送，并请求一次集中 macOS 回归验证；不改动 JSON-RPC、CFMessagePort、任务策略、固定目录或网络边界。
+
+## T2 MCP 测试返回修复
+
+- [x] 补齐测试辅助桥接中返回 `LocalMCPBridgeResponse` 的显式 `return`，保持既有模拟响应与协议断言语义不变。
+- [ ] 完成静态审计、提交推送，并请求一次集中 macOS 回归验证；不改动 MCP 运行时、CFMessagePort、任务策略或网络边界。

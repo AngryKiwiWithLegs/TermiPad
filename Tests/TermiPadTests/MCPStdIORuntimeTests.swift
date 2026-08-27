@@ -121,6 +121,6 @@ private final class MockBridge: LocalMCPBridgeTransport {
 
     func send(_ request: LocalMCPBridgeRequest) -> LocalMCPBridgeResponse {
         requests.append(request)
-        response
+        return response
     }
 }
