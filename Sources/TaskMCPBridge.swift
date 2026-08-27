@@ -225,7 +225,8 @@ struct CFMessagePortMCPBridgeTransport: LocalMCPBridgeTransport {
             return .failure(code: "local_bridge_unavailable", message: "Open TermiPad on this Mac before using its local MCP service.")
         }
         var reply: Unmanaged<CFData>?
-        let status = CFMessagePortSendRequest(port, 0, requestData as CFData, 5, 5, kCFRunLoopDefaultMode, &reply)
+        let replyMode: CFString? = kCFRunLoopDefaultMode?.rawValue as CFString?
+        let status = CFMessagePortSendRequest(port, 0, requestData as CFData, 5, 5, replyMode, &reply)
         guard status == kCFMessagePortSuccess, let replyData = reply?.takeRetainedValue() else {
             return .failure(code: "local_bridge_unavailable", message: "TermiPad local MCP bridge is unavailable.")
         }

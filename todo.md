@@ -123,3 +123,8 @@
 - [x] 实现受限 stdio MCP 服务端和 Mac 主应用的本地桥接，只支持查询固定工具、提出任务、读取最小状态与取消任务。
 - [x] 增加协议/工具 schema/拒绝/撤销测试和静态防护，并提供最小本机 MCP 管理状态；禁止 HTTP、WebSocket、网络监听和任意 Shell。
 - [ ] 完成静态审计、提交推送，并在本批次结束后请求一次集中 macOS 验证；静态审计已通过，待真实 macOS 验证。
+
+## T2 Core Foundation 类型修复
+
+- [x] 将 `CFMessagePortSendRequest` 的 `replyMode` 从 `CFRunLoopMode?` 显式转换为 API 所需的 `CFString?`。
+- [ ] 完成静态审计、提交推送，并请求一次集中 macOS 回归验证；不改动 JSON-RPC、CFMessagePort 桥接、任务策略或网络边界。
