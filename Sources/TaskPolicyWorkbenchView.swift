@@ -17,6 +17,7 @@ struct TaskPolicyWorkbenchView: View {
     @State private var selectedScopeID: UUID?
     @State private var selectedTaskKind: TaskKind = .swiftPackageTests
     @State private var notice: String?
+    @State private var persistenceStatus = ""
 
     private var selectedScope: TaskProjectScope? {
         scopes.first { $0.id == selectedScopeID }
@@ -37,6 +38,7 @@ struct TaskPolicyWorkbenchView: View {
         .navigationTitle(copy("taskWorkbench", english: "Task Workbench"))
         .onAppear {
             selectedScopeID = selectedScopeID ?? scopes.first?.id
+            persistenceStatus = copy("本地设置会自动保存到这台 Mac。", english: "Local settings save automatically on this Mac.")
         }
         .alert(copy("taskPolicyNotice", english: "Task Policy"), isPresented: Binding(
             get: { notice != nil },
@@ -58,6 +60,10 @@ struct TaskPolicyWorkbenchView: View {
             ))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+            Label(persistenceStatus, systemImage: "checkmark.circle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("task-policy-auto-save-status")
         }
         .padding(16)
         .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -66,14 +72,25 @@ struct TaskPolicyWorkbenchView: View {
 
     private var localMCPSection: some View {
         GroupBox {
-            Toggle(copy("允许本机 MCP 提出任务", english: "Allow Local MCP Task Proposals"), isOn: $localMCPEnabled)
-                .accessibilityIdentifier("task-mcp-toggle")
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle(copy("允许本机 MCP 提出任务", english: "Allow Local MCP Task Proposals"), isOn: $localMCPEnabled)
+                    .accessibilityIdentifier("task-mcp-toggle")
+                Label(localMCPStatus, systemImage: localMCPEnabled ? "checkmark.circle.fill" : "minus.circle")
+                    .font(.caption)
+                    .foregroundStyle(localMCPEnabled ? Color.green : Color.secondary)
+                    .accessibilityIdentifier("task-mcp-persistence-status")
+            }
             Text(copy(
                 "默认关闭。开启后，只有同一台 Mac 上以 --termipad-mcp-stdio 启动的本机客户端可查询固定任务、提出待本机审阅的任务、读取最小状态或取消任务。它不能批准、执行、读取路径或终端输出。",
                 english: "Off by default. When enabled, only a client launched on this Mac with --termipad-mcp-stdio can list fixed tasks, propose tasks for local review, read minimum state, or cancel tasks. It cannot approve, execute, read paths, or read terminal output."
             ))
             .font(.caption)
             .foregroundStyle(.secondary)
+        }
+        .onChange(of: localMCPEnabled) { enabled in
+            persistenceStatus = enabled
+                ? copy("已自动保存：本机 MCP 已开启。", english: "Saved automatically: Local MCP is enabled.")
+                : copy("已自动保存：本机 MCP 已关闭。", english: "Saved automatically: Local MCP is disabled.")
         }
         .accessibilityIdentifier("task-mcp-local-section")
     }
@@ -326,9 +343,16 @@ struct TaskPolicyWorkbenchView: View {
     private func save() {
         do {
             try modelContext.save()
+            persistenceStatus = copy("已自动保存到这台 Mac。", english: "Saved automatically on this Mac.")
         } catch {
             notice = copy("无法保存本地任务策略。", english: "The local task policy could not be saved.")
         }
+    }
+
+    private var localMCPStatus: String {
+        localMCPEnabled
+            ? copy("已自动保存并已开启：只允许本机受限 MCP 提出待审阅任务。", english: "Saved automatically and enabled: only the restricted local MCP may propose tasks for review.")
+            : copy("已自动保存：本机 MCP 当前关闭。", english: "Saved automatically: Local MCP is currently disabled.")
     }
 
     private func scopeStatus(_ scope: TaskProjectScope) -> String {

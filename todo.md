@@ -165,8 +165,21 @@
 
 - [x] 确认用户本机 OpenCode 1.14.33、TermiPad 可执行文件绝对路径、正常运行的主应用，以及由用户明确开启的本机 MCP 状态。
 - [x] 在用户本机准备可撤销的最小 OpenCode `type: "local"` 配置，显式拒绝 OpenCode 的 Shell、编辑、网络和子代理工具；不写入 URL、密钥或环境变量。
-- [ ] 仅在用户于 TermiPad 本机开启 MCP 后检查 OpenCode 服务状态，并只读列出项目范围与固定任务。
+- [x] 仅在用户于 TermiPad 本机开启 MCP 后检查 OpenCode 服务状态：`termipad-local` 已在 OpenCode 1.14.33 显示 `connected`。
+- [ ] 在临时配置中显式禁用同会话的 `quick9-wormhole` 与任何其他已加载 MCP 服务，再只读列出项目范围与固定任务。
 - [ ] 演练结束后关闭 TermiPad MCP 开关并在 OpenCode 配置中禁用该服务；不创建、批准、执行或取消任务。
+
+## OpenCode NVIDIA DeepSeek 默认模型切换
+
+- [x] 在用户本机只读发现 DeepSeek 可用模型标识；已确认没有 `nvidia` provider，且旧 `nvidia-nim-proxy.js` 当前未运行；用户确认选择当前可用的 NVIDIA NIM `nim/deepseek-ai/deepseek-v4-flash-0731`；未读取或显示 provider 配置、API Key、token 或环境变量。
+- [x] 确认准确模型标识后，已先备份再仅更新临时只读演练配置的默认模型为 `nim/deepseek-ai/deepseek-v4-flash-0731`；不改动 TermiPad MCP、其他 MCP 服务或权限拒绝规则。
+- [ ] 确认新默认模型已生效，再恢复仅限 TermiPad 的两项只读工具查询。
+
+## 本地任务工作台保存反馈审计
+
+- [x] 核对项目范围、审阅窗口、任务提案和本机 MCP 开关的实际保存/生效路径，确认均为即时本地保存；缺少保存按钮是自动保存设计，但缺少可见反馈。
+- [x] 保留自动保存，增加符合原生 macOS 习惯的“已自动保存”与本机 MCP 当前启用/关闭状态反馈；未改动任务或 MCP 安全边界。
+- [ ] 增加最小 UI 回归断言，完成静态审计、提交推送并请求一次集中 macOS 验证后，再恢复 OpenCode 只读演练。
 
 ## T2 OpenCode MCP 协议版本兼容修复
 

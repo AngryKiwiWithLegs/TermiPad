@@ -125,6 +125,14 @@ final class TermiPadUITests: XCTestCase {
             element("task-mcp-toggle").exists,
             "用户应能在 Mac 本机明确选择是否允许受限 MCP 提出待审阅任务。"
         )
+        XCTAssertTrue(
+            element("task-policy-auto-save-status").waitForExistence(timeout: 5),
+            "任务工作台应说明本地设置会自动保存，避免用户误以为还需要全局保存按钮。"
+        )
+        XCTAssertTrue(
+            element("task-mcp-persistence-status").waitForExistence(timeout: 5),
+            "本机 MCP 开关应显示已自动保存的当前启用状态。"
+        )
         XCTAssertFalse(
             element("discover-tools-button").exists,
             "任务工作台不应显示工具扫描操作，也不应暴露远程终端入口。"
