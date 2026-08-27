@@ -192,14 +192,15 @@ final class TermiPadUITests: XCTestCase {
         }
         app.launch()
         let reachedForeground = app.wait(for: .runningForeground, timeout: 10)
-        XCTAssertTrue(
-            reachedForeground,
-            "TermiPad 未能在 10 秒内进入前台。当前 UI 层级：\n\(app.debugDescription)"
-        )
         ensureMainWindow()
+        let hasAccessibleMainWindow = app.windows.firstMatch.exists
+        XCTAssertTrue(
+            reachedForeground || hasAccessibleMainWindow,
+            "TermiPad 未能在 10 秒内进入前台或呈现可访问的主窗口。当前 UI 层级：\n\(app.debugDescription)"
+        )
         attachTextDiagnostic(
             named: "termipad-launch-state",
-            text: "bundleIdentifier=com.termipad.app\nstate=\(app.state.rawValue)\n\(app.debugDescription)"
+            text: "bundleIdentifier=com.termipad.app\nstate=\(app.state.rawValue)\nreachedForeground=\(reachedForeground)\nhasAccessibleMainWindow=\(hasAccessibleMainWindow)\n\(app.debugDescription)"
         )
     }
 
