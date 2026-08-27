@@ -193,6 +193,11 @@
 - [x] 将自动保存反馈归并到已验证可访问的任务策略边界元素标签，并调整最小 UI 断言；未移除用户可见反馈，未改动持久化、MCP、任务策略或执行器。
 - [ ] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
 
+## 自动保存状态 accessibilityLabel 编译修复
+
+- [x] 修复 Xcode 26.6 中 `accessibilityLabel` 需要 SwiftUI `Text` 而非 `String` 的编译类型不匹配，保持策略边界的单一 accessibility element 设计。
+- [ ] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
+
 ## T2 OpenCode MCP 协议版本兼容修复
 
 - [x] 核验 OpenCode 1.14.33 发出的 MCP `initialize.protocolVersion` 为 `2025-11-25`，确认其与 TermiPad 当前固定 `2025-03-26` 的不匹配原因。
