@@ -64,7 +64,7 @@ open "$PWD/.mcp-derived-data/Build/Products/Debug/TermiPad.app"
 
 ## 4. 连接后的最小验证顺序
 
-标准 MCP 生命周期要求客户端先发送 `initialize`、收到响应后再发送 `notifications/initialized`，随后才进入常规工具调用。[2] 大多数成熟 MCP 客户端会自动完成这一过程；如果客户端在工具列表尚未出现时显示初始化错误，应先检查它是否支持本服务固定的协议版本 `2025-03-26`。
+标准 MCP 生命周期要求客户端先发送 `initialize`、收到响应后再发送 `notifications/initialized`，随后才进入常规工具调用。[2] 大多数成熟 MCP 客户端会自动完成这一过程；如果客户端在工具列表尚未出现时显示初始化错误，应先检查它是否请求并支持本服务精确接受的 `2025-03-26` 或 `2025-11-25` 协议版本。
 
 建议按以下顺序验证，避免一开始就创建任务。
 
@@ -128,7 +128,7 @@ MCP 创建的任务只能处于待审阅状态。真正的批准与启动只在 
 | `task_unknown` | `task_id` 不存在或不再可用。 | 只使用本次提案返回的 ID；不要扫描本地文件寻找任务信息。 |
 | `task_running_local_stop_required` | 任务已在本机执行。 | 回到 TermiPad 工作台停止；MCP 不具备远程进程终止能力。 |
 | `rate_limited` | 单个服务进程在一分钟内超过 30 个普通请求。 | 等待后再进行必要的单次调用，并修正客户端轮询策略。 |
-| `Unsupported protocol version` 或初始化前操作被拒绝 | 客户端不支持 `2025-03-26` 或未按生命周期发送初始化通知。 | 更新/改用支持该版本 stdio MCP 的本机客户端；不要手工降级 TermiPad 协议或添加兼容网络代理。 |
+| `Unsupported protocol version` 或初始化前操作被拒绝 | 客户端未请求或不支持 TermiPad 精确接受的 `2025-03-26`、`2025-11-25`，或未按生命周期发送初始化通知。 | 更新/改用支持已接受版本的 stdio MCP 本机客户端；不要手工放宽 TermiPad 协议校验或添加兼容网络代理。 |
 
 如果客户端界面要求填写服务器 URL、API Key、OAuth、浏览器授权或远程端点，说明它所选的连接类型不是本指南的 `stdio` 子进程模式。不要为迁就该界面而把 TermiPad 暴露为 HTTP 服务；请选择支持命令型 `stdio` MCP 配置的本机客户端。
 
@@ -146,7 +146,7 @@ T2 已在用户真实 Apple Silicon Mac、Xcode 26.6、Swift 6.3.3 与 XcodeGen 
 
 ## 9. OpenCode：已兼容的本机客户端接入方式
 
-**结论：OpenCode 可以作为 T2 的 MCP 客户端。** OpenCode 官方支持本地 MCP 服务；它要求在 `mcp` 对象中使用 `type: "local"`，并将可执行文件与固定参数写成一个 `command` 数组。[4] 这与 TermiPad 的唯一入口“绝对可执行文件路径 + `--termipad-mcp-stdio`”严格匹配，不需要 URL、远程服务器、OAuth、header、token 或环境变量。
+**结论：OpenCode 可以作为 T2 的 MCP 客户端。** OpenCode 官方支持本地 MCP 服务；它要求在 `mcp` 对象中使用 `type: "local"`，并将可执行文件与固定参数写成一个 `command` 数组。[4] OpenCode 1.14.33 已实际证实使用 `2025-11-25` 发起初始化；TermiPad 仅精确接受该版本与原有 `2025-03-26`，并在成功握手中回显接受的客户端版本，符合 MCP 的版本协商规则。[6] 这与 TermiPad 的唯一入口“绝对可执行文件路径 + `--termipad-mcp-stdio`”严格匹配，不需要 URL、远程服务器、OAuth、header、token 或环境变量。
 
 OpenCode 同时拥有自己的 `bash`、读写文件和网络工具。**TermiPad 的受限 MCP 边界不会自动限制这些 OpenCode 内置工具。** OpenCode 默认允许大部分工具，因此本节的权限配置把 OpenCode 的 Shell 与文件修改能力显式拒绝，并让其余操作默认要求确认。[5] 不要使用 OpenCode 的 `--auto` 模式；该模式会自动批准未被明确拒绝的操作。[5]
 
@@ -181,7 +181,7 @@ OpenCode 同时拥有自己的 `bash`、读写文件和网络工具。**TermiPad
 }
 ```
 
-将示例中的 `/Users/你的账户名` 替换为 Mac 的真实账户目录，并确认该路径指向你在第 2 节构建得到的 `TermiPad.app/Contents/MacOS/TermiPad`。`command` 必须保持为数组：不要改成 `zsh -c`、`bash -c`、字符串拼接或包装脚本；也不要添加 `cwd`、`environment`、`url`、`headers`、OAuth 字段或任何秘密值。`timeout: 6000` 只是为 OpenCode 的工具发现预留略高于 TermiPad 本机桥接请求上限的时间，不会扩大 TermiPad 能力。
+将示例中的 `/Users/你的账户名` 替换为 Mac 的真实账户目录，并确认该路径指向你在第 2 节构建得到的 `TermiPad.app/Contents/MacOS/TermiPad`。**每次拉取涉及 MCP 的新提交后，都必须重新运行第 2 节的定向构建命令，覆盖 `.mcp-derived-data` 中的二进制文件；`./scripts/verify-macos.sh` 的验证产物不会替代该固定路径。** `command` 必须保持为数组：不要改成 `zsh -c`、`bash -c`、字符串拼接或包装脚本；也不要添加 `cwd`、`environment`、`url`、`headers`、OAuth 字段或任何秘密值。`timeout: 6000` 只是为 OpenCode 的工具发现预留略高于 TermiPad 本机桥接请求上限的时间，不会扩大 TermiPad 能力。
 
 ### 9.2 只读优先演练
 
@@ -220,3 +220,4 @@ OpenCode 的 `opencode serve`、`opencode web`、`--hostname`、`--mdns` 与远�
 [3]: https://developer.apple.com/documentation/corefoundation/cfmessageport "Apple：CFMessagePort"
 [4]: https://opencode.ai/docs/mcp-servers/ "OpenCode：MCP servers"
 [5]: https://opencode.ai/docs/permissions/ "OpenCode：Permissions"
+[6]: https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle "Model Context Protocol：Lifecycle and version negotiation"
