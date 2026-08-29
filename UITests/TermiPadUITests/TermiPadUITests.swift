@@ -181,26 +181,42 @@ final class TermiPadUITests: XCTestCase {
     }
 
     func testToolEditMobileEntrySectionExposesFiveFieldsAndRevoke() throws {
-        // M0 移动端入口（track-protocol stage 4.3）：UI 行为测试。
-        // docs/m0-m1-mobile-entry-design.md §2.4 — 工具编辑面板新增"手机入口" section。
-        // 该测试先发现一个 tool tile、打开编辑、断言 5 个 M0 accessibility identifier
-        // 可见、外加 1 个 revoke 按钮。
-        launchApp()
+        // M0 移动端入口（track-protocol stage 5.2）：UI 行为测试 placeholder。
+        //
+        // docs/m0-m1-mobile-entry-design.md §2.7 要求"新增 1 个 UI 场景（打开工具编辑
+        // 面板 + 看到手机入口 section）"。完整断言需要进 ToolTile 的 contextMenu
+        // 选 "编辑工具" 进入 ToolEditView sheet。
+        //
+        // **已知问题**（在 stage 5.2 调研中发现）：SwiftUI 在 macOS 上 `.contextMenu`
+        // 由 NSMenu 系统层处理，XCUITest 的合成 rightClick 事件在不同 macOS 版本
+        // 上一致性差——Xcode 26.6 上 menuItems 列表返回空 label（不是 SwiftUI 端
+        // 问题，是 XCTest 事件合成限制）。stage 5.2 范围内 XCUITest 还不能可靠地
+        // 触发 SwiftUI .contextMenu。
+        //
+        // **保留价值**：本 commit 加的 SEED_TOOL fixture helper + launchApp(seedTool:)
+        // 是真实的能力增量——未来 UITest 框架升级或 SwiftUI contextMenu 在 XCUITest
+        // 修好时，本测试即可补全 5 个 M0 identifier 断言（见 commit 6f762f0 placeholder
+        // 内的 5 行 + commit 21c5a7d 的 seeder 实现）。
+        //
+        // 本测试在 stage 5.2 内只覆盖："seed 工作了 + 主工作区能渲染 + fixture
+        // tool 出现在工具库"——证明 SEED_TOOL 路径打通。完整 5 identifier 断言留待
+        // 后续 SwiftUI contextMenu + XCUITest 兼容性解决后补。
+        launchApp(seedTool: true)
         completeOnboarding()
 
-        // 进入工具库：必须先有一个已收录工具（扫描可造一个，但本测试只读 UI 不写）
-        // 改为：直接断言侧边栏设置入口仍存在（先 sanity），然后通过 sidebar-favorites 切到收藏。
-        // 当前测试基础设施没有"自动添加 tool" helper（LaunchpadView.performScan 是异步的），
-        // 所以这个测试只覆盖 "能打开设置" 路径 + 编辑 sheet 可见性，留待 commit 5 加。
-        // 这里 placeholder：等 stage 4.4+ 引入测试 fixture helper 后再补完整 assertion。
         XCTAssertTrue(
-            element("language-segmented-control").waitForExistence(timeout: 5),
-            "M0 之后：UI 仍能进入主工作区。"
+            element("tool-library").waitForExistence(timeout: 10),
+            "M0 启动 + fixture tool 已 seed，工具库应能渲染。"
         )
-        attachScreenshot(named: "termipad-m0-section-baseline")
+        XCTAssertTrue(
+            element("tool-tile-merge-cli").waitForExistence(timeout: 10),
+            "fixture tool 'merge-cli' 应该在工具库中可见（证明 SEED_TOOL 路径生效）。\n当前 UI 层级：\n\(app.debugDescription)"
+        )
+
+        attachScreenshot(named: "termipad-m0-fixture-baseline")
     }
 
-    private func launchApp(openSettings: Bool = false, forceRecovery: Bool = false) {
+    private func launchApp(openSettings: Bool = false, forceRecovery: Bool = false, seedTool: Bool = false) {
         app = XCUIApplication(bundleIdentifier: "com.termipad.app")
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         app.launchEnvironment["TERMIPAD_UI_TEST_MODE"] = "1"
@@ -209,6 +225,9 @@ final class TermiPadUITests: XCTestCase {
         }
         if forceRecovery {
             app.launchEnvironment["TERMIPAD_UI_TEST_FORCE_RECOVERY"] = "1"
+        }
+        if seedTool {
+            app.launchEnvironment["TERMIPAD_UI_TEST_SEED_TOOL"] = "1"
         }
         app.launch()
         let reachedForeground = app.wait(for: .runningForeground, timeout: 10)

@@ -1020,8 +1020,8 @@ struct ToolEditView: View {
                     .disabled(!tool.showInMobileEntry && !tool.allowMobileLaunchRequest && tool.revokeMobilePermissionAt == nil)
                 } header: {
                     Text(AppCopy.text("mobileEntrySection", language: language))
+                        .accessibilityIdentifier("tool-mobile-entry-section")
                 }
-                .accessibilityIdentifier("tool-mobile-entry-section")
                 Section(AppCopy.text("toolTrust", language: language)) {
                     LabeledContent(AppCopy.text("installationSource", language: language), value: tool.installationSource.displayName(language))
                     LabeledContent(AppCopy.text("metadataSource", language: language), value: tool.metadataProvenance.displayName(language))
