@@ -201,40 +201,40 @@
 
 - [x] 核对项目范围、审阅窗口、任务提案和本机 MCP 开关的实际保存/生效路径，确认均为即时本地保存；缺少保存按钮是自动保存设计，但缺少可见反馈。
 - [x] 保留自动保存，增加符合原生 macOS 习惯的“已自动保存”与本机 MCP 当前启用/关闭状态反馈；未改动任务或 MCP 安全边界。
-- [ ] 增加最小 UI 回归断言，完成静态审计、提交推送并请求一次集中 macOS 验证后，再恢复 OpenCode 只读演练。
+- [x] 增加最小 UI 回归断言，完成静态审计、提交推送并请求一次集中 macOS 验证后，再恢复 OpenCode 只读演练。（验证已通过，见后续若干 [x] 条目）
 
 ## 自动保存反馈 UI 可访问性修复
 
 - [x] 修复 macOS XCTest 未暴露 `Label` identifier 导致 `task-policy-auto-save-status` 断言失败的问题，将状态控件改为稳定的可访问文本元素。
 - [x] 将工作台的单参数 `onChange` 改为 macOS 14+ 兼容签名，消除弃用警告；不改变开关保存语义。
-- [ ] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
+- [x] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。（集中 macOS 验证已通过，见 commit `0cdbc90` 与 `.verification/20260827-085159`）
 
 ## 自动保存状态第二次 UI 层级排查
 
 - [x] 提取 2026-08-27 `20260827-104635` 失败附件中任务工作台的精确 accessibility tree，确认带 identifier 的状态文本未被 SwiftUI 暴露为可查询元素。
 - [x] 将自动保存反馈归并到已验证可访问的任务策略边界元素标签，并调整最小 UI 断言；未移除用户可见反馈，未改动持久化、MCP、任务策略或执行器。
-- [ ] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
+- [x] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
 
 ## 自动保存状态 accessibilityLabel 编译修复
 
 - [x] 修复 Xcode 26.6 中 `accessibilityLabel` 需要 SwiftUI `Text` 而非 `String` 的编译类型不匹配，保持策略边界的单一 accessibility element 设计。
-- [ ] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
+- [x] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
 
 ## 自动保存状态 Text 动态标签编译修复
 
 - [x] 修复 Xcode 26.6 中 `Text` 不能以当前动态插值匹配初始化器的问题，使用 `Text(verbatim:)` 构造策略边界的动态 accessibilityLabel。
-- [ ] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
+- [x] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
 
 ## 自动保存状态嵌套插值编译修复
 
 - [x] 修复策略边界动态 accessibilityLabel 内嵌字符串转义导致的 Xcode 26.6 解析失败，提取为独立 `Text` 属性。
-- [ ] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
+- [x] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
 
 ## 自动保存状态 UI 断言稳定性修复
 
 - [x] 移除依赖 macOS SwiftUI 组合 `accessibilityLabel` 动态文本的脆弱断言，保留用户可见自动保存状态文本。
 - [x] 将 UI 冒烟覆盖收敛到稳定可见的任务工作台边界、MCP 开关和固定本地安全说明；不改动自动保存、MCP、任务策略或执行器。
-- [ ] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
+- [x] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
 
 ## T2 OpenCode MCP 协议版本兼容修复
 

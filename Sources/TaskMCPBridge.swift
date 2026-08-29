@@ -61,7 +61,8 @@ struct LocalMCPBridgeResponse: Codable {
 /// 主应用在持有 SwiftData 容器时安装的本机桥接。stdio 子进程绝不直接打开或竞争应用 store。
 @MainActor
 final class TaskMCPBridge {
-    static let serviceName = "com.termipad.app.local-mcp-v1"
+    /// 字符串字面量不依赖实例状态；显式声明 nonisolated 让 stdio 子进程桥接无需跨 actor 访问。
+    nonisolated static let serviceName = "com.termipad.app.local-mcp-v1"
     private static var shared: TaskMCPBridge?
 
     private let modelContext: ModelContext
