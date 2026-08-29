@@ -176,7 +176,11 @@ final class TaskMCPBridge {
         guard let intent = intents.first(where: { $0.id == taskID }) else {
             return .failure(code: "task_unknown", message: "The requested task is not available on this Mac.")
         }
+        // 双层审计：协议层记 MCP 客户端读取次数（mcpTaskStatusRead），
+        // task 域记 task 结果被读取（taskExecutionResultRead）。
+        // 同一次读取产生两个 event 是有意义的：可分别分析 MCP 流量和 task 状态查询频率。
         DiagnosticsStore.shared.record(.mcpTaskStatusRead)
+        DiagnosticsStore.shared.record(.taskExecutionResultRead)
         return .success(message: "Minimum task state returned.", task: summary(for: intent))
     }
 
