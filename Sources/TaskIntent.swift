@@ -2,8 +2,14 @@ import Foundation
 import SwiftData
 
 /// T0 只允许随应用发布的固定任务类型。它们不是手机、MCP 或 AI 传入的 Shell 命令。
+///
+/// 新增 case 必须同时在 `FixedTaskCatalog.definitions` 加入对应条目；
+/// `TaskIntentPolicyTests.testTaskCatalogContainsOnlyFixedLocalDefinitions` 会自动
+/// 校验两边的 case 集合严格相等。
 enum TaskKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case swiftPackageTests
+    case swiftBuild
+    case swiftPackageCheck
     case macOSVerification
     case xcodegenGeneration
 
@@ -237,6 +243,28 @@ enum FixedTaskCatalog {
             timeout: 120,
             purposeChinese: "运行项目的 Swift Package 单元测试。",
             purposeEnglish: "Run the project's Swift Package unit tests.",
+            risk: .low
+        ),
+        .init(
+            kind: .swiftBuild,
+            commandPreview: "swift build",
+            executable: .absoluteCandidates(["/usr/bin/xcrun"]),
+            arguments: ["swift", "build"],
+            requiredRelativePaths: ["Package.swift"],
+            timeout: 180,
+            purposeChinese: "编译项目的 Swift Package。",
+            purposeEnglish: "Build the project's Swift Package.",
+            risk: .standard
+        ),
+        .init(
+            kind: .swiftPackageCheck,
+            commandPreview: "swift package describe",
+            executable: .absoluteCandidates(["/usr/bin/xcrun"]),
+            arguments: ["swift", "package", "describe"],
+            requiredRelativePaths: ["Package.swift"],
+            timeout: 30,
+            purposeChinese: "只读检查 Swift Package 描述，不修改任何文件。",
+            purposeEnglish: "Read-only inspect the Swift Package description, no file modification.",
             risk: .low
         ),
         .init(
