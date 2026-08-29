@@ -43,6 +43,10 @@ enum DiagnosticEventKind: String, Codable, CaseIterable {
     /// 任务 proposal 即将过期（remaining < 60s 但 > 0s）时记一次，给用户
     /// 在工作台上的"即将过期"提示提供审计依据。
     case taskProposalExpiringSoon
+    /// M0 移动端入口：用户在工具编辑面板点"撤销手机权限"按钮时记一次。
+    /// 同时 ToolTool.revokeMobilePermissionAt 时间戳被写、showInMobileEntry 与
+    /// allowMobileLaunchRequest 被设回 false，iPhone 端下次心跳读到新值即停用。
+    case mobilePermissionRevoked
     case mcpToolListed
     case mcpTaskProposed
     case mcpTaskStatusRead

@@ -881,6 +881,8 @@ struct ToolEditView: View {
     @State private var isImportingCustomIcon = false
     @State private var isChoosingWorkingDirectory = false
     @State private var customIconMessage: String?
+    @State private var isConfirmingMobileRevoke = false
+    @State private var mobileRevokeMessage: String?
 
     private var health: ToolHealth {
         ToolHealthChecker.check(executablePath: tool.executablePath)
@@ -966,6 +968,60 @@ struct ToolEditView: View {
                     language: language,
                     onStyleChanged: applyBuiltInIconStyle
                 )
+                // M0 移动端入口（track-protocol stage 4）：6 字段默认全关，用户必须明确开启。
+                // 详见 docs/m0-m1-mobile-entry-design.md §2.4。
+                Section {
+                    Text(AppCopy.text("mobileEntryHint", language: language))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    TextField(AppCopy.text("mobileEntryDisplayName", language: language), text: Binding(
+                        get: { tool.mobileDisplayName ?? "" },
+                        set: { tool.mobileDisplayName = $0.isEmpty ? nil : $0 }
+                    ))
+                    .accessibilityIdentifier("tool-mobile-display-name")
+                    Text(AppCopy.text("mobileEntryDisplayNameHint", language: language))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    TextField(AppCopy.text("mobileEntryDescription", language: language), text: $tool.mobileDescription, axis: .vertical)
+                        .lineLimit(2...4)
+                        .accessibilityIdentifier("tool-mobile-description")
+                    Text(AppCopy.text("mobileEntryDescriptionHint", language: language))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Toggle(AppCopy.text("mobileEntryShowInApp", language: language), isOn: $tool.showInMobileEntry)
+                        .accessibilityIdentifier("tool-mobile-show-in-entry")
+                    Text(AppCopy.text("mobileEntryShowInAppHint", language: language))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    // allowMobileLaunchRequest 仅在 showInMobileEntry=true 时可勾——勾上才能启动。
+                    Toggle(AppCopy.text("mobileEntryAllowLaunch", language: language), isOn: $tool.allowMobileLaunchRequest)
+                        .disabled(!tool.showInMobileEntry)
+                        .accessibilityIdentifier("tool-mobile-allow-launch")
+                    Text(AppCopy.text("mobileEntryAllowLaunchHint", language: language))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Picker(AppCopy.text("mobileEntryConfirmPolicy", language: language), selection: $tool.mobileLocalConfirmPolicy) {
+                        Text(AppCopy.text("mobileEntryConfirmPolicyEveryTime", language: language))
+                            .tag(MobileLocalConfirmPolicy.everyTime)
+                        Text(AppCopy.text("mobileEntryConfirmPolicyPerSession", language: language))
+                            .tag(MobileLocalConfirmPolicy.perSession)
+                        Text(AppCopy.text("mobileEntryConfirmPolicyLowRiskSessionOnly", language: language))
+                            .tag(MobileLocalConfirmPolicy.lowRiskSessionOnly)
+                    }
+                    .pickerStyle(.menu)
+                    .accessibilityIdentifier("tool-mobile-confirm-policy")
+                    Button(role: .destructive) {
+                        isConfirmingMobileRevoke = true
+                    } label: {
+                        Label(AppCopy.text("mobileEntryRevoke", language: language), systemImage: "iphone.slash")
+                    }
+                    .accessibilityIdentifier("tool-mobile-revoke")
+                    .disabled(!tool.showInMobileEntry && !tool.allowMobileLaunchRequest && tool.revokeMobilePermissionAt == nil)
+                } header: {
+                    Text(AppCopy.text("mobileEntrySection", language: language))
+                }
+                .accessibilityIdentifier("tool-mobile-entry-section")
                 Section(AppCopy.text("toolTrust", language: language)) {
                     LabeledContent(AppCopy.text("installationSource", language: language), value: tool.installationSource.displayName(language))
                     LabeledContent(AppCopy.text("metadataSource", language: language), value: tool.metadataProvenance.displayName(language))
@@ -1012,6 +1068,27 @@ struct ToolEditView: View {
             Button(AppCopy.text("ok", language: language), role: .cancel) { customIconMessage = nil }
         } message: {
             Text(customIconMessage ?? "")
+        }
+        // M0 撤销手机权限确认：双撤销（时间戳 + 字段）确保 iPhone 端立即失效。
+        .confirmationDialog(
+            AppCopy.text("mobileEntryRevokeConfirm", language: language),
+            isPresented: $isConfirmingMobileRevoke,
+            titleVisibility: .visible
+        ) {
+            Button(AppCopy.text("mobileEntryRevoke", language: language), role: .destructive) {
+                performMobileRevoke()
+            }
+            Button(AppCopy.text("cancel", language: language), role: .cancel) { }
+        } message: {
+            Text(AppCopy.text("mobileEntryRevokeConfirm", language: language))
+        }
+        .alert(AppCopy.text("operationResult", language: language), isPresented: Binding(
+            get: { mobileRevokeMessage != nil },
+            set: { if !$0 { mobileRevokeMessage = nil } }
+        )) {
+            Button(AppCopy.text("ok", language: language), role: .cancel) { mobileRevokeMessage = nil }
+        } message: {
+            Text(mobileRevokeMessage ?? "")
         }
         .fileImporter(
             isPresented: $isImportingCustomIcon,
@@ -1113,6 +1190,20 @@ struct ToolEditView: View {
         } else {
             tool.iconStyleIdentifier = nil
             tool.iconSymbol = ToolIconCatalog.definition(for: tool.name, category: tool.category).symbol
+        }
+    }
+
+    /// M0 撤销手机权限：双撤销（写时间戳 + 关 6 字段）。iPhone 端下次心跳会读到新值并立即停用。
+    private func performMobileRevoke() {
+        tool.revokeMobilePermissionAt = Date()
+        tool.showInMobileEntry = false
+        tool.allowMobileLaunchRequest = false
+        do {
+            try modelContext.save()
+            DiagnosticsStore.shared.record(.mobilePermissionRevoked)
+            mobileRevokeMessage = AppCopy.text("mobileEntryRevokedNotice", language: language)
+        } catch {
+            mobileRevokeMessage = AppCopy.text("customIconImportFailed", language: language)
         }
     }
 }
