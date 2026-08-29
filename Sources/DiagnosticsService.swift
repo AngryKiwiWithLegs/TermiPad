@@ -36,6 +36,13 @@ enum DiagnosticEventKind: String, Codable, CaseIterable {
     case taskExecutionTimedOut
     case taskExecutionRejected
     case taskExecutionStartFailed
+    /// T1/T2 任何入口（T0 工作台 UI、T1 执行器读取、T2 MCP）读取 task 执行结果时记一次。
+    /// 与 `.mcpTaskStatusRead` 互补：后者是协议层审计，前者是 task 域审计。同一次读取
+    /// 可能产生两个 event：用户/智能体走 MCP 协议调用 + task 域记录最小结果回传。
+    case taskExecutionResultRead
+    /// 任务 proposal 即将过期（remaining < 60s 但 > 0s）时记一次，给用户
+    /// 在工作台上的"即将过期"提示提供审计依据。
+    case taskProposalExpiringSoon
     case mcpToolListed
     case mcpTaskProposed
     case mcpTaskStatusRead
