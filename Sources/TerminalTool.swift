@@ -444,6 +444,27 @@ final class TerminalTool {
     var lastLaunchedAt: Date?
     var createdAt: Date
 
+    // MARK: - M0 移动端入口（track-protocol stage 4）
+
+    /// 手机端显示名；nil = 用本地 `name`（避免展示冗余）。
+    /// 永不出本机（仅在 iPhone/Telegram/PWA 入口收到时回传）。
+    var mobileDisplayName: String?
+    /// 手机端用途说明；**严禁**含命令/路径/变量，由客户端在展示前脱敏。
+    /// 永不出本机。
+    var mobileDescription: String
+    /// 是否进入手机端最小化目录。默认 false——用户必须明确开启。
+    /// 永不出本机（除 iPhone/Telegram/PWA 入口收到外）。
+    var showInMobileEntry: Bool
+    /// 允许手机端对**已批准图标**发起启动请求。默认 false。
+    /// 即便 showInMobileEntry=true，此项为 false 时手机只能看不能启动。
+    var allowMobileLaunchRequest: Bool
+    /// 手机端启动请求的本地确认策略。默认 .everyTime（最严格）。
+    var mobileLocalConfirmPolicy: MobileLocalConfirmPolicy
+    /// 用户点"撤销"按钮时写入的当前时间戳。
+    /// 双撤销机制：撤销时间戳 + 把 showInMobileEntry/allowMobileLaunchRequest 都设回 false。
+    /// 写入后 iPhone 端该工具立即失效（客户端会查询新值）。
+    var revokeMobilePermissionAt: Date?
+
     var category: ToolCategory {
         get { ToolCategory(rawValue: categoryRawValue) ?? .other }
         set { categoryRawValue = newValue.rawValue }
@@ -497,6 +518,14 @@ final class TerminalTool {
         variableValuesJSON = nil
         lastLaunchedAt = nil
         createdAt = Date()
+        // M0 默认值：所有移动端入口字段默认关闭/最严策略。
+        // 新增工具绝不自动暴露在手机端——用户必须主动去"手机入口"section 开启。
+        mobileDisplayName = nil
+        mobileDescription = ""
+        showInMobileEntry = false
+        allowMobileLaunchRequest = false
+        mobileLocalConfirmPolicy = .everyTime
+        revokeMobilePermissionAt = nil
     }
 }
 
@@ -512,6 +541,17 @@ enum ToolLibraryOrdering {
             return leftDate > rightDate
         }
     }
+}
+
+/// M0 移动端入口：手机端启动请求的本地确认策略。详见
+/// `docs/m0-m1-mobile-entry-design.md` §2.3。
+enum MobileLocalConfirmPolicy: String, Codable, CaseIterable, Sendable {
+    /// 每次手机请求都要求 Mac 本机用户在工作台点击确认
+    case everyTime
+    /// 同一会话内（≤5min）不重复确认；新会话或超时会话必须重确认
+    case perSession
+    /// 仅 5min 内的会话，且任务风险为 .low；其他情况要求重确认
+    case lowRiskSessionOnly
 }
 
 /// 扫描到但尚未由用户确认收录的命令。
