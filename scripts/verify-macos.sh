@@ -148,6 +148,15 @@ swift_source_guard() {
     echo '检测到 T1 之外新增的进程执行入口。' >&2
     return 1
   fi
+  # 备份与任务域隔离（track-protocol §4.5）：Sources/BackupService.swift 不得引用
+  # 任何 task 实体——它们的字段（路径/nonce/退出码/时间戳）含本地敏感信息，
+  # 永远不应进入可移植的 JSON 备份。
+  local backup_code
+  backup_code="$(sed '/^[[:space:]]*\/\//d' Sources/BackupService.swift)"
+  if printf '%s\n' "$backup_code" | grep -En 'TaskIntent|TaskProjectScope|TaskReviewWindow|projectScopeID|reviewWindowID'; then
+    echo '检测到 BackupService 引用 task 域实体——备份绝不含任务历史、项目路径或审阅窗口。' >&2
+    return 1
+  fi
   local mcp_code
   mcp_code="$(sed '/^[[:space:]]*\/\//d' Sources/MCPStdIORuntime.swift Sources/TaskMCPBridge.swift Sources/TaskMCPSettings.swift Sources/TaskPolicyWorkbenchView.swift)"
   if printf '%s\n' "$mcp_code" | grep -En 'URLSession|URLRequest|NWConnection|NWListener|WebSocket|NSAppleScript|TerminalLauncher|forkpty|posix_openpt|/bin/sh|https?://|NSXPC|XPCListener|XPCSession|socket|Process\(|Pipe\('; then
