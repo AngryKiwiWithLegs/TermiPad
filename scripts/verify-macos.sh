@@ -157,6 +157,13 @@ swift_source_guard() {
     echo '检测到 BackupService 引用 task 域实体——备份绝不含任务历史、项目路径或审阅窗口。' >&2
     return 1
   fi
+  # M0 移动端入口（track-protocol stage 4.1）：6 字段永不出本机，绝不进 JSON 备份。
+  # 字段在 Sources/TerminalTool.swift 内安全（本地数据），但 Sources/BackupService.swift
+  # 任何位置都不得引用——引用即意味着序列化路径中有了该字段。
+  if printf '%s\n' "$backup_code" | grep -En 'mobileDisplayName|mobileDescription|showInMobileEntry|allowMobileLaunchRequest|mobileLocalConfirmPolicy|revokeMobilePermissionAt'; then
+    echo '检测到 BackupService 引用 M0 移动端入口字段——备份不含手机端显示名/说明/开关。' >&2
+    return 1
+  fi
   local mcp_code
   mcp_code="$(sed '/^[[:space:]]*\/\//d' Sources/MCPStdIORuntime.swift Sources/TaskMCPBridge.swift Sources/TaskMCPSettings.swift Sources/TaskPolicyWorkbenchView.swift)"
   if printf '%s\n' "$mcp_code" | grep -En 'URLSession|URLRequest|NWConnection|NWListener|WebSocket|NSAppleScript|TerminalLauncher|forkpty|posix_openpt|/bin/sh|https?://|NSXPC|XPCListener|XPCSession|socket|Process\(|Pipe\('; then
@@ -169,6 +176,12 @@ swift_source_guard() {
   fi
   if grep -En 'ModelContainer|ModelContext|FetchDescriptor|TaskIntentPolicy' Sources/MCPStdIORuntime.swift; then
     echo 'stdio MCP 子进程不得直接打开或操作 TermiPad SwiftData store。' >&2
+    return 1
+  fi
+  # M0 移动端入口（track-protocol stage 4.1）：6 字段永不出本机，绝不进 MCP 响应。
+  # LocalMCPTaskState 8 字段白名单（docs/task-result-minimal-spec.md §2.3）固定不动。
+  if printf '%s\n' "$mcp_code" | grep -En 'mobileDisplayName|mobileDescription|showInMobileEntry|allowMobileLaunchRequest|mobileLocalConfirmPolicy|revokeMobilePermissionAt'; then
+    echo '检测到 MCP 引用 M0 移动端入口字段——MCP 响应白名单固定 8 字段，不含手机端字段。' >&2
     return 1
   fi
   if ! grep -qF 'CFMessagePortCreateRemote' Sources/TaskMCPBridge.swift || ! grep -qF 'CFMessagePortCreateLocal' Sources/TaskMCPBridge.swift; then
