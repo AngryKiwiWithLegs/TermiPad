@@ -55,6 +55,13 @@ struct TermiPadApplication: App {
             UserDefaults.standard.set(false, forKey: "TermiPad.discoveryPreviewEnabled")
             UserDefaults.standard.set(false, forKey: TaskMCPSettings.localMCPEnabledKey)
             DiscoveryCacheStore.clear()
+            // M0 UI 测试 fixture（track-protocol stage 5.1）：当显式 env var 设了 SEED_TOOL
+            // 时插入一个 pre-seeded TerminalTool。默认不插——保持现有 6 个 UI 测试
+            // 行为不变（它们只检查侧边栏入口存在性）。
+            if environment["TERMIPAD_UI_TEST_SEED_TOOL"] == "1" {
+                let seedContext = sharedModelContainer.mainContext
+                Self.seedUITestFixtureTool(in: seedContext)
+            }
         }
         if primaryStoreErrorDescription == nil {
             TaskMCPBridge.install(modelContainer: sharedModelContainer)
@@ -96,5 +103,30 @@ struct TermiPadApplication: App {
         .modelContainer(sharedModelContainer)
 
         TermiPadMenuBarExtra()
+    }
+
+    /// M0 UI 测试 fixture（track-protocol stage 5.1）：在 in-memory SwiftData
+    /// 容器里插入一个 pre-seeded TerminalTool，让 UI 测试可以打开工具编辑面板
+    /// 断言"手机入口" section 的 5 个 accessibility identifier + revoke 按钮。
+    ///
+    /// **仅**在 `TERMIPAD_UI_TEST_MODE=1` 且 `TERMIPAD_UI_TEST_SEED_TOOL=1` 时由
+    /// init() 调用。默认不插任何数据——保持现有 6 个 UI 测试行为完全不变。
+    private static func seedUITestFixtureTool(in context: ModelContext) {
+        let tool = TerminalTool(
+            name: "merge-cli",
+            executablePath: "/usr/local/bin/merge-cli",
+            commandTemplate: "merge-cli --sync",
+            category: .development
+        )
+        tool.toolDescription = "Test fixture tool for M0 UI assertions."
+        // 显式设一个 M0 字段为 true，验证 toggle 在 UI 上能被定位。
+        tool.showInMobileEntry = true
+        tool.mobileLocalConfirmPolicy = .everyTime
+        context.insert(tool)
+        do {
+            try context.save()
+        } catch {
+            fatalError("Unable to insert M0 UI test fixture tool: \(error)")
+        }
     }
 }
