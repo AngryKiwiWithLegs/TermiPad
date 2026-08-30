@@ -247,7 +247,7 @@ struct LaunchpadView: View {
                 Label(AppCopy.text("installAndEnvironment", language: language), systemImage: "checklist")
                     .tag(SidebarItem.installEnvironment.rawValue)
                     .accessibilityIdentifier("sidebar-install-environment")
-                Label(language == .simplifiedChinese ? "本地任务工作台" : "Local Task Workbench", systemImage: "checkmark.shield")
+                Label(AppCopy.text("sidebarTaskWorkbench", language: language), systemImage: "checkmark.shield")
                     .tag(SidebarItem.taskWorkbench.rawValue)
                     .accessibilityIdentifier("sidebar-task-workbench")
             }
@@ -1353,7 +1353,7 @@ private struct OnboardingSheet: View {
             ? "TermiPad 只整理您主动安装、会直接互动使用的命令行工具。开始前，请确认以下边界。"
             : "TermiPad organizes CLI tools you installed and use interactively. Please review these boundaries before you begin."
     }
-    private var finishTitle: String { isChinese ? "开始使用" : "Get Started" }
+    private var finishTitle: String { AppCopy.text("onboardingGetStarted", language: language) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {

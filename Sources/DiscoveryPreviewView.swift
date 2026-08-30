@@ -180,7 +180,7 @@ private struct DiscoveryItemRow: View {
                 Text(item.name)
                     .fontWeight(.semibold)
                 Spacer()
-                Text("★ \(item.starCount.formatted())")
+                Text(AppCopy.format("discoverStarCount", item.starCount.formatted(), language: language))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
