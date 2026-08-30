@@ -2,7 +2,7 @@
 
 **审计范围：** 私有开发与受控 beta 候选，不包含 Mac App Store 或外部分发。
 
-**当前已验证功能基线：** `0cdbc90`（`Stabilize task workbench UI assertion`），包含 T2 本机受限 MCP 协作 `3a60ffb`、其 Swift 6/Core Foundation 兼容修复、OpenCode `2025-11-25` 精确协议协商修复 `5c7d202`、工作台自动保存状态反馈与稳定 UI 冒烟修复 `38aae06`/`0cdbc90`、T1 本机受限任务执行器 `5edeb8f`、T0 本地受限任务策略核心 `8750200`、此前的本地图标系统 `0265caf` 与 Mendocino 工作区视觉基线 `70d9d40`。
+**当前已验证功能基线：** `72c4e6e`（`Stabilize task workbench UI assertion`），包含 T2 本机受限 MCP 协作 `3a60ffb`、其 Swift 6/Core Foundation 兼容修复、OpenCode `2025-11-25` 精确协议协商修复 `5c7d202`、工作台自动保存状态反馈与稳定 UI 冒烟修复 `38aae06`/`0cdbc90`、T1 本机受限任务执行器 `5edeb8f`、T0 本地受限任务策略核心 `8750200`、此前的本地图标系统 `0265caf` 与 Mendocino 工作区视觉基线 `70d9d40`。
 
 **审计日期：** 2026-08-27。
 
@@ -10,7 +10,7 @@
 
 ## 1. 已完成并在真实 Mac 验证的基线
 
-在用户的 Apple Silicon Mac（Xcode 26.6、Swift 6.3.3、XcodeGen 2.46.0）上，Mendocino 工作区基线 `70d9d40`、本地图标系统批次 `0265caf`、T0 本地受限任务策略核心 `8750200`/修复 `1cb82d3`、T1 本机受限任务执行器 `5edeb8f`/修复 `274d6ea` 与 T2 本机受限 MCP 协作 `3a60ffb`/兼容修复 `030b747`、`f5383d3`、`2564665`、`6569c3a`、`4fe6472`、`5c7d202`、`44b8ae1`、`38aae06`、`0cdbc90` 均已通过 `./scripts/verify-macos.sh` 的完整集中验证。最近一次回归验证的结果目录为 `20260827-115315`，输出 `TEST EXECUTE SUCCEEDED` 与 `[通过] ui-smoke-test`。`5c7d202` 仅精确接受 `2025-03-26` 与已由 OpenCode 1.14.33 证实的 `2025-11-25` 初始化版本，并回显被接受的版本；未扩大 MCP 工具、请求字段或执行权限。随后在 OpenCode 1.14.33 中以 NVIDIA NIM 的 DeepSeek V4 Flash 开展了一次隔离只读演练：仅 `termipad-local` 被启用，`quick9-wormhole` 被临时禁用，且只调用 `list_task_scopes` 与 `list_fixed_tasks`；范围返回为空、固定目录返回三个预定义任务，没有创建、批准、执行或取消任务，也没有返回命令、路径、参数、环境变量、文件内容或终端输出。演练结束后，用户关闭了 TermiPad 本机 MCP 开关，并将临时 OpenCode 配置内的 `termipad-local` 设回 `disabled`。`44b8ae1` 仅令 UI 测试在已呈现可访问主窗口但 XCTest 未报告 `.runningForeground` 时继续执行既有页面断言；`38aae06` 保留即时自动保存并增加用户可见状态反馈，`0cdbc90` 仅将 UI 冒烟断言收敛到跨 macOS 版本稳定的工作台边界和开关元素。该流程还覆盖工具链与脚本语法检查、Swift 源码回归防护、Swift Package 清单检查、XcodeGen 工程生成、原生 macOS 构建、UI Runner 签名校验及单元测试。该批次以 11 英寸 iPad Pro 纵向工作区为首次窗口的视觉基准，并按 macOS 可见区域自适应；它仅强化原生工作区面板、工具卡片和辅助页面层级，不模拟 iPad 设备机身或改变功能/安全行为。UI 测试显式隔离内存数据容器，并在 macOS 仅恢复菜单栏而未恢复窗口时创建主窗口；失败时会自动导出启动状态、界面层级和截图附件。
+在用户的 Apple Silicon Mac（Xcode 26.6、Swift 6.3.3、XcodeGen 2.46.0）上，Mendocino 工作区基线 `70d9d40`、本地图标系统批次 `0265caf`、T0 本地受限任务策略核心 `8750200`/修复 `1cb82d3`、T1 本机受限任务执行器 `5edeb8f`/修复 `274d6ea` 与 T2 本机受限 MCP 协作 `3a60ffb`/兼容修复 `030b747`、`f5383d3`、`2564665`、`6569c3a`、`4fe6472`、`5c7d202`、`44b8ae1`、`38aae06`、`0cdbc90` 均已通过 `./scripts/verify-macos.sh` 的完整集中验证。最近一次回归验证的结果目录为 `.verification/20260829-213928`（一键收录全部修复），输出 `TEST EXECUTE SUCCEEDED` 与 `[通过] ui-smoke-test`。`5c7d202` 仅精确接受 `2025-03-26` 与已由 OpenCode 1.14.33 证实的 `2025-11-25` 初始化版本，并回显被接受的版本；未扩大 MCP 工具、请求字段或执行权限。随后在 OpenCode 1.14.33 中以 NVIDIA NIM 的 DeepSeek V4 Flash 开展了一次隔离只读演练：仅 `termipad-local` 被启用，`quick9-wormhole` 被临时禁用，且只调用 `list_task_scopes` 与 `list_fixed_tasks`；范围返回为空、固定目录返回三个预定义任务，没有创建、批准、执行或取消任务，也没有返回命令、路径、参数、环境变量、文件内容或终端输出。演练结束后，用户关闭了 TermiPad 本机 MCP 开关，并将临时 OpenCode 配置内的 `termipad-local` 设回 `disabled`。`44b8ae1` 仅令 UI 测试在已呈现可访问主窗口但 XCTest 未报告 `.runningForeground` 时继续执行既有页面断言；`38aae06` 保留即时自动保存并增加用户可见状态反馈，`0cdbc90` 仅将 UI 冒烟断言收敛到跨 macOS 版本稳定的工作台边界和开关元素。该流程还覆盖工具链与脚本语法检查、Swift 源码回归防护、Swift Package 清单检查、XcodeGen 工程生成、原生 macOS 构建、UI Runner 签名校验及单元测试。该批次以 11 英寸 iPad Pro 纵向工作区为首次窗口的视觉基准，并按 macOS 可见区域自适应；它仅强化原生工作区面板、工具卡片和辅助页面层级，不模拟 iPad 设备机身或改变功能/安全行为。UI 测试显式隔离内存数据容器，并在 macOS 仅恢复菜单栏而未恢复窗口时创建主窗口；失败时会自动导出启动状态、界面层级和截图附件。
 
 | 已验证或已实现的控制项 | 当前结论 | 证据或实现位置 |
 |---|---|---|
