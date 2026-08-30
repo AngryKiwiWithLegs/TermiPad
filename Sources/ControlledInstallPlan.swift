@@ -60,8 +60,8 @@ enum ControlledInstallCatalog {
                 repositoryFullName: repositoryFullName,
                 channel: .homebrewCore,
                 expectedExecutableNames: expectedExecutableNames,
-                catalogRevision: "2026.08.25.1",
-                auditedAt: "2026-08-25",
+                catalogRevision: "2026.08.29.1",
+                auditedAt: "2026-08-29",
                 command: "brew install \(formula)"
             )
         }
@@ -76,7 +76,7 @@ enum ControlledInstallCatalog {
         .init(toolName: "eza", formula: "eza", repositoryFullName: "eza-community/eza", expectedExecutableNames: ["eza"]),
         .init(toolName: "fzf", formula: "fzf", repositoryFullName: "junegunn/fzf", expectedExecutableNames: ["fzf"]),
         .init(toolName: "GitHub CLI", formula: "gh", repositoryFullName: "cli/cli", expectedExecutableNames: ["gh"]),
-        .init(toolName: "gitui", formula: "gitui", repositoryFullName: "extrawurst/gitui", expectedExecutableNames: ["gitui"]),
+        .init(toolName: "gitui", formula: "gitui", repositoryFullName: "gitui-org/gitui", expectedExecutableNames: ["gitui"]),
         .init(toolName: "glow", formula: "glow", repositoryFullName: "charmbracelet/glow", expectedExecutableNames: ["glow"]),
         .init(toolName: "htop", formula: "htop", repositoryFullName: "htop-dev/htop", expectedExecutableNames: ["htop"]),
         .init(toolName: "lazygit", formula: "lazygit", repositoryFullName: "jesseduffield/lazygit", expectedExecutableNames: ["lazygit"]),

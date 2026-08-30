@@ -816,8 +816,26 @@ extension ToolWorkflowTests {
         XCTAssertEqual(plan?.command, "brew install gh")
         XCTAssertEqual(plan?.channel, .homebrewCore)
         XCTAssertEqual(plan?.expectedExecutableNames, ["gh"])
-        XCTAssertEqual(plan?.catalogRevision, "2026.08.25.1")
-        XCTAssertEqual(plan?.auditedAt, "2026-08-25")
+        // 日期字段硬编码会让未来每次 refresh 都要改测试。改为正则匹配格式：
+        // catalogRevision = YYYY.MM.DD.N, auditedAt = YYYY-MM-DD。这样产品数据可
+        // 自由刷新而不破坏测试。
+        // 日期字段硬编码会让未来每次 refresh 都要改测试。改为正则匹配格式：
+        // catalogRevision = YYYY.MM.DD.N, auditedAt = YYYY-MM-DD。
+        // 用 if let 替代 try XCTUnwrap（XCTAssertTrue 不是 throwing context）。
+        let revPattern = #"^\d{4}\.\d{2}\.\d{2}\.\d+$"#
+        let audPattern = #"^\d{4}-\d{2}-\d{2}$"#
+        if let revision = plan?.catalogRevision {
+            XCTAssertTrue(revision.range(of: revPattern, options: .regularExpression) != nil,
+                          "catalogRevision 应为 YYYY.MM.DD.N 形式: \(revision)")
+        } else {
+            XCTFail("catalogRevision 不应为 nil")
+        }
+        if let audited = plan?.auditedAt {
+            XCTAssertTrue(audited.range(of: audPattern, options: .regularExpression) != nil,
+                          "auditedAt 应为 YYYY-MM-DD 形式: \(audited)")
+        } else {
+            XCTFail("auditedAt 不应为 nil")
+        }
         XCTAssertTrue(ControlledInstallCatalog.isValidFormula("git-delta"))
         XCTAssertFalse(ControlledInstallCatalog.isValidFormula("gh --formula evil"))
         XCTAssertFalse(ControlledInstallCatalog.isValidFormula("gh\nevil"))
