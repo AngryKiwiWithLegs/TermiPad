@@ -59,7 +59,7 @@ final class TermiPadMCPStdIORuntime {
         return result(id: id, value: [
             "protocolVersion": version,
             "capabilities": ["tools": [:]],
-            "serverInfo": ["name": "termipad-local", "version": "0.1"],
+            "serverInfo": ["name": "termipad-local", "version": UpdateCheckService.currentAppVersion()],
             "instructions": "This is a local-only, user-enabled TermiPad service. It never accepts shell commands, paths, variables, files, or terminal output. Task proposals require local Mac review before approval or execution."
         ])
     }
