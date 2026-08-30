@@ -644,7 +644,7 @@ struct CandidateInboxView: View {
                                 onAcceptAll()
                             } label: {
                                 Label(
-                                    String(format: AppCopy.text("acceptAll", language: language), pendingCount),
+                                    AppCopy.format("acceptAll", pendingCount, language: language),
                                     systemImage: "checkmark.circle.fill"
                                 )
                             }
