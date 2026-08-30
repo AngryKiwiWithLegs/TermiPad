@@ -291,7 +291,8 @@ struct LaunchpadView: View {
                 language: language,
                 onAccept: accept,
                 onIgnore: ignore,
-                onRestore: restoreCandidate
+                onRestore: restoreCandidate,
+                onAcceptAll: acceptAllPending
             )
             .navigationTitle(contentTitle)
         } else {
@@ -411,6 +412,31 @@ struct LaunchpadView: View {
         if autoEnrich {
             Task { await enrich(tool: tool, toolName: candidate.name, fallbackCategory: category) }
         }
+    }
+
+    /// 一键收录收件箱中所有"待收录"候选。仍由用户显式点击触发（不是后台自动跑），
+    /// 每个候选走与单个收录完全相同的 makeToolForAcceptance + 图标归一化路径。
+    private func acceptAllPending() {
+        let pending = candidates.filter { $0.status == .pending }
+        guard !pending.isEmpty else { return }
+        var newTools: [TerminalTool] = []
+        for candidate in pending {
+            let tool = candidate.makeToolForAcceptance()
+            modelContext.insert(tool)
+            candidate.status = .accepted
+            newTools.append(tool)
+        }
+        normalizeIconAssignments(in: tools + newTools)
+        try? modelContext.save()
+        DiagnosticsStore.shared.record(.scanCompleted, itemCount: newTools.count)
+
+        if autoEnrich {
+            for (candidate, tool) in zip(pending, newTools) {
+                let category = candidate.category
+                Task { await enrich(tool: tool, toolName: candidate.name, fallbackCategory: category) }
+            }
+        }
+        selectedSidebarItem = SidebarItem.all.rawValue
     }
 
     private func ignore(_ candidate: CandidateTool) {
@@ -560,6 +586,12 @@ struct CandidateInboxView: View {
     let onAccept: (CandidateTool) -> Void
     let onIgnore: (CandidateTool) -> Void
     let onRestore: (CandidateTool) -> Void
+    var onAcceptAll: (() -> Void)? = nil
+
+    /// 只有"待收录"的候选可被批量收录；已忽略的保持原状。
+    private var pendingCount: Int {
+        candidates.filter { $0.status == .pending }.count
+    }
 
     var body: some View {
         Group {
@@ -604,6 +636,27 @@ struct CandidateInboxView: View {
                 }
                 .scrollContentBackground(.hidden)
                 .background(SoftMacTheme(colorScheme: colorScheme).contentSurface)
+                .safeAreaInset(edge: .bottom) {
+                    if pendingCount > 0, let onAcceptAll {
+                        HStack {
+                            Spacer()
+                            Button {
+                                onAcceptAll()
+                            } label: {
+                                Label(
+                                    String(format: AppCopy.text("acceptAll", language: language), pendingCount),
+                                    systemImage: "checkmark.circle.fill"
+                                )
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                            .accessibilityIdentifier("inbox-accept-all")
+                            Spacer()
+                        }
+                        .padding(.vertical, 10)
+                        .background(.bar)
+                    }
+                }
             }
         }
         .accessibilityIdentifier("candidate-inbox")

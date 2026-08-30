@@ -880,3 +880,60 @@ extension ToolWorkflowTests {
         XCTAssertTrue(AppCopy.text("installRequiresHomebrewCheck", language: .simplifiedChinese).contains("Homebrew"))
     }
 }
+
+
+extension ToolWorkflowTests {
+    func testAcceptAllPendingCandidatesCreatesToolsWithIconsAndMarksAccepted() throws {
+        let container = try TermiPadDataStore.makeContainer(isStoredInMemoryOnly: true)
+        let context = ModelContext(container)
+
+        let pendingA = CandidateTool(
+            name: "claude",
+            executablePath: "/usr/local/bin/claude",
+            category: .ai
+        )
+        let pendingB = CandidateTool(
+            name: "custom-cli",
+            executablePath: "/Users/example/.cargo/bin/custom-cli",
+            category: .development,
+            installationSource: .cargo
+        )
+        let ignored = CandidateTool(
+            name: "skipped-tool",
+            executablePath: "/usr/local/bin/skipped-tool",
+            category: .other,
+            status: .ignored
+        )
+        for c in [pendingA, pendingB, ignored] { context.insert(c) }
+        try context.save()
+
+        // 镜像 LaunchpadView.acceptAllPending 的核心路径
+        let pending = [pendingA, pendingB, ignored].filter { $0.status == .pending }
+        XCTAssertEqual(pending.count, 2, "只批量收录 pending 候选；ignored 不动。")
+        var newTools: [TerminalTool] = []
+        for candidate in pending {
+            let tool = candidate.makeToolForAcceptance()
+            context.insert(tool)
+            candidate.status = .accepted
+            newTools.append(tool)
+        }
+        ToolIconCatalog.normalizeFallbackAssignments(for: newTools)
+        try context.save()
+
+        let tools = try context.fetch(FetchDescriptor<TerminalTool>())
+        XCTAssertEqual(tools.count, 2)
+        XCTAssertEqual(Set(tools.map(\.name)), Set(["claude", "custom-cli"]))
+        // claude 是已知工具 → 语义图标（brain.head.profile）
+        let claude = try XCTUnwrap(tools.first { $0.name == "claude" })
+        XCTAssertEqual(claude.category, .ai)
+        XCTAssertEqual(claude.iconSymbol, "brain.head.profile")
+        // 未知工具获得稳定回退标识
+        let custom = try XCTUnwrap(tools.first { $0.name == "custom-cli" })
+        XCTAssertNotNil(custom.iconStyleIdentifier)
+        // ignored 候选保持不变
+        XCTAssertEqual(ignored.status, .ignored)
+        // pending 候选全部转为 accepted
+        XCTAssertEqual(pendingA.status, .accepted)
+        XCTAssertEqual(pendingB.status, .accepted)
+    }
+}
