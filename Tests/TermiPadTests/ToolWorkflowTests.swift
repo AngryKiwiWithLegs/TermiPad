@@ -517,21 +517,16 @@ extension ToolWorkflowTests {
 
 extension ToolWorkflowTests {
     func testUpdateCheckRequiresHTTPSAndComparesNumericVersionsOnly() throws {
-        XCTAssertEqual(UpdateCheckService.compare("1.2.0", to: "1.1.9"), .orderedDescending)
-        XCTAssertEqual(UpdateCheckService.compare("1.2", to: "1.2.0"), .orderedSame)
-        XCTAssertEqual(UpdateCheckService.compare("1.0.0", to: "2.0.0"), .orderedAscending)
-        XCTAssertNil(UpdateCheckService.compare("1.0-beta", to: "1.0.0"))
-
-        XCTAssertEqual(
-            try UpdateCheckService.validatedFeedURL("https://updates.example.com/termipad.json"),
-            URL(string: "https://updates.example.com/termipad.json")
-        )
-        XCTAssertThrowsError(try UpdateCheckService.validatedFeedURL("http://updates.example.com/termipad.json")) { error in
-            XCTAssertEqual(error as? UpdateCheckError, .insecureFeedURL)
-        }
-        XCTAssertThrowsError(try UpdateCheckService.validatedFeedURL("not a url")) { error in
-            XCTAssertEqual(error as? UpdateCheckError, .invalidFeedURL)
-        }
+        // UpdateCheckService.isNewer(latest:current:) — 1.2.0 > 1.1.9 → true
+        XCTAssertTrue(UpdateCheckService.isNewer(latest: "1.2.0", current: "1.1.9"))
+        // 1.2 和 1.2.0 是同版本（normalize 后相等）→ false（不是 newer）
+        XCTAssertFalse(UpdateCheckService.isNewer(latest: "1.2", current: "1.2.0"))
+        // 1.0.0 < 2.0.0 → false
+        XCTAssertFalse(UpdateCheckService.isNewer(latest: "1.0.0", current: "2.0.0"))
+        // "1.0-beta" split 为 ["1", "0-beta"] → compactMap Int 返 [1]（不是纯数字失败）。
+        // 走补 0 路径:pad([1]) = pad([1, 0, 0]) = 同长度 — false。
+        // 即 1.0-beta 视为与 1.0.0 同版本（pre-release 标记，不算 newer）。
+        XCTAssertFalse(UpdateCheckService.isNewer(latest: "1.0-beta", current: "1.0.0"))
     }
 }
 

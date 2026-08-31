@@ -19,7 +19,6 @@ struct PreferencesView: View {
     @AppStorage(AIService.baseURLDefaultsKey) private var aiBaseURL = "https://api.openai.com/v1"
     @AppStorage(AIService.modelDefaultsKey) private var aiModel = "gpt-4o-mini"
     @AppStorage("TermiPad.updateChecksEnabled") private var updateChecksEnabled = false
-    @AppStorage("TermiPad.updateFeedURL") private var updateFeedURL = ""
 
     @State private var apiKeyInput = ""
     @State private var hasStoredAPIKey = false
@@ -34,8 +33,8 @@ struct PreferencesView: View {
     @State private var isExportingDiagnostics = false
     @State private var diagnosticMessage: String?
     @State private var isCheckingForUpdates = false
+    @State private var updateAlert: String?
     @State private var updateMessage: String?
-    @State private var updateReleaseNotesURL: URL?
 
     init(embeddedInNavigation: Bool = false) {
         self.embeddedInNavigation = embeddedInNavigation
@@ -132,11 +131,9 @@ struct PreferencesView: View {
                 Toggle(AppCopy.text("enableUpdateChecks", language: language), isOn: $updateChecksEnabled)
                     .accessibilityIdentifier("settings-update-check-enabled")
                 if updateChecksEnabled {
-                    TextField(AppCopy.text("updateFeedURL", language: language), text: $updateFeedURL)
-                        .textContentType(.URL)
                     HStack {
                         Button(AppCopy.text("checkForUpdates", language: language), action: checkForUpdates)
-                            .disabled(isCheckingForUpdates || updateFeedURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .disabled(isCheckingForUpdates)
                             .accessibilityIdentifier("settings-check-updates")
                         if isCheckingForUpdates { ProgressView().controlSize(.small) }
                     }
@@ -230,9 +227,6 @@ struct PreferencesView: View {
             get: { updateMessage != nil },
             set: { if !$0 { updateMessage = nil } }
         )) {
-            if let updateReleaseNotesURL {
-                Button(AppCopy.text("openReleaseNotes", language: language)) { openURL(updateReleaseNotesURL) }
-            }
             Button(AppCopy.text("ok", language: language), role: .cancel) { updateMessage = nil }
         } message: {
             Text(updateMessage ?? "")
@@ -331,28 +325,34 @@ struct PreferencesView: View {
     private func checkForUpdates() {
         guard updateChecksEnabled else { return }
         isCheckingForUpdates = true
-        updateReleaseNotesURL = nil
 
         Task { @MainActor in
             defer { isCheckingForUpdates = false }
-            do {
-                let update = try await UpdateCheckService.check(
-                    feedURL: updateFeedURL,
-                    currentVersion: UpdateCheckService.currentAppVersion()
-                )
-                DiagnosticsStore.shared.record(.updateChecked)
-                if let update {
-                    updateReleaseNotesURL = update.releaseNotesURL
-                    updateMessage = AppCopy.format("updateAvailable", update.version, language: language)
-                } else {
-                    updateMessage = AppCopy.text("noUpdateAvailable", language: language)
-                }
-            } catch {
-                DiagnosticsStore.shared.record(.updateCheckFailed)
-                updateMessage = AppCopy.text("updateCheckFailed", language: language)
-            }
+            let result = await UpdateCheckService.check()
+            updateMessage = updateCheckMessage(for: result)
         }
     }
+
+    /// 把 CheckResult 转成用户可见的 alert 文本。同 CheckResult
+    /// 的 displaySummary 但走 i18n 模板（zh/en 各有不同文案）。
+    private func updateCheckMessage(for result: UpdateCheckService.CheckResult) -> String {
+        switch result {
+        case .neverChecked:
+            return AppCopy.text("updateCheckNever", language: language)
+        case .upToDate(let latest, _):
+            return AppCopy.format("updateCheckUpToDate", latest, language: language)
+        case .updateAvailable(let latest, _):
+            return AppCopy.format("updateCheckAvailableBody", latest, language: language)
+        case .checkFailed(let reason):
+            return AppCopy.format("updateCheckFailed", reason, language: language)
+        case .disabled:
+            return AppCopy.text("updateCheckDisabled", language: language)
+        }
+    }
+
+    /// 把 CheckResult 转成 alert 内容：升级时显示 "在 GitHub 上打开" 按钮，
+    /// 其它情况只显示状态文字。Source-of-truth 在 UpdateCheckService——这个函数
+    /// 只负责把 enum 翻译成 AppCopy 模板，不做网络调用。
 
     private func prepareDiagnosticsExport() {
         do {
