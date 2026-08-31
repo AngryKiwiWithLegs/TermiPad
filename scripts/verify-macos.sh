@@ -164,7 +164,27 @@ swift_source_guard() {
     echo '检测到 BackupService 引用 M0 移动端入口字段——备份不含手机端显示名/说明/开关。' >&2
     return 1
   fi
-  local mcp_code
+  # 更新检查只读网络（track-prototol 用户承诺：A 通知式方案）。
+  # UpdateCheckService 必须**不**触发下载、**不**写入 ~/Applications、
+  # **不**启动 NSWorkspace.openApplication 自动更新 .app。任何"自动下载/替换"
+  # commit 都会绕过 Mac Gatekeeper 信任链 + 引入供应链攻击面。
+  local update_check_code
+  update_check_code="$(sed '/^[[:space:]]*\/\//d' Sources/UpdateCheckService.swift)"
+  if printf '%s\n' "$update_check_code" | grep -En 'NSWorkspace.shared.openApplication|FileManager.default.write|FileManager.default.copy|FileManager.default.move|/bin/sh -c |Process\(|NSAppleScript|TarExtractor|tempDirectory'; then
+    echo '检测到 UpdateCheckService 试图自动下载/解压/替换 .app — 违反项目"通知式"承诺。' >&2
+    return 1
+  fi
+  if ! printf '%s\n' "$update_check_code" | grep -qF 'api.github.com/repos/AngryKiwiWithLegs/TermiPad'; then
+    echo 'UpdateCheckService 必须固定指向 AngryKiwiWithLegs/TermiPad releases endpoint，' >&2
+    echo '不接受运行时配置——攻击者不能改 endpoint 重定向到恶意 server。' >&2
+    return 1
+  fi
+  if ! printf '%s\n' "$update_check_code" | grep -qF 'currentAppVersion'; then
+    echo 'UpdateCheckService 必须从 bundle 读 currentAppVersion 用于版本比较——' >&2
+    echo '不能用 UserDefaults 配置攻击者控制的版本号。' >&2
+    return 1
+  fi
+
   mcp_code="$(sed '/^[[:space:]]*\/\//d' Sources/MCPStdIORuntime.swift Sources/TaskMCPBridge.swift Sources/TaskMCPSettings.swift Sources/TaskPolicyWorkbenchView.swift)"
   if printf '%s\n' "$mcp_code" | grep -En 'URLSession|URLRequest|NWConnection|NWListener|WebSocket|NSAppleScript|TerminalLauncher|forkpty|posix_openpt|/bin/sh|https?://|NSXPC|XPCListener|XPCSession|socket|Process\(|Pipe\('; then
     echo '本机 MCP 目录出现网络、XPC、进程、终端交接、PTY 或输出管道入口。' >&2
@@ -246,6 +266,15 @@ if [[ "$SKIP_UI" -eq 0 ]]; then
       --output-path "$LOG_DIR/ui-attachments" >/dev/null 2>&1 || true
   fi
 fi
+
+# UpdateCheckService 不应让用户配置 feed URL（那是 G6 闸门漏洞：让 social
+# engineering 把受害者引到填 https://evil.com/updates.json）。PreferencesView
+# 不应出现 updateFeedURL UserDefault、URL 输入框,或任何 URL 输入路径。
+if grep -RnE 'updateFeedURL' Sources/PreferencesView.swift Sources/UpdateCheckService.swift 2>/dev/null; then
+  echo '检测到 updateFeedURL — 违反 G6 闸门"用户不配置 feed URL"承诺。' >&2
+  return 1
+fi
+
 
 echo
 echo "验证通过。摘要：$LOG_DIR/summary.md"
