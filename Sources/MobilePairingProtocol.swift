@@ -124,6 +124,7 @@ extension MobilePairingCrypto {
 /// 测试用双端进程内模拟完成全握手。
 enum MobilePairingHandshake {
     static let currentProtocolVersion = MobilePairingCrypto.protocolVersion
+    static let resumeProtocolInfo = "termipad-m1-resume-v1"
 
     /// Mac → iPhone 第一步：公布协议版本、公钥、nonce 与指纹（iPhone 屏上人工比对）。
     struct MacHello: Codable, Sendable, Equatable {
@@ -189,5 +190,67 @@ enum MobilePairingHandshake {
             sessionKeyData: key.withUnsafeBytes { Data($0) },
             phonePublicKeyHash: MobilePairingCrypto.fingerprint(forPublicKeyData: hello.phonePublicKey),
             deviceName: hello.deviceName)
+    }
+
+    // MARK: - 会话复用（§3.3.1，2026-09-06 增补）
+
+    /// 已配对手机重连时的第一个帧。无 pairingCode 字段——与 PhoneHello 靠字段区分。
+    struct PhoneResumeHello: Codable, Sendable, Equatable {
+        let protocolVersion: String
+        let deviceID: UUID
+        let phonePublicKey: Data
+        let phoneNonce: Data
+    }
+
+    /// Mac 回给已配对手机的明文 hello（公钥与 nonce 非机密；后续全部帧走 AEAD）。
+    struct MacResumeHello: Codable, Sendable, Equatable {
+        let protocolVersion: String
+        let macPublicKey: Data
+        let macNonce: Data
+    }
+
+    /// Mac 收到的第一个 hello 的分流结果。
+    enum IncomingHello {
+        case pairing(PhoneHello)
+        case resume(PhoneResumeHello)
+    }
+
+    /// 按 JSON 字段存在性区分两种 hello：含 pairingCode → 配对；含 deviceID → 复用。
+    static func decodeIncomingHello(from data: Data) -> IncomingHello? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        if object["pairingCode"] != nil {
+            return (try? JSONDecoder().decode(PhoneHello.self, from: data)).map { .pairing($0) }
+        }
+        if object["deviceID"] != nil {
+            return (try? JSONDecoder().decode(PhoneResumeHello.self, from: data)).map { .resume($0) }
+        }
+        return nil
+    }
+
+    /// Mac 侧复用校验 + 会话密钥派生。三重绑定缺一不可：
+    /// 版本钉死、设备记录活跃（revokedAt 即刻失效）、手机公钥指纹与配对时一致。
+    static func acceptResume(
+        _ hello: PhoneResumeHello,
+        identity: MobilePairingIdentity,
+        macNonce: Data,
+        expectedRecord: PairedDeviceRecord
+    ) throws -> Data {
+        guard hello.protocolVersion == currentProtocolVersion else {
+            throw MobilePairingError.unsupportedProtocolVersion
+        }
+        guard hello.deviceID == expectedRecord.id, expectedRecord.revokedAt == nil else {
+            throw MobilePairingError.handshakeFailed
+        }
+        guard MobilePairingCrypto.fingerprint(forPublicKeyData: hello.phonePublicKey)
+            == expectedRecord.publicKeyHash else {
+            throw MobilePairingError.handshakeFailed
+        }
+        let key = try identity.resumeSessionKey(
+            peerPublicKeyData: hello.phonePublicKey,
+            macNonce: macNonce,
+            phoneNonce: hello.phoneNonce)
+        return key.withUnsafeBytes { Data($0) }
     }
 }

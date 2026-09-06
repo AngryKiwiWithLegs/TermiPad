@@ -46,6 +46,30 @@ struct MobilePairingIdentity: Sendable, Equatable {
         return privateKey.publicKey.rawRepresentation
     }
 
+    /// X25519 + HKDF-SHA256 派生会话密钥（§3.3.1 会话复用）。
+    /// 与配对派生（sessionKey）使用不同 info 域——同一密钥材料永不跨协议复用。
+    /// salt = macNonce ‖ phoneNonce（角色序，长度固定，拼接无歧义）。
+    func resumeSessionKey(
+        peerPublicKeyData: Data,
+        macNonce: Data,
+        phoneNonce: Data
+    ) throws -> SymmetricKey {
+        guard macNonce.count == MobilePairingCrypto.nonceByteCount,
+              phoneNonce.count == MobilePairingCrypto.nonceByteCount else {
+            throw MobilePairingError.invalidNonce
+        }
+        let privateKey = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: privateKeyData)
+        let peerPublicKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: peerPublicKeyData)
+        let sharedSecret = try privateKey.sharedSecretFromKeyAgreement(with: peerPublicKey)
+        var salt = macNonce
+        salt.append(phoneNonce)
+        return sharedSecret.hkdfDerivedSymmetricKey(
+            using: SHA256.self,
+            salt: salt,
+            sharedInfo: Data(MobilePairingHandshake.resumeProtocolInfo.utf8),
+            outputByteCount: 32)
+    }
+
     /// X25519 + HKDF-SHA256 派生配对通道对称密钥。
     /// salt = 配对码(6B) ‖ Mac nonce(16B) ‖ 手机 nonce(16B)：三段长度全部固定，
     /// 拼接无歧义，双方按同一角色顺序计算才能得到同一密钥——不用 local/peer
