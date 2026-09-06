@@ -208,6 +208,15 @@ swift_source_guard() {
     echo '本机 MCP 必须通过应用内 CFMessagePort 桥接，而非让 stdio 子进程直接竞争 store。' >&2
     return 1
   fi
+  # M1 同网配对核心（feature/m1-local-network-pairing）：纯密码学 + Keychain。
+  # 这两个文件绝不允许网络、进程、终端自动化入口——网络监听只允许出现在
+  # 未来的 Sources/MobilePairingService.swift 并由专门守卫圈定。
+  local mobile_pairing_core_code
+  mobile_pairing_core_code="$(sed '/^[[:space:]]*\/\//d' Sources/MobilePairingCrypto.swift Sources/PairedDeviceStore.swift)"
+  if printf '%s\n' "$mobile_pairing_core_code" | grep -En 'URLSession|URLRequest|NWConnection|NWListener|WebSocket|NSAppleScript|TerminalLauncher|Process\(|Pipe\(|forkpty|posix_openpt|/bin/sh|socket\('; then
+    echo '检测到 M1 配对核心触及网络、进程或终端自动化边界——它必须是纯密码学 + Keychain。' >&2
+    return 1
+  fi
 }
 
 run_step toolchain bash -c 'xcodebuild -version && swift --version && xcodegen --version'
