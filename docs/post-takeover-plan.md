@@ -20,7 +20,7 @@
 
 | 原方案 §6 行 | 对应 `product-roadmap.md` 阶段 | 我能做的（无外部条件） | 阻塞在你（外部条件） | 下一个分支名 |
 |---|---|---|---|---|
-| 1. 原生 iPhone 同网配对 | 阶段 4: M0/M1 | ✅ **M0 已实现并合入 master**（6 字段 + 工具编辑 UI + 双重撤销 + 备份排除测试）。**M1 实现已启动**（2026-09-06，`feature/m1-local-network-pairing`）| ⚠️ **G4 开发验证已解锁**（免费 Apple ID personal team 真机签名：3 app/设备、7 天重签、开发者模式）；**双设备实测**待真实 iPhone + 局域网。长期安装/TestFlight 仍 ❌ 付费会员 | M1 实现：`feature/m1-local-network-pairing`（进行中）|
+| 1. 原生 iPhone 同网配对 | 阶段 4: M0/M1 | ✅ **M0 已实现并合入 master**。**M1 Mac 侧 + iPhone 伴侣已实现**（`feature/m1-local-network-pairing`，8 commit）| ⚠️ **G4 实测进行中（3/7 通过，2026-09-06）**：Bonjour 发现 ✅ 指纹比对 ✅ 配对落库 ✅；会话加密/启动请求/撤销实测待请求通道实现；7 天重签待观察。长期安装/TestFlight 仍 ❌ 付费会员 | 下一批：会话复用协议 + listTools 通道 |
 | 2. 原生 iPhone 长期安装/分发 | 阶段 7 | ❌（M1 完成后才有意义） | ❌ Apple Developer Program 账户 + App Store / TestFlight 资质 | 待 M1 完成后单独立项 |
 | 3. 异地会话 / PWA | 阶段 5: M2 | ❌（M1 完成后才有意义） | ❌ **G5 闸门**：HTTPS origin + 设备身份 + 会话服务 + 撤销模型 | 待 M1 完成后：`feature/m2-remote-secure-session` |
 | 4. Telegram Mini App | 阶段 4/5 备线（与 1 互斥） | ❌ | ❌ 私人 Bot + Bot token 的 Keychain 存储 + 固定 HTTPS origin + 服务端 `initData` 验证 | 待 M0 实现完成后，与 iPhone 主线对比，由用户拍板入口路线 |

@@ -29,8 +29,18 @@
 
 **红线复核（每一项不过即 G4 不通过）：** 手机端任意时刻不可见命令/路径/变量/环境变量/终端输出；Mac 无公网入站端口（监听仅 Bonjour 局域网广播）；白名单外的操作一律拒绝。
 
-## 3. 结果归档
+## 4. 验收记录
 
-- 验收通过后：更新 `docs/post-takeover-plan.md` §2 行 1、`docs/product-roadmap.md` §8 G4 行为"已通过（日期 + 证据目录）"。
-- 证据放 `.verification/<timestamp>-g4/`（与集中验证产物同一纪律）。
-- 免费签名的 7 天特性意味着 G4 通过**不等于**"长期可用"——长期安装仍按 `product-roadmap.md` §6 第 2 行等付费会员。
+**2026-09-06 首轮（iPhone 14 Plus, iOS 26.6.1 ↔ MacBook Pro, 192.168.2.81/en0）：**
+
+| # | 验证项 | 结果 | 备注 |
+|---|---|---|---|
+| 1 | Bonjour 发现 | ✅ 通过 | `_termipad-m1._tcp`；iOS 端本地网络权限声明由 project.yml info.properties 生成（手写 plist 曾被 XcodeGen 覆盖，见 commit 278b9a7） |
+| 2 | 指纹人工比对 | ✅ 通过 | 手机屏显 MacHello.fingerprint 与 Mac 屏一致后人工确认 |
+| 3 | 配对成功 | ✅ 通过 | 钥匙串 `mobile-pairing.device-index=["BE0172EB-…"]` + `mobile-pairing.identity` 均确认存在 |
+| 4 | 会话加密（工具目录） | ⏳ 未测 | 请求通道（listTools）未实现——需设备长期身份持久化 + 会话复用协议（下一批次） |
+| 5 | 启动请求 + 本地确认 | ⏳ 未测 | 依赖 #4 |
+| 6 | 双重撤销实测 | ⏳ 未测 | Mac 撤销 UI 已实现；手机端失效效果待请求通道接通后验证 |
+| 7 | 7 天重签 | ⏳ 未测 | 时间依赖；重签后凭据保留情况待记录 |
+
+**结论：G4 进行中（3/7）。** 免费签名（team 7LTPLQKWWD，Apple 于 2026-09-06 重登录时轮换）+ 开发者模式 + 同网 mDNS 均已实证可用。
