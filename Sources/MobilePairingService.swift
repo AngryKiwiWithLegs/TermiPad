@@ -241,8 +241,11 @@ final class MobilePairingService: ObservableObject {
             guard let record = PairedDeviceStore.find(id: hello.deviceID, store: store) else {
                 throw MobilePairingError.handshakeFailed
             }
-            let sessionKeyData = try MobilePairingHandshake.acceptResume(
-                hello, identity: identity, macNonce: macNonce, expectedRecord: record)
+            guard record.revokedAt == nil else { throw MobilePairingError.handshakeFailed }
+            guard MobilePairingCrypto.fingerprint(forPublicKeyData: hello.phonePublicKey)
+                == record.publicKeyHash else { throw MobilePairingError.handshakeFailed }
+            let sessionKeyData = try MobilePairingHandshake.deriveResumeSessionKey(
+                hello, identity: identity, macNonce: macNonce)
             let macResume = MobilePairingHandshake.MacResumeHello(
                 protocolVersion: MobilePairingHandshake.currentProtocolVersion,
                 macPublicKey: try identity.publicKeyData(),
