@@ -83,6 +83,21 @@ targets:
       - path: Sources/MobilePairingProtocol.swift
     info:
       path: CompanionApp/Info.plist
+      properties:
+        CFBundleDisplayName: TermiPad 伴侣
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # iOS 14+ 本地发现必填：缺 NSLocalNetworkUsageDescription 或
+        # NSBonjourServices 时系统静默拦截 Bonjour——verify-macos.sh 有守卫
+        NSLocalNetworkUsageDescription: TermiPad 伴侣仅在同 Wi-Fi 局域网内发现并配对你的 Mac；不连接公网。
+        NSBonjourServices:
+          - _termipad-m1._tcp
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.termipad.companion
