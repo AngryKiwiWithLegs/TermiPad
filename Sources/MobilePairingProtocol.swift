@@ -229,23 +229,26 @@ enum MobilePairingHandshake {
         return nil
     }
 
-    /// Mac 侧复用校验 + 会话密钥派生。三重绑定缺一不可：
-    /// 版本钉死、设备记录活跃（revokedAt 即刻失效）、手机公钥指纹与配对时一致。
-    static func acceptResume(
+    /// Mac 侧复用校验 + 会话密钥派生。拆为两步以让 iOS 端也能复用纯计算部分：
+    /// 1. `validateResumeRecord`：版本/记录/指纹三重绑定（Mac 专用，依赖 PairedDeviceRecord）
+    /// 2. `resumeSessionKey`：纯计算，签名双方一致即同密钥
+    ///
+    /// 整体等价于原 `acceptResume` + `expectedRecord.revokedAt == nil` + 公钥指纹校验。
+    /// 拆出的目的是让 iOS 复用握手代码无须引入 Mac 专用 PairedDeviceRecord 类型。
+
+    /// 纯计算侧：版本钉死 + 派生会话密钥。iOS 端在双向公钥指纹绑定后调用此方法。
+    /// Mac 端先调 `validateResumeRecord` 再调本方法——两步等价原 `acceptResume`。
+    static func deriveResumeSessionKey(
         _ hello: PhoneResumeHello,
         identity: MobilePairingIdentity,
-        macNonce: Data,
-        expectedRecord: PairedDeviceRecord
+        macNonce: Data
     ) throws -> Data {
         guard hello.protocolVersion == currentProtocolVersion else {
             throw MobilePairingError.unsupportedProtocolVersion
         }
-        guard hello.deviceID == expectedRecord.id, expectedRecord.revokedAt == nil else {
-            throw MobilePairingError.handshakeFailed
-        }
-        guard MobilePairingCrypto.fingerprint(forPublicKeyData: hello.phonePublicKey)
-            == expectedRecord.publicKeyHash else {
-            throw MobilePairingError.handshakeFailed
+        guard hello.phoneNonce.count == MobilePairingCrypto.nonceByteCount,
+              macNonce.count == MobilePairingCrypto.nonceByteCount else {
+            throw MobilePairingError.invalidNonce
         }
         let key = try identity.resumeSessionKey(
             peerPublicKeyData: hello.phonePublicKey,
