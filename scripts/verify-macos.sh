@@ -217,6 +217,19 @@ swift_source_guard() {
     echo '检测到 M1 配对核心触及网络、进程或终端自动化边界——它必须是纯密码学 + Keychain。' >&2
     return 1
   fi
+  # M1 配对协议层：白名单 + 最小载荷 + AEAD 信封 + 握手状态机，同样零 I/O。
+  local mobile_pairing_protocol_code
+  mobile_pairing_protocol_code="$(sed '/^[[:space:]]*\/\//d' Sources/MobilePairingProtocol.swift)"
+  if printf '%s\n' "$mobile_pairing_protocol_code" | grep -En 'URLSession|URLRequest|NWConnection|NWListener|WebSocket|NSAppleScript|TerminalLauncher|Process\(|Pipe\(|forkpty|posix_openpt|/bin/sh|socket\('; then
+    echo '检测到 M1 配对协议层触及网络、进程或终端自动化边界——网络监听只允许在 MobilePairingService.swift。' >&2
+    return 1
+  fi
+  # 全局白名单：整个 Sources 里 NWListener/NWConnection 只允许出现在
+  # Sources/MobilePairingService.swift（M1 同网监听，默认关闭）。
+  if grep -RInE 'NWListener|NWConnection' Sources | grep -vE 'Sources/MobilePairingService\.swift'; then
+    echo '检测到 M1 配对监听文件之外的网络监听入口。' >&2
+    return 1
+  fi
 }
 
 run_step toolchain bash -c 'xcodebuild -version && swift --version && xcodegen --version'

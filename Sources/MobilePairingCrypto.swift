@@ -81,6 +81,8 @@ enum MobilePairingError: Error, Equatable {
     case invalidPairingCode
     case invalidNonce
     case sealFailed
+    case unsupportedProtocolVersion
+    case invalidDeviceName
 }
 
 extension MobilePairingCrypto {
