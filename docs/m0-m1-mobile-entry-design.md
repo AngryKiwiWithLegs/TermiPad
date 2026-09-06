@@ -223,7 +223,7 @@ M1 的验证**不能**在 Mac 端单边完成——必须有真机 iPhone：
 | 撤销路径 | 用户在 Mac 工作台撤销 → iPhone 立即无响应 | G4 |
 | 启动请求 | iPhone 点图标 → Mac 工作台弹确认 → 用户确认 → `TerminalLauncher.launch` | G4 + `mobileLocalConfirmPolicy` |
 
-**M1 实施必须在 G4 闸门具备后**——`docs/post-takeover-plan.md`（commit 2.2）会显式列出 G4 状态。
+**M1 实施必须在 G4 闸门具备后**——`docs/post-takeover-plan.md`（commit 2.2）会显式列出 G4 状态。双设备验收的操作步骤与证据要求见 `docs/m1-g4-verification-guide.md`。
 
 ## 4. M0 vs M1 实现路径
 
