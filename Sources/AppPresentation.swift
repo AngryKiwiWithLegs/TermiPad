@@ -99,7 +99,13 @@ enum AppCopy {
             "variableHint": "需要用户填写的内容可写为 `{{variable_name}}`，首次启动时会自动询问。",
             "variableSecurityHint": "参数会以 shell 安全转义方式写入本次命令，并保存在本机以便下次使用。",
             "editVariableHint": "可使用 `{{variable_name}}` 创建首次启动填写项。",
-            "warpCopied": "已打开 Warp，并将命令复制到剪贴板。", "copied": "完整命令已复制到剪贴板。", "terminalLaunched": "已在 Terminal 中执行命令。", "itermLaunched": "已在 iTerm 中输入命令。"
+            "warpCopied": "已打开 Warp，并将命令复制到剪贴板。", "copied": "完整命令已复制到剪贴板。", "terminalLaunched": "已在 Terminal 中执行命令。", "itermLaunched": "已在 iTerm 中输入命令。",
+            // M1 同网配对（docs/m0-m1-mobile-entry-design.md §3.3-§3.4 + §6 G4）
+            "mobileCompanion": "手机伴侣（M1）", "mobileCompanionHint": "默认关闭。启用后，TermiPad 会在本机监听来自手机端 app 的同网配对请求；不开放公网端口，不向手机返回命令、路径或变量值。",
+            "mobileCompanionEnable": "启用同网配对", "mobileCompanionDisable": "停止配对",
+            "mobileCompanionPairingCode": "配对码", "mobileCompanionFingerprint": "本机指纹（与手机端人工比对）",
+            "mobileCompanionDeviceName": "设备名", "mobileCompanionRevoke": "撤销该设备", "mobileCompanionNoPairedDevices": "尚未配对任何设备。",
+            "mobileCompanionListening": "正在配对模式", "mobileCompanionOff": "未启动", "mobileCompanionFailed": "配对服务错误：%@"
         ]
         let english: [String: String] = [
             "allTools": "All Tools", "inbox": "Review Inbox", "favorites": "Favorites", "recent": "Recent", "hidden": "Hidden", "categories": "Categories", "toolLibrary": "Library", "settings": "Settings",
@@ -139,7 +145,13 @@ enum AppCopy {
             "variableHint": "Use `{{variable_name}}` for a value that TermiPad should ask for before the first launch.",
             "variableSecurityHint": "Values are shell-escaped for this command and stored on this Mac for next time.",
             "editVariableHint": "Use `{{variable_name}}` to create a first-launch input.",
-            "warpCopied": "Warp was opened and the command was copied to the clipboard.", "copied": "The completed command was copied to the clipboard.", "terminalLaunched": "The command was sent to Terminal.", "itermLaunched": "The command was entered in iTerm."
+            "warpCopied": "Warp was opened and the command was copied to the clipboard.", "copied": "The completed command was copied to the clipboard.", "terminalLaunched": "The command was sent to Terminal.", "itermLaunched": "The command was entered in iTerm.",
+            // M1 同网配对（docs/m0-m1-mobile-entry-design.md §3.3-§3.4 + §6 G4）
+            "mobileCompanion": "Mobile Companion (M1)", "mobileCompanionHint": "Off by default. When enabled, TermiPad listens on the local network for pairing requests from the phone-side app. It does not open public ports and never returns commands, paths, or variable values to the phone.",
+            "mobileCompanionEnable": "Enable Local Network Pairing", "mobileCompanionDisable": "Stop Pairing",
+            "mobileCompanionPairingCode": "Pairing code", "mobileCompanionFingerprint": "Local fingerprint (verify with phone)",
+            "mobileCompanionDeviceName": "Device", "mobileCompanionRevoke": "Revoke this device", "mobileCompanionNoPairedDevices": "No paired devices yet.",
+            "mobileCompanionListening": "Pairing mode active", "mobileCompanionOff": "Not started", "mobileCompanionFailed": "Pairing service error: %@"
         ]
         let table = language == .simplifiedChinese ? chinese : english
         return table[key] ?? key

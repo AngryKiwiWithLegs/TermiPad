@@ -53,6 +53,57 @@ enum MobilePairingEnvelope {
         let plaintext = try MobilePairingCrypto.open(data, using: key)
         return try JSONDecoder().decode([MobileToolSummary].self, from: plaintext)
     }
+
+    static func openAck(_ data: Data, using key: SymmetricKey) throws -> MobilePairingAck {
+        let plaintext = try MobilePairingCrypto.open(data, using: key)
+        return try JSONDecoder().decode(MobilePairingAck.self, from: plaintext)
+    }
+}
+
+/// Mac → iPhone 配对确认（经会话密钥 AEAD 加密后发送）。
+struct MobilePairingAck: Codable, Sendable, Equatable {
+    let accepted: Bool
+    let deviceID: UUID
+}
+
+/// 4 字节大端长度前缀帧编解码。纯逻辑——分包/粘包由测试覆盖；
+/// 网络层只做"收字节进缓冲、解出一帧、发一帧"。
+enum MobilePairingFrame {
+    static let headerByteCount = 4
+    /// 单帧上限 64 KB：配对与工具目录消息远小于此；声明超过即协议违规，直接断连。
+    static let maxPayloadByteCount = 65_536
+
+    enum DecodeOutcome: Equatable {
+        case message(Data, remainder: Data)
+        case incomplete
+        case invalid
+    }
+
+    static func encode(_ payload: Data) -> Data {
+        var frame = Data(capacity: headerByteCount + payload.count)
+        let length = UInt32(payload.count)
+        frame.append(UInt8((length >> 24) & 0xFF))
+        frame.append(UInt8((length >> 16) & 0xFF))
+        frame.append(UInt8((length >> 8) & 0xFF))
+        frame.append(UInt8(length & 0xFF))
+        frame.append(payload)
+        return frame
+    }
+
+    static func decodeOne(from buffer: Data) -> DecodeOutcome {
+        guard buffer.count >= headerByteCount else { return .incomplete }
+        let header = [UInt8](buffer.prefix(headerByteCount))
+        let declaredLength = (UInt32(header[0]) << 24)
+            | (UInt32(header[1]) << 16)
+            | (UInt32(header[2]) << 8)
+            | UInt32(header[3])
+        guard declaredLength <= maxPayloadByteCount else { return .invalid }
+        let total = headerByteCount + Int(declaredLength)
+        guard buffer.count >= total else { return .incomplete }
+        let message = Data(buffer.dropFirst(headerByteCount).prefix(Int(declaredLength)))
+        let remainder = Data(buffer.dropFirst(total))
+        return .message(message, remainder: remainder)
+    }
 }
 
 /// Bonjour 广播契约：服务类型固定，不允许运行时配置——防仿冒服务重定向。
