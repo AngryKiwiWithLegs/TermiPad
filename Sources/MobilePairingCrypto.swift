@@ -83,6 +83,7 @@ enum MobilePairingError: Error, Equatable {
     case sealFailed
     case unsupportedProtocolVersion
     case invalidDeviceName
+    case handshakeFailed
 }
 
 extension MobilePairingCrypto {
