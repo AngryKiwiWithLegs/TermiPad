@@ -4,6 +4,8 @@
 
 **状态：** 阶段 2 接手 commit 2.1（2026-08-29，zcode）。**纯设计文档**——无代码改动，无运行时代码修改。
 
+**2026-09-06 更新（zcode）：** 用户确认用免费 Apple ID（personal team）支撑 M1 真机开发验证——G4 的"开发验证"前提已解锁；"长期安装/TestFlight/外部分发"仍需付费会员（见 §3.1、§6）。M1 实现分支 `feature/m1-local-network-pairing` 同日启动。§3.4 修订：Mac 端配对设备记录改为只存 Keychain（原 SwiftData 方案废弃），理由见该节。
+
 **作用范围：** M0 = TermiPad 内部为每个工具加 6 个用户控制字段（默认全关）的本地原型。**M0 完成后**才能考虑 M1 同网配对实现。**M0 不需要外部条件**（无 iPhone、无 Apple Developer 账户、无 Bonjour）；**M1 启动需要 G4 闸门**（真实 iPhone + 真实 Mac + 局域网 + 系统本地网络权限）。
 
 **红线继承**：`product-roadmap.md` §7 "不可妥协的产品红线"——Mac 不开放公网终端、无任意远程 Shell、命令不可被 AI 改写、最小数据回传、每个权限可撤销、本地优先、不替代专业远程终端。本设计**全文不越线**。
@@ -126,14 +128,14 @@ M0 **不**新增 `DiagnosticEventKind`。**为什么**：
 
 `docs/t0-development-preparation-checklist.md` §6 第 1 行 + `docs/product-roadmap.md` §8 G4："原生 iPhone 同网配对在真实两设备上测试通过 — 未开始；受 Apple 设备/签名条件影响。"
 
-| 闸门 | 含义 | 当前状态 |
+| 闸门 | 含义 | 当前状态（2026-09-06）|
 |---|---|---|
-| Apple Developer Program 账户 | 真机调试 + 局域网 NSLocalNetworkUsageDescription 权限 | ❌ 未具备 |
-| 真实 iPhone | 物理 iPhone，running iOS 16+（与 macOS 14 同步）| ❌ 未具备 |
-| 真实 Mac（已具备） | 当前开发机即可 | ✅ |
-| 局域网 | 同一 Wi-Fi、Bonjour 可发现 | ❌ 取决于上面 2 项 |
+| 真机安装签名 | 免费 Apple ID（personal team）即可 Xcode 真机调试：每设备 ≤3 app、App ID/设备注册 7 天过期需重签、iPhone 需开启开发者模式；CloudKit/Developer ID/公证/TestFlight 仍是付费专属 | ✅ 解锁（用户已有免费账号；付费会员只在"长期安装/分发/iCloud"时才需要）|
+| 真实 iPhone | 物理 iPhone，iOS 16+，开发者模式已开启 | ⚠️ 用户提供 |
+| 真实 Mac | 当前开发机即可 | ✅ |
+| 局域网 | 同一 Wi-Fi、Bonjour 可发现 | ⚠️ 用户提供 |
 
-**M0 完成 ≠ M1 可启动**。M0 是 Mac 本地工作，**不**依赖 G4。**M1 设计可以现在写**（commit 2.1），**M1 实现必须等 G4 闸门具备后再开新分支**。
+**M0 完成 ≠ M1 可启动**。M0 是 Mac 本地工作，**不**依赖 G4。**M1 设计可以现在写**（commit 2.1）。2026-09-06 起开发验证前提已具备——M1 实现分支 `feature/m1-local-network-pairing` 已启动；**双设备真机验收（G4 完成）仍需用户提供真实 iPhone + 局域网**，未实测前不得宣称 G4 通过。
 
 ### 3.2 选型：Network framework + Bonjour + 本地 TLS
 
@@ -181,17 +183,18 @@ iPhone App (远期)                 Mac (TermiPad)
 - **fingerprint 必须** 由用户在 iPhone 上**人工**确认——这是抗中间人攻击的关键
 - 配对后 iPhone 在 `PairedDevice` 列表里——可**在 Mac 工作台撤销**（**必须**有撤销路径，§7 红线"每个权限可撤销"）
 
-### 3.4 M1 数据模型（待 G4 后实现）
+### 3.4 M1 数据模型（2026-09-06 修订）
+
+`PairedDevice` **不再**建 SwiftData 实体——设备记录与配对身份**只存 Keychain**。理由：(a) Keychain 天然不进 JSON 备份，直接满足 §2.5 契约，免去新增备份排除守卫；(b) 公钥指纹与设备身份属于凭据域，与 API Key 同级；(c) 实现为 `Sources/PairedDeviceStore.swift`（`PairedDeviceRecord: Codable` + Keychain 索引账号），存储后端可注入，测试用内存实现不打真实 SecItem（与 `KeychainStoreTests` 纪律一致）。
 
 ```swift
-@Model final class PairedDevice {
-    var id: UUID
-    var displayName: String           // iPhone 配对时填的
-    var publicKeyHash: String          // 配对时 iPhone 公钥的 SHA-256
+struct PairedDeviceRecord: Codable, Sendable, Equatable {
+    let id: UUID
+    let displayName: String           // iPhone 配对时填的
+    let publicKeyHash: String         // 配对时 iPhone 公钥的 SHA-256 指纹
+    let pairedAt: Date
     var lastConnectedAt: Date?
-    var createdAt: Date
-    var revokedAt: Date?               // 撤销时间戳
-    var pairedFromScope: TaskProjectScope?  // 可选：限制 iPhone 只能触发某个 scope 的 task
+    var revokedAt: Date?              // 撤销时间戳
 }
 
 enum PairedDeviceOperation: String, Codable {
@@ -206,7 +209,7 @@ enum PairedDeviceOperation: String, Codable {
 }
 ```
 
-**PairedDevice + 5 个旧 case 是 M1 引入的"操作白名单"——任何 iPhone 请求必须 match 这个 enum，否则拒绝**。这与 `Sources/TaskMCPBridge.swift:5-12` 的 `LocalMCPBridgeOperation` 5 个 case 设计一致。
+**8 个 case 是 M1 引入的操作白名单——任何 iPhone 请求必须 match 这个 enum，否则拒绝**。这与 `Sources/TaskMCPBridge.swift` 的 `LocalMCPBridgeOperation` 受限 case 设计一致。
 
 ### 3.5 验证 M1
 
@@ -229,7 +232,7 @@ M1 的验证**不能**在 Mac 端单边完成——必须有真机 iPhone：
 | M0 设计 | 本文 (commit 2.1) | `feature/m0-m1-design` | 1 | 无 |
 | M0 实现 | 数据模型 + 枚举 + 工具编辑 UI + 备份守卫 + 单测 + UI 测试 | `feature/m0-mobile-entry-prototype` | 3-5 | 无（**不依赖 G4**）|
 | M1 设计 | 选型 (Network/Bonjour/TLS) + 配对流程 + 数据模型 + 验证方案 | `feature/m0-m1-design`（本文档 §3）| 1 | 无 |
-| M1 实现 | 配对 API + TLS 握手 + PairedDevice + iPhone app | `feature/m1-local-network-pairing` | 5-10 | **G4 闸门** |
+| M1 实现 | 配对核心 + 监听器 + PairedDeviceStore + iPhone app | `feature/m1-local-network-pairing`（2026-09-06 启动）| 5-10 | 开发验证无阻塞（免费 personal team 签名）；双设备实测待 iPhone + 局域网 |
 | M2 设计 + 实现 | 出站长连接 + 会话模型 | `feature/m2-remote-secure-session` | 10+ | **G5 闸门** |
 
 ## 5. 与原方案 §4 已补强材料的关系
@@ -250,16 +253,22 @@ M0 启动依赖**已完成的**阶段 1 全部 commit：
 5. 新增 `Tests/TermiPadTests/MobileEntryTests.swift` + `BackupServiceMobileFieldExclusionTests.swift`
 6. 新增 1 个 UI 场景（打开工具编辑面板 + 看到手机入口 section）
 
-## 6. G4 闸门现状
+## 6. G4 闸门现状（2026-09-06 更新）
 
-**当前未具备**。G4 闸门要求：
-- Apple Developer Program 账户（年费 $99）—— 用户决定
-- 真实 iPhone 物理设备（项目维护者持有）—— 用户决定
-- 同一局域网环境（家庭/办公室 Wi-Fi 即可）—— 用户决定
+**开发验证前提已具备；双设备实测未开始——G4 仍未通过。**
 
-**M1 启动决策树**：
-- G4 闸门具备 → 开 `feature/m1-local-network-pairing` 分支 → 按 §3 实施
-- G4 闸门不具备 → 暂不启动 M1 → 维护 `docs/post-takeover-plan.md`（commit 2.2）反映现状
+| G4 组成 | 状态 |
+|---|---|
+| 真机安装签名 | ✅ 免费 Apple ID（personal team）：Xcode 真机调试可用，限额 3 app/设备、App ID/设备注册 7 天过期、10 App ID/周、3 台设备；iPhone 需开启开发者模式 |
+| 真实 iPhone | ⚠️ 待用户提供 |
+| 局域网 | ⚠️ 待用户提供 |
+| 双设备 Bonjour/TLS/配对/撤销实测 | ❌ 未开始——完成前不得宣称 G4 通过 |
+
+**免费账号的边界**：只支撑开发验证。手机端 app 每 7 天必须回 Mac 重签一次，不能当长期工具用；TestFlight、长期安装、Developer ID 外部分发、iCloud 仍是付费会员专属。
+
+**M1 启动决策树（已执行）**：
+- ✅ 开发验证前提具备 → `feature/m1-local-network-pairing` 分支已启动，按 §3.2–§3.4 实现
+- ⚠️ 双设备实测 → 等 iPhone + 局域网，按 §3.5 执行；结果记入 `docs/post-takeover-plan.md` 与 `product-roadmap.md` §8
 
 ## 7. 红线再次确认
 
