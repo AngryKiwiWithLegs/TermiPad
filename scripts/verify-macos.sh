@@ -230,6 +230,17 @@ swift_source_guard() {
     echo '检测到 M1 配对监听文件之外的网络监听入口。' >&2
     return 1
   fi
+  # iOS 伴侣 app：NWBrowser 只允许出现在 CompanionApp/ 下；Sources/ 不得使用。
+  if grep -RInE 'NWBrowser' Sources; then
+    echo '检测到 Mac 端引入 NWBrowser——浏览器仅属于 iOS 伴侣 app。' >&2
+    return 1
+  fi
+  # iOS Info.plist 必填：缺 NSLocalNetworkUsageDescription 或 NSBonjourServices 则本地发现会被静默杀。
+  if ! grep -qF 'NSLocalNetworkUsageDescription' CompanionApp/Info.plist \
+     || ! grep -qF '_termipad-m1._tcp' CompanionApp/Info.plist; then
+    echo 'iOS 伴侣 Info.plist 必须声明 NSLocalNetworkUsageDescription 和 NSBonjourServices=_termipad-m1._tcp。' >&2
+    return 1
+  fi
 }
 
 run_step toolchain bash -c 'xcodebuild -version && swift --version && xcodegen --version'

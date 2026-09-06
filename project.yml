@@ -71,3 +71,25 @@ targets:
         GENERATE_INFOPLIST_FILE: "YES"
         TEST_TARGET_NAME: TermiPad
         DEAD_CODE_STRIPPING: "YES"
+
+  TermiPadCompanion:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: CompanionApp
+      # 复用 Mac 端纯逻辑层（密码学/协议/帧），避免代码漂移
+      - path: Sources/MobilePairingCrypto.swift
+      - path: Sources/MobilePairingProtocol.swift
+    info:
+      path: CompanionApp/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.termipad.companion
+        PRODUCT_NAME: TermiPadCompanion
+        SWIFT_VERSION: "5.9"
+        IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "Apple Development"
+        # 复用 Mac 钥匙串里那张免费 personal team 证书；缺失时 Xcode 会自动选
+        DEVELOPMENT_TEAM: "4XRX3DHYQ6"
