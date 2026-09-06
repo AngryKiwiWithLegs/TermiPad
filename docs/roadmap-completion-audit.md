@@ -18,7 +18,7 @@ TermiPad 的原始 P0 目标及不依赖开发者账户的 P1 能力已进入实
 | P1：iCloud 同步 | 外部闸门，设计已完成 | 默认 `cloudKitDatabase: .none`，并已记录账户、CloudKit 容器、冲突、迁移与双设备验收条件；见 `docs/icloud-sync-design-gate.md`。没有账户/容器配置时不伪实现。 |
 | P2-A：项目发现预览 | 已完成并通过真实 macOS 验证 | 默认关闭；仅由用户手动刷新固定公开 GitHub CLI 查询；ETag 缓存、限流退避、非 fork/非 archived 筛选、可解释排序与本地缓存均已实现。不会安装软件、生成命令、自动收录项目或上传本地工具数据。 |
 | P2-B：受控安装审查 | 已实现并在真实 macOS 验证 | 仅内置静态审核的 Homebrew core formula 目录（13 个 formula，Sources/ControlledInstallPlan.swift:71-85）；精确仓库映射；显示预期 CLI、审核修订、日期与固定命令；用户明确勾选和手动确认后才可交给所选终端或复制。不会应用内安装、读取 README 命令、支持 tap/cask 或自动收录。 |
-| P2-C：依赖与版本治理 | 尚未开始 | 跨生态自动安装、升级、卸载或冲突裁决不在当前范围；未来至多先做只读环境报告。 |
+| P2-C：只读环境报告 | 已实现并在真实 macOS 验证 | 仅在用户点击检查时对 6 个固定绝对路径组件（Homebrew / Cargo / npm / pnpm / Bun / Python）运行 `--version`；不枚举 PATH、不运行 shell、不联网、不安装/升级/卸载/裁决冲突。Sources/EnvironmentReport.swift:80-153。 |
 | 正式外部分发 | 外部闸门 | 需要 Apple Developer 账户、Developer ID、Hardened Runtime、公证、stapling 和 Gatekeeper 隔离冷启动。 |
 
 ## 私有 beta 的验证要求

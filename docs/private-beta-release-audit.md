@@ -2,7 +2,7 @@
 
 **审计范围：** 私有开发与受控 beta 候选，不包含 Mac App Store 或外部分发。
 
-**当前已验证功能基线：** `72c4e6e`（`Stabilize task workbench UI assertion`），包含 T2 本机受限 MCP 协作 `3a60ffb`、其 Swift 6/Core Foundation 兼容修复、OpenCode `2025-11-25` 精确协议协商修复 `5c7d202`、工作台自动保存状态反馈与稳定 UI 冒烟修复 `38aae06`/`0cdbc90`、T1 本机受限任务执行器 `5edeb8f`、T0 本地受限任务策略核心 `8750200`、此前的本地图标系统 `0265caf` 与 Mendocino 工作区视觉基线 `70d9d40`。
+**当前已验证功能基线：** `b6b37e7`（`Stabilize task workbench UI assertion`），包含 T2 本机受限 MCP 协作 `3a60ffb`、其 Swift 6/Core Foundation 兼容修复、OpenCode `2025-11-25` 精确协议协商修复 `5c7d202`、工作台自动保存状态反馈与稳定 UI 冒烟修复 `38aae06`/`0cdbc90`、T1 本机受限任务执行器 `5edeb8f`、T0 本地受限任务策略核心 `8750200`、此前的本地图标系统 `0265caf` 与 Mendocino 工作区视觉基线 `70d9d40`。
 
 **审计日期：** 2026-08-27。
 
