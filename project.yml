@@ -91,5 +91,5 @@ targets:
         IPHONEOS_DEPLOYMENT_TARGET: "16.0"
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "Apple Development"
-        # 复用 Mac 钥匙串里那张免费 personal team 证书；缺失时 Xcode 会自动选
-        DEVELOPMENT_TEAM: "4XRX3DHYQ6"
+        # 免费 personal team（重新登录后 Apple 轮换了 team ID：4XRX3DHYQ6 → 7LTPLQKWWD）
+        DEVELOPMENT_TEAM: "7LTPLQKWWD"
