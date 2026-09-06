@@ -358,6 +358,9 @@ struct PreferencesView: View {
         .background(theme.contentSurface)
         .padding(20)
         .frame(maxWidth: embeddedInNavigation ? .infinity : 560, alignment: .topLeading)
+        .onAppear {
+            pairingService.configure(modelContext: modelContext)
+        }
     }
 
     private func saveAPIKey() {

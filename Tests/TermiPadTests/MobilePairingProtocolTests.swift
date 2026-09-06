@@ -157,4 +157,111 @@ final class MobilePairingProtocolTests: XCTestCase {
             XCTAssertEqual(error as? MobilePairingError, .invalidDeviceName)
         }
     }
+
+    // MARK: - 会话复用（§3.3.1）
+
+    func testResumeKeyDerivesSameKeyOnBothSides() throws {
+        let mac = MobilePairingIdentity.generate()
+        let phone = MobilePairingIdentity.generate()
+        let macNonce = MobilePairingCrypto.generateNonce()
+        let phoneNonce = MobilePairingCrypto.generateNonce()
+
+        let macSide = try mac.resumeSessionKey(
+            peerPublicKeyData: phone.publicKeyData(), macNonce: macNonce, phoneNonce: phoneNonce)
+        let phoneSide = try phone.resumeSessionKey(
+            peerPublicKeyData: mac.publicKeyData(), macNonce: macNonce, phoneNonce: phoneNonce)
+
+        XCTAssertEqual(Self.keyData(macSide), Self.keyData(phoneSide))
+    }
+
+    func testResumeKeyDiffersFromPairingKey() throws {
+        // info 域不同：同一密钥材料永不跨协议复用。
+        let mac = MobilePairingIdentity.generate()
+        let phone = MobilePairingIdentity.generate()
+        let macNonce = MobilePairingCrypto.generateNonce()
+        let phoneNonce = MobilePairingCrypto.generateNonce()
+        let resume = try mac.resumeSessionKey(
+            peerPublicKeyData: phone.publicKeyData(), macNonce: macNonce, phoneNonce: phoneNonce)
+        let pairing = try mac.sessionKey(
+            peerPublicKeyData: phone.publicKeyData(),
+            pairingCode: "042913",
+            macNonce: macNonce,
+            phoneNonce: phoneNonce)
+        XCTAssertNotEqual(Self.keyData(resume), Self.keyData(pairing))
+    }
+
+    func testIncomingHelloDispatchPairingVsResume() throws {
+        let phoneKey = try MobilePairingIdentity.generate().publicKeyData()
+        let pairing = MobilePairingHandshake.PhoneHello(
+            protocolVersion: MobilePairingHandshake.currentProtocolVersion,
+            phonePublicKey: phoneKey,
+            phoneNonce: MobilePairingCrypto.generateNonce(),
+            pairingCode: "042913",
+            deviceName: "iPhone")
+        let resume = MobilePairingHandshake.PhoneResumeHello(
+            protocolVersion: MobilePairingHandshake.currentProtocolVersion,
+            deviceID: UUID(),
+            phonePublicKey: phoneKey,
+            phoneNonce: MobilePairingCrypto.generateNonce())
+
+        guard case .pairing(let decodedPairing) = MobilePairingHandshake.decodeIncomingHello(
+            from: try JSONEncoder().encode(pairing)) else {
+            return XCTFail("pairing hello 应被分发到 .pairing")
+        }
+        XCTAssertEqual(decodedPairing, pairing)
+        guard case .resume(let decodedResume) = MobilePairingHandshake.decodeIncomingHello(
+            from: try JSONEncoder().encode(resume)) else {
+            return XCTFail("resume hello 应被分发到 .resume")
+        }
+        XCTAssertEqual(decodedResume, resume)
+        XCTAssertNil(MobilePairingHandshake.decodeIncomingHello(from: Data("{}".utf8)))
+    }
+
+    func testAcceptResumeValidation() throws {
+        let mac = MobilePairingIdentity.generate()
+        let phone = MobilePairingIdentity.generate()
+        let phonePub = try phone.publicKeyData()
+        var record = PairedDeviceRecord(
+            id: UUID(),
+            displayName: "iPhone",
+            publicKeyHash: MobilePairingCrypto.fingerprint(forPublicKeyData: phonePub),
+            pairedAt: Date(),
+            lastConnectedAt: nil,
+            revokedAt: nil)
+        let hello = MobilePairingHandshake.PhoneResumeHello(
+            protocolVersion: MobilePairingHandshake.currentProtocolVersion,
+            deviceID: record.id,
+            phonePublicKey: phonePub,
+            phoneNonce: MobilePairingCrypto.generateNonce())
+
+        // 正常路径：返回 32 字节会话密钥。
+        let keyData = try MobilePairingHandshake.acceptResume(
+            hello, identity: mac, macNonce: MobilePairingCrypto.generateNonce(), expectedRecord: record)
+        XCTAssertEqual(keyData.count, 32)
+
+        // 撤销即失效——G4 #6 撤销实测的数据面。
+        record.revokedAt = Date()
+        XCTAssertThrowsError(try MobilePairingHandshake.acceptResume(
+            hello, identity: mac, macNonce: MobilePairingCrypto.generateNonce(), expectedRecord: record))
+        record.revokedAt = nil
+
+        // 公钥被换（指纹不匹配）→ 拒绝。
+        let attackerKey = try MobilePairingIdentity.generate().publicKeyData()
+        XCTAssertThrowsError(try MobilePairingHandshake.acceptResume(
+            MobilePairingHandshake.PhoneResumeHello(
+                protocolVersion: MobilePairingHandshake.currentProtocolVersion,
+                deviceID: record.id,
+                phonePublicKey: attackerKey,
+                phoneNonce: MobilePairingCrypto.generateNonce()),
+            identity: mac, macNonce: MobilePairingCrypto.generateNonce(), expectedRecord: record))
+
+        // 版本不符 → 拒绝。
+        XCTAssertThrowsError(try MobilePairingHandshake.acceptResume(
+            MobilePairingHandshake.PhoneResumeHello(
+                protocolVersion: "termipad-m1-pairing-v9",
+                deviceID: record.id,
+                phonePublicKey: phonePub,
+                phoneNonce: MobilePairingCrypto.generateNonce()),
+            identity: mac, macNonce: MobilePairingCrypto.generateNonce(), expectedRecord: record))
+    }
 }

@@ -183,6 +183,29 @@ iPhone App (远期)                 Mac (TermiPad)
 - **fingerprint 必须** 由用户在 iPhone 上**人工**确认——这是抗中间人攻击的关键
 - 配对后 iPhone 在 `PairedDevice` 列表里——可**在 Mac 工作台撤销**（**必须**有撤销路径，§7 红线"每个权限可撤销"）
 
+### 3.3.1 会话复用协议（2026-09-06 增补，G4 #4-6 的前置）
+
+配对码是一次性的、连接在配对后即断开——重连的已配对手机必须能被 Mac 认出，且无需用户再输码。
+
+**手机端持久化**（配对完成时写入 iOS Keychain，复用 `KeychainStore` 同一 service 域）：
+- 自身 X25519 私钥（长期身份，替代首版"每次配对临时生成"）
+- Mac 公钥 + Mac 指纹（信任锚点 = 初次配对时人工比对过的那串）
+- `deviceID`（Mac ack 下发）
+
+**复用握手**（区别于 §3.3 配对握手：Mac 仍先发 `MacHello`，手机按本地是否有凭据分流）：
+1. 手机连接后发 `PhoneResumeHello { protocolVersion, deviceID, phonePublicKey, phoneNonce }`（无 pairingCode 字段——Mac 按字段存在性区分 pairing/resume 两种 hello）
+2. Mac 验证：版本钉死；按 `deviceID` 查活跃设备；`SHA256(phonePublicKey) == record.publicKeyHash`——公钥被换即拒绝
+3. 双方各派生会话密钥：ECDH + HKDF-SHA256（salt = macNonce ‖ phoneNonce，info = `termipad-m1-resume-v1`，与配对派生不同 info 域）
+4. Mac 回**明文** `MacResumeHello { protocolVersion, macPublicKey, macNonce }`（公钥与 nonce 非机密）；手机验证 `SHA256(macPublicKey) == 存储的 Mac 指纹` 后才接受——**双向绑定缺一不可**
+5. 之后所有帧 AEAD 加密
+
+**请求通道**（G4 #4-6）：每连接一请求一响应，响应即断开（无长连接、无服务端状态）：
+- `listTools` → `[MobileToolSummary]`（仅 `showInMobileEntry == true` 的工具，4 字段白名单不变）
+- `requestLaunch` → Mac 按 `mobileLocalConfirmPolicy` 本地确认后经既有终端启动路径执行（后续 commit）
+- 白名单外操作一律拒绝并断开
+
+**撤销语义**：Mac 撤销设备后，其 `PhoneResumeHello` 在第 2 步被拒（记录 revokedAt 非空即不在活跃集合）——撤销立即对复用生效。
+
 ### 3.4 M1 数据模型（2026-09-06 修订）
 
 `PairedDevice` **不再**建 SwiftData 实体——设备记录与配对身份**只存 Keychain**。理由：(a) Keychain 天然不进 JSON 备份，直接满足 §2.5 契约，免去新增备份排除守卫；(b) 公钥指纹与设备身份属于凭据域，与 API Key 同级；(c) 实现为 `Sources/PairedDeviceStore.swift`（`PairedDeviceRecord: Codable` + Keychain 索引账号），存储后端可注入，测试用内存实现不打真实 SecItem（与 `KeychainStoreTests` 纪律一致）。
