@@ -5,6 +5,7 @@
 // 本文件保持零 I/O，verify-macos.sh 的 mobile_pairing_protocol_code 守卫强制。
 import CryptoKit
 import Foundation
+import Network
 
 /// M1 操作白名单（§3.4）：任何 iPhone 请求必须 match 之一，否则拒绝。
 /// 与 TaskMCPBridge 的受限 case 设计同一纪律——白名单即攻击面。
@@ -107,16 +108,30 @@ enum MobilePairingFrame {
 }
 
 /// Bonjour 广播契约：服务类型固定，不允许运行时配置——防仿冒服务重定向。
-/// TXT 只广播协议版本 + 指纹前缀，足以让手机预筛，不广播主机名/用户名/工具信息。
+/// TXT 只广播协议版本 + 指纹前缀 + LAN 直连地址（a/p，供手机绕开 iOS 26
+/// 对 .service 端点的解析卡死）；不广播主机名/用户名/工具信息。
 extension MobilePairingCrypto {
     static let bonjourServiceType = "_termipad-m1._tcp"
     static let bonjourServiceName = "TermiPad"
+    /// M1 监听固定端口（Mac 端监听用它；手机端从实例名还原直连地址时拼端口）。
+    /// 跨端共享故放协议层。
+    static let listenerPort: UInt16 = 57146
 
     static func bonjourTXTRecord(fingerprint: String) -> [String: String] {
         [
             "v": protocolVersion,
             "fp": String(fingerprint.prefix(16))
         ]
+    }
+
+    /// TXT 是否携带直连地址（"a"=IPv4, "p"=端口）——手机端用它决定
+    /// 走 hostPort 直连还是回退到 .service 端点解析。
+    static func bonjourDirectAddress(fromTXT txt: NWTXTRecord) -> (host: String, port: UInt16)? {
+        guard let host = txt["a"], let portString = txt["p"],
+              let port = UInt16(portString), !host.isEmpty else {
+            return nil
+        }
+        return (host, port)
     }
 }
 

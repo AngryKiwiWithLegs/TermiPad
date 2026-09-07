@@ -11,6 +11,43 @@ import SwiftData
 
 @MainActor
 final class MobilePairingService: ObservableObject {
+    /// M1 监听固定端口。固定端口让 TXT 在 listener 启动前就能带上完整地址，
+    /// 手机可绕开 Bonjour 服务解析（iOS 26 对 .service 端点解析会卡 preparing）直连。
+    nonisolated static let listenerPort: UInt16 = MobilePairingCrypto.listenerPort
+
+    /// 枚举 en* 接口上的第一个私有 IPv4（192.168/10./172.16-31）。
+    /// 不用 Process、不依赖 shell——getifaddrs 是 libc 级系统调用。
+    nonisolated static func lanIPv4Address() -> String? {
+        var address: String?
+        var ifaddrPtr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddrPtr) == 0, let first = ifaddrPtr else {
+            return nil
+        }
+        defer { freeifaddrs(ifaddrPtr) }
+        var cursor: UnsafeMutablePointer<ifaddrs>? = first
+        while let ifa = cursor {
+            cursor = ifa.pointee.ifa_next
+            guard let name = String(cString: ifa.pointee.ifa_name, encoding: .utf8),
+                  name.hasPrefix("en"),
+                  let sa = ifa.pointee.ifa_addr,
+                  sa.pointee.sa_family == UInt8(AF_INET) else { continue }
+            var addr = sa.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee }
+            var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+            inet_ntop(AF_INET, &addr.sin_addr, &buffer, socklen_t(INET_ADDRSTRLEN))
+            guard let ip = String(cString: buffer, encoding: .utf8) else { continue }
+            let octets = ip.split(separator: ".").compactMap { UInt8($0) }
+            guard octets.count == 4 else { continue }
+            let isPrivate = octets[0] == 192 && octets[1] == 168
+                || octets[0] == 10
+                || (octets[0] == 172 && (12...31).contains(octets[1]))
+            if isPrivate {
+                address = ip
+                break
+            }
+        }
+        return address
+    }
+
     enum ServiceState: Equatable {
         case off
         case listening(pairingCode: String, fingerprint: String)
@@ -52,11 +89,41 @@ final class MobilePairingService: ObservableObject {
             let identity = try PairedDeviceStore.MobilePairingIdentityStore.loadOrCreate(store: store)
             let fingerprint = MobilePairingCrypto.fingerprint(forPublicKeyData: try identity.publicKeyData())
             let pairingCode = MobilePairingCrypto.generatePairingCode()
-            let listener = try NWListener(using: .tcp)
+            // 锁 Wi-Fi + 固定端口 + TXT 携带 LAN 地址：手机浏览时直接拿到 IP:port
+            // 用 hostPort 直连，绕开 iOS 26 对 .service 端点解析卡 preparing 的问题。
+            let parameters = NWParameters.tcp
+            parameters.requiredInterfaceType = .wifi
+            // 停止→快速重启配对时旧 socket 尚在 TIME_WAIT/异步关闭中，固定端口
+            // 会报"地址已被占用"（UI 显示一串红色错误）。允许本地端点复用，
+            // 这是 M1 固定端口设计的必然配套。
+            parameters.allowLocalEndpointReuse = true
+            let listener = try NWListener(using: parameters, on: NWEndpoint.Port(rawValue: MobilePairingService.listenerPort)!)
+            var txtDictionary = MobilePairingCrypto.bonjourTXTRecord(fingerprint: fingerprint)
+            if let lanAddress = MobilePairingService.lanIPv4Address() {
+                txtDictionary["a"] = lanAddress
+                txtDictionary["p"] = String(MobilePairingService.listenerPort)
+                Self.diagMac("TXT 带 LAN 地址 \(lanAddress):\(MobilePairingService.listenerPort)")
+            } else {
+                Self.diagMac("未找到 LAN IPv4——TXT 无地址，手机走服务端点回退路径")
+            }
+            // 实例名携带 LAN 地址（TermiPad-192-168-2-81）：iOS 26 的手机端浏览
+            // browse 结果不带 TXT（metadata 恒为 .none），.service 解析又卡
+            // preparing。地址编码进实例名是手机端唯一能自取的通道；端口固定
+            // listenerPort。实例名只影响"怎么连上"，身份仍由 MacHello 指纹决定。
+            let serviceName: String
+            if let lanAddress = MobilePairingService.lanIPv4Address() {
+                serviceName = "\(MobilePairingCrypto.bonjourServiceName)-\(lanAddress.replacingOccurrences(of: ".", with: "-"))"
+                Self.diagMac("实例名带 LAN 地址: \(serviceName)")
+            } else {
+                serviceName = MobilePairingCrypto.bonjourServiceName
+                Self.diagMac("未找到 LAN IPv4——退回无地址实例名")
+            }
             listener.service = NWListener.Service(
-                name: MobilePairingCrypto.bonjourServiceName,
-                type: MobilePairingCrypto.bonjourServiceType)
-            listener.stateUpdateHandler = { [weak self] newState in
+                name: serviceName,
+                type: MobilePairingCrypto.bonjourServiceType,
+                domain: "local.",
+                txtRecord: NWTXTRecord(txtDictionary))
+            listener.stateUpdateHandler = { [weak self] (newState: NWListener.State) in
                 guard let self else { return }
                 Task { @MainActor in
                     if case .failed(let error) = newState {
@@ -65,7 +132,7 @@ final class MobilePairingService: ObservableObject {
                     }
                 }
             }
-            listener.newConnectionHandler = { [weak self] connection in
+            listener.newConnectionHandler = { [weak self] (connection: NWConnection) in
                 guard let self else { return }
                 MobilePairingService.beginHandshake(
                     on: connection,
@@ -105,6 +172,24 @@ final class MobilePairingService: ObservableObject {
         // 失败（扫描器、版本不符、配对码错误）静默丢弃连接；诊断事件后续接入。
         if case .success = result {
             refreshPairedDevices()
+        }
+    }
+
+    // MARK: - 诊断
+
+    /// Mac 端诊断：NSLog + ~/Library/Logs/termipad-pairing.log（统一日志在
+    /// 本机 ad hoc 签名下不稳定，文件日志保证可查）。
+    nonisolated static func diagMac(_ message: String) {
+        NSLog("termipad-pairing: \(message)")
+        let line = "[\(Date())] \(message)\n"
+        let url = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/termipad-pairing.log")
+        if let handle = try? FileHandle(forWritingTo: url) {
+            defer { try? handle.close() }
+            handle.seekToEndOfFile()
+            handle.write(Data(line.utf8))
+        } else {
+            try? line.write(to: url, atomically: true, encoding: .utf8)
         }
     }
 
