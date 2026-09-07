@@ -353,8 +353,12 @@ final class CompanionPairingClient: ObservableObject {
               let credentials = currentCredentials,
               let identity = pendingIdentity,
               let phoneNonce = pendingPhoneNonce else {
-            phase = .failed("复用握手异常。")
-            stopConnection()
+            // Mac 对被撤销/未知设备的 resume 静默断连（不回错误细节防探测）。
+            // 凭据已失效——清除并回到配对界面，而不是留一句含糊的报错。
+            Self.diag("resume 未收到 MacResumeHello——凭据很可能已被 Mac 撤销")
+            CompanionPairingStore.clear()
+            stopAll()
+            phase = .failed("Mac 已撤销本设备的配对。请重新走一次配对流程。")
             return
         }
         do {
