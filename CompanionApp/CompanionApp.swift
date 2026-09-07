@@ -67,12 +67,23 @@ final class CompanionPairingClient: ObservableObject {
             for: .bonjour(type: MobilePairingCrypto.bonjourServiceType, domain: nil),
             using: .tcp)
         browser.browseResultsChangedHandler = { [weak self] results, _ in
+            Self.diag("browse results=\(results.count) metadata=\(results.first?.metadata)")
             guard let self else { return }
             guard let first = results.first,
                   case .service(let name, _, _, _) = first.endpoint else { return }
-            Task { @MainActor in self.connect(to: name) }
+            // iOS 26 的 browse 结果不带 TXT（metadata 恒为 .none）；.service 端点
+            // 解析会卡 preparing。Mac 端把 LAN 地址编码进实例名
+            // （TermiPad-192-168-2-81），这里直接从名字还原 IP 直连。
+            guard let directAddress = Self.directAddress(fromServiceName: name) else {
+                Self.diag("实例名无 LAN 地址（\(name)）——等待 Mac 端重新开启配对广播")
+                return
+            }
+            Self.diag("从实例名还原直连地址 \(directAddress)")
+            let finalAddress = directAddress
+            Task { @MainActor in self.connect(to: name, directAddress: finalAddress) }
         }
         browser.stateUpdateHandler = { [weak self] newState in
+            Self.diag("browser state=\(newState)")
             guard let self else { return }
             Task { @MainActor in
                 if case .failed(let error) = newState {
@@ -83,6 +94,7 @@ final class CompanionPairingClient: ObservableObject {
         }
         browser.start(queue: queue)
         self.browser = browser
+        Self.diag("browsing started for \(MobilePairingCrypto.bonjourServiceType)")
         phase = .browsing
     }
 
@@ -166,14 +178,39 @@ final class CompanionPairingClient: ObservableObject {
 
     // MARK: - 连接与握手
 
-    private func connect(to serviceName: String) {
-        let endpoint = NWEndpoint.service(
-            name: serviceName,
-            type: MobilePairingCrypto.bonjourServiceType,
-            domain: "local.",
-            interface: nil)
-        let connection = NWConnection(to: endpoint, using: .tcp)
-        connection.stateUpdateHandler = { [weak self] newState in
+    private func connect(to serviceName: String, directAddress: String?) {
+        let endpoint: NWEndpoint
+        if let directAddress,
+           let separatorIndex = directAddress.lastIndex(of: ":"),
+           let port = UInt16(directAddress[directAddress.index(after: separatorIndex)...]) {
+            // TXT 直连路径：IP:port 已由 Mac 通告，跳过 .service 解析
+            // （iOS 26 下该解析会无限卡 preparing）。
+            let host = NWEndpoint.Host(String(directAddress[..<separatorIndex]))
+            endpoint = NWEndpoint.hostPort(host: host, port: NWEndpoint.Port(rawValue: port)!)
+            Self.diag("direct connect via TXT \(directAddress)")
+        } else {
+            endpoint = NWEndpoint.service(
+                name: serviceName,
+                type: MobilePairingCrypto.bonjourServiceType,
+                domain: "local.",
+                interface: nil)
+            Self.diag("fallback to service endpoint for \(serviceName)")
+        }
+        let connection = NWConnection(to: endpoint, using: Self.wifiParameters())
+        Self.diag("connecting to \(serviceName)")
+        // 10 秒仍停在 preparing 即视为失败——路由不可达/接口不匹配，不让用户无限转圈。
+        let timeoutWorkItem = DispatchWorkItem { [weak self] in
+            Task { @MainActor in
+                guard let self, case .connecting = self.phase else { return }
+                Self.diag("connection timeout in preparing")
+                self.stopConnection()
+                self.phase = .failed("连接超时：Mac 不可达。确认两端在同一 Wi-Fi，且 Mac 端配对已开启。")
+            }
+        }
+        queue.asyncAfter(deadline: .now() + 10, execute: timeoutWorkItem)
+        connection.stateUpdateHandler = { [weak self, timeoutWorkItem] newState in
+            Self.diag("connection state=\(newState)")
+            if case .ready = newState { timeoutWorkItem.cancel() }
             guard let self else { return }
             Task { @MainActor in
                 switch newState {
@@ -209,9 +246,13 @@ final class CompanionPairingClient: ObservableObject {
                 return
             }
             pendingMacHello = macHello
-            if case .paired(let credentials) = phase {
+            // 凭据判断必须查 Keychain 而非 phase——connect() 在 ready 时已把
+            // phase 改成 .connecting，查 phase 会让 resume 路径永远不触发，
+            // 每次都跳回首次配对界面（真机实测踩过的坑）。
+            if let credentials = CompanionPairingStore.loadCredentials() {
                 // 已配对：走 resume 路径，验证 Mac 公钥指纹 == 初次配对锚点。
                 let currentFingerprint = macHello.fingerprint
+                Self.diag("有凭据；Mac指纹\(currentFingerprint == credentials.macFingerprint ? "匹配" : "不匹配")")
                 if currentFingerprint == credentials.macFingerprint {
                     // 信任锚点一致——自动发 resume hello（无需用户确认指纹，因为上次人工核对过）。
                     pendingIdentity = CompanionPairingStore.loadIdentity()
@@ -254,6 +295,7 @@ final class CompanionPairingClient: ObservableObject {
                 }
             } else {
                 // 首次配对路径：用户必须人工确认指纹。
+                Self.diag("无凭据——首次配对路径")
                 pendingIdentity = MobilePairingIdentity.generate()
                 phase = .verifyFingerprint(
                     DiscoveredMac(serviceName: capturedServiceName ?? "TermiPad"),
@@ -297,6 +339,7 @@ final class CompanionPairingClient: ObservableObject {
                 macFingerprint: macHello.fingerprint,
                 deviceName: deviceName)
             try CompanionPairingStore.save(identity: identity, credentials: credentials)
+            Self.diag("配对完成，凭据已存（deviceID=\(ack.deviceID)）")
             stopConnection()
             phase = .paired(credentials: credentials)
         } catch {
@@ -328,6 +371,7 @@ final class CompanionPairingClient: ObservableObject {
                 macNonce: macResume.macNonce,
                 phoneNonce: phoneNonce)
             pendingSessionKey = key
+            Self.diag("MacResumeHello 校验通过，发 listTools")
             // 立刻发 listTools 请求——一连接一请求一响应。
             if let connection, let mac = currentDiscoveredMac {
                 let request = MobilePairingRequest(operation: .listTools, requestID: UUID(), toolID: nil)
@@ -361,6 +405,7 @@ final class CompanionPairingClient: ObservableObject {
         }
         do {
             let summaries = try MobilePairingEnvelope.openToolSummaries(data, using: key)
+            Self.diag("收到工具目录 count=\(summaries.count)")
             // 最小数据校验：任何 4 字段之外的字段都拒收（防 Mac 端 schema 漂移）。
             guard summaries.allSatisfy({ summary in
                 summary.iconSymbolName == nil || !(summary.iconSymbolName?.isEmpty ?? true)
@@ -377,7 +422,47 @@ final class CompanionPairingClient: ObservableObject {
         }
     }
 
+    // MARK: - 诊断
+
+    /// 从 Bonjour 实例名还原直连地址：Mac 端通告 "TermiPad-192-168-2-81"，
+    /// 端口固定 listenerPort。名字里没地址（老版 Mac）返回 nil。
+    nonisolated private static func directAddress(fromServiceName name: String) -> String? {
+        guard let range = name.range(of: "\(MobilePairingCrypto.bonjourServiceName)-") else {
+            return nil
+        }
+        let addressPart = String(name[range.upperBound...])
+        let octets = addressPart.split(separator: "-").compactMap { UInt8($0) }
+        guard octets.count == 4 else { return nil }
+        let host = octets.map(String.init).joined(separator: ".")
+        return "\(host):\(MobilePairingCrypto.listenerPort)"
+    }
+
+    /// 同时写 NSLog 与 Documents/companion-diag.log——后者可经 devicectl
+    /// appDataContainer 拉取，不依赖控制台挂载。
+    nonisolated private static func diag(_ message: String) {
+        NSLog("companion-diag: \(message)")
+        let line = "[\(Date())] \(message)\n"
+        guard let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return
+        }
+        let url = dir.appendingPathComponent("companion-diag.log")
+        if let handle = try? FileHandle(forWritingTo: url) {
+            defer { try? handle.close() }
+            handle.seekToEndOfFile()
+            handle.write(Data(line.utf8))
+        } else {
+            try? line.write(to: url, atomically: true, encoding: .utf8)
+        }
+    }
+
     // MARK: - 帧收发
+
+    /// 锁 Wi-Fi 接口（与 Mac 端监听器对称）：避免解析到 VPN/隧道接口的不可达地址。
+    nonisolated private static func wifiParameters() -> NWParameters {
+        let parameters = NWParameters.tcp
+        parameters.requiredInterfaceType = .wifi
+        return parameters
+    }
 
     private func receiveOneMessage(handler: @escaping @Sendable (Data?) -> Void) {
         guard let connection else {
@@ -447,6 +532,10 @@ final class CompanionPairingClient: ObservableObject {
 
     private var currentDiscoveredMac: DiscoveredMac? {
         if case .connecting(let mac) = phase { return mac }
+        // resume 流程在 .awaitingAck 阶段就要发 listTools——此前用 capturedServiceName。
+        if case .awaitingAck = phase, let name = capturedServiceName {
+            return DiscoveredMac(serviceName: name)
+        }
         return nil
     }
 
