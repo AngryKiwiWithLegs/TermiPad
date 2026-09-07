@@ -38,7 +38,7 @@
 | 1 | Bonjour 发现 | ✅ 通过 | `_termipad-m1._tcp`；iOS 端本地网络权限声明由 project.yml info.properties 生成（手写 plist 曾被 XcodeGen 覆盖，见 commit 278b9a7） |
 | 2 | 指纹人工比对 | ✅ 通过 | 手机屏显 MacHello.fingerprint 与 Mac 屏一致后人工确认 |
 | 3 | 配对成功 | ✅ 通过 | 钥匙串 `mobile-pairing.device-index=["BE0172EB-…"]` + `mobile-pairing.identity` 均确认存在 |
-| 4 | 会话加密（工具目录） | ⏳ 未测 | 请求通道（listTools）未实现——需设备长期身份持久化 + 会话复用协议（下一批次） |
+| 4 | 会话加密（工具目录） | ✅ 通过（2026-09-07）| 加密 resume 握手 + listTools；手机日志 `收到工具目录 count=3`（commit a161200）|
 | 5 | 启动请求 + 本地确认 | ⏳ 未测 | 依赖 #4 |
 | 6 | 双重撤销实测 | ⏳ 未测 | Mac 撤销 UI 已实现；手机端失效效果待请求通道接通后验证 |
 | 7 | 7 天重签 | ⏳ 未测 | 时间依赖；重签后凭据保留情况待记录 |
