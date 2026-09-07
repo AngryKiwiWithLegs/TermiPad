@@ -201,8 +201,23 @@ iPhone App (远期)                 Mac (TermiPad)
 
 **请求通道**（G4 #4-6）：每连接一请求一响应，响应即断开（无长连接、无服务端状态）：
 - `listTools` → `[MobileToolSummary]`（仅 `showInMobileEntry == true` 的工具，4 字段白名单不变）
-- `requestLaunch` → Mac 按 `mobileLocalConfirmPolicy` 本地确认后经既有终端启动路径执行（后续 commit）
+- `requestLaunch` → Mac 按 `mobileLocalConfirmPolicy` 本地确认后经既有终端启动路径执行
 - 白名单外操作一律拒绝并断开
+
+### 3.3.2 requestLaunch 启动请求（2026-09-07 增补，G4 #5）
+
+**手机侧**：工具卡点击 → 发 `requestLaunch { toolID }`（加密 resume 通道，与 listTools 同一握手）→ 收到三种结果之一：`accepted`（Mac 用户已确认并交给终端）/ `pendingLocalConfirm`（等待 Mac 用户在 Mac 上确认——手机显示"请在 Mac 上确认"）/ `rejected`（工具未开启 `allowMobileLaunchRequest`，或策略拒绝）。
+
+**Mac 侧执行链**（顺序不可交换）：
+1. **资格预检**（MainActor 读 SwiftData）：`showInMobileEntry == true` **且** `allowMobileLaunchRequest == true` **且** `revokeMobilePermissionAt == nil`——任一不满足即 `rejected`，不弹任何确认框
+2. **本地确认**（按 `mobileLocalConfirmPolicy`）：
+   - `.everyTime`（默认）：每次都弹确认
+   - `.perSession` / `.lowRiskSessionOnly`：M1 阶段**一律降级为 everyTime**——会话缓存是后续优化，先收口到最严格
+3. **确认 UI**：macOS alert（工具名 + "来自已配对设备 <设备名> 的启动请求"），用户点"启动"才继续；alert 60 秒无响应视为拒绝（防无人值守 Mac 上请求悬挂）
+4. **执行**：确认后经既有 `TerminalLauncher` 交给用户所选终端——**不**新增执行路径，命令永远来自 Mac 已保存的 `commandTemplate`
+5. **响应**：启动交接完成即回 `accepted`；用户点拒绝或超时回 `rejected`
+
+**红线**：手机端永不收到命令正文/路径/变量/终端输出——只有三种结果枚举。Mac 无人在场（alert 超时）= 拒绝，这是"Mac 始终是唯一执行权威"的直接体现。
 
 **撤销语义**：Mac 撤销设备后，其 `PhoneResumeHello` 在第 2 步被拒（记录 revokedAt 非空即不在活跃集合）——撤销立即对复用生效。
 
