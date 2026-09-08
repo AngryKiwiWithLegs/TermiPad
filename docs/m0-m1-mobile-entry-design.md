@@ -213,6 +213,14 @@ iPhone App (远期)                 Mac (TermiPad)
 2. **本地确认**（按 `mobileLocalConfirmPolicy`）：
    - `.everyTime`（默认）：每次都弹确认
    - `.perSession` / `.lowRiskSessionOnly`：M1 阶段**一律降级为 everyTime**——会话缓存是后续优化，先收口到最严格
+
+**perSession/lowRisk 启用语义（2026-09-08 增补，M1.1 批次）**：G4 #5 全链通过后放开降级，真实行为如下——
+- **会话定义**：Mac 主进程内存中的一条白名单记录（`[toolID: Date]`），**不落盘、不进备份**。每次本机确认通过即写入；重启 Mac/重开配对监听即清空——确认缓存的生命周期绝不超出 Mac 进程生命周期。
+- **`.perSession`**：白名单命中且距上次确认 ≤5 分钟 → 免确认直启；否则走 everyTime 弹窗，确认后刷新时间戳。
+- **`.lowRiskSessionOnly`**：在 perSession 基础上叠加任务风险门——仅 `TemplateRisk` 判定为低风险（无模板变量、无 shell 元字符——资格预检第 4 条已保证无变量）的工具可免确认；其余一律 everyTime。
+- **超时撤销**：白名单超过 5 分钟未刷新即失效；Mac 端撤销工具手机权限（`revokeMobilePermissionAt != nil`）立即从白名单移除。
+- **诊断**：免确认直启记一次固定枚举审计事件 `mobileLaunchAutoConfirmed`（仅时间戳与终端目标，**无**工具名/设备名——`DiagnosticEventKind` 隐私纪律禁止存工具名），与 `launchSucceeded` 并读即知"哪些启动跳过了确认"（时间戳对齐）。
+- **红线不变**：免确认 ≠ 无人值守常开。Mac 必须开着配对监听（默认关闭）且在 5 分钟会话窗内；用户随时把策略切回 everyTime 或关监听即收回。
 3. **确认 UI**：macOS alert（工具名 + "来自已配对设备 <设备名> 的启动请求"），用户点"启动"才继续；alert 60 秒无响应视为拒绝（防无人值守 Mac 上请求悬挂）
 4. **执行**：确认后经既有 `TerminalLauncher` 交给用户所选终端——**不**新增执行路径，命令永远来自 Mac 已保存的 `commandTemplate`
 5. **响应**：启动交接完成即回 `accepted`；用户点拒绝或超时回 `rejected`

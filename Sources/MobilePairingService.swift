@@ -166,6 +166,8 @@ final class MobilePairingService: ObservableObject {
     private func stopPairingInternal() {
         listener?.cancel()
         listener = nil
+        // 关闭监听即清会话白名单——免确认缓存的生命周期绝不超出监听开启期。
+        MobileLaunchSession.shared.invalidateAll()
     }
 
     private func finishPairing(_ result: Result<PairedDeviceRecord, Error>) {
@@ -418,15 +420,28 @@ final class MobilePairingService: ObservableObject {
                 on: connection, using: sessionKey)
             return
         }
-        // 2. 本机确认（每次都确认——M1 阶段 perSession/lowRisk 降级为 everyTime）
-        let accepted = await MobileLaunchPromptCenter.shared.requestConfirmation(
-            toolName: tool.mobileDisplayName ?? tool.name,
-            deviceName: "已配对设备")
-        guard accepted else {
-            sendLaunchResponse(
-                MobileLaunchResponse(status: .rejected, reason: "Mac 上拒绝了本次启动。"),
-                on: connection, using: sessionKey)
-            return
+        // 2. 本机确认（§3.3.2 增补 2026-09-08）：perSession/lowRisk 会话白名单
+        //    命中即免确认直启（记审计事件）；everyTime / 未命中 / lowRisk 元字符
+        //    第二道防线拦下的一律弹 60s 确认框。
+        let launchSession = MobileLaunchSession.shared
+        if launchSession.canSkipConfirmation(
+            policy: tool.mobileLocalConfirmPolicy,
+            toolID: tool.id,
+            commandTemplate: tool.commandTemplate) {
+            DiagnosticsStore.shared.record(.mobileLaunchAutoConfirmed)
+            diagMac("会话白名单命中，免确认直启 policy=\(tool.mobileLocalConfirmPolicy.rawValue)")
+        } else {
+            let accepted = await MobileLaunchPromptCenter.shared.requestConfirmation(
+                toolName: tool.mobileDisplayName ?? tool.name,
+                deviceName: "已配对设备")
+            guard accepted else {
+                sendLaunchResponse(
+                    MobileLaunchResponse(status: .rejected, reason: "Mac 上拒绝了本次启动。"),
+                    on: connection, using: sessionKey)
+                return
+            }
+            // 确认通过刷新会话时间戳——perSession/lowRisk 从这次确认起算 5 分钟。
+            launchSession.recordConfirmation(toolID: tool.id)
         }
         // 3. 经既有终端启动路径——不新增执行入口，命令来自 Mac 已保存模板
         let target = TerminalTarget(
