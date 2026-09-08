@@ -96,6 +96,31 @@ struct ContentView: View {
                 }
             case .toolSummaries:
                 EmptyView()
+            case .requestingLaunch(let name):
+                HStack {
+                    ProgressView()
+                    Text("已发送「\(name)」启动请求，请在 Mac 上确认…")
+                }
+                Button("取消", role: .destructive) { client.stopBrowsing() }
+            case .launchResult(let accepted, let message):
+                if accepted {
+                    Label("Mac 已确认启动", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .font(.body.bold())
+                    Text("命令已交给 Mac 上你选择的终端执行。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Label("启动未执行", systemImage: "xmark.circle")
+                        .foregroundStyle(.orange)
+                        .font(.body.bold())
+                    if let message {
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Button("返回工具目录") { client.startBrowsing() }
             case .failed(let message):
                 Label(message, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.red)
@@ -118,18 +143,26 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(summaries, id: \.id) { summary in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(summary.displayName).font(.body.bold())
-                        if !summary.displayDescription.isEmpty {
-                            Text(summary.displayDescription)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    Button {
+                        client.requestLaunch(summary)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Text(summary.displayName).font(.body.bold())
+                                Spacer()
+                                Image(systemName: "play.circle")
+                                    .foregroundStyle(.blue)
+                            }
+                            if !summary.displayDescription.isEmpty {
+                                Text(summary.displayDescription)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                        Text("id: \(summary.id.uuidString.prefix(8))…")
-                            .font(.caption2.monospaced())
-                            .foregroundStyle(.tertiary)
+                        .padding(.vertical, 2)
                     }
-                    .padding(.vertical, 2)
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("companion-launch-\(summary.id.uuidString)")
                 }
             }
         } header: {

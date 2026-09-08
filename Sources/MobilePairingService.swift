@@ -372,10 +372,99 @@ final class MobilePairingService: ObservableObject {
                     connection.cancel()
                 })
             }
+        case .requestLaunch:
+            Task { @MainActor in
+                guard let toolID = request.toolID else {
+                    Self.sendLaunchResponse(
+                        MobileLaunchResponse(status: .rejected, reason: "请求缺少目标工具。"),
+                        on: connection, using: key)
+                    return
+                }
+                await Self.handleLaunchRequest(
+                    toolID: toolID, connection: connection, sessionKey: key)
+            }
         default:
-            // requestLaunch 等操作按设计文档节奏逐个启用；未启用即拒绝并断开。
+            // 其余操作按设计文档节奏逐个启用；未启用即拒绝并断开。
             connection.cancel()
         }
+    }
+
+    /// §3.3.2 启动请求执行链（顺序不可交换）：
+    /// 资格预检 → 本机确认（60s 超时=拒绝）→ 经 TerminalLauncher 交接 → 回结果。
+    @MainActor
+    private static func handleLaunchRequest(
+        toolID: UUID,
+        connection: NWConnection,
+        sessionKey: SymmetricKey
+    ) async {
+        // 1. 资格预检
+        guard let tool = fetchTool(id: toolID),
+              tool.showInMobileEntry,
+              tool.allowMobileLaunchRequest,
+              tool.revokeMobilePermissionAt == nil,
+              CommandTemplate.variables(in: tool.commandTemplate).isEmpty else {
+            sendLaunchResponse(
+                MobileLaunchResponse(status: .rejected, reason: "该工具未允许手机启动，或需要填写参数。"),
+                on: connection, using: sessionKey)
+            return
+        }
+        // 2. 本机确认（每次都确认——M1 阶段 perSession/lowRisk 降级为 everyTime）
+        let accepted = await MobileLaunchPromptCenter.shared.requestConfirmation(
+            toolName: tool.mobileDisplayName ?? tool.name,
+            deviceName: "已配对设备")
+        guard accepted else {
+            sendLaunchResponse(
+                MobileLaunchResponse(status: .rejected, reason: "Mac 上拒绝了本次启动。"),
+                on: connection, using: sessionKey)
+            return
+        }
+        // 3. 经既有终端启动路径——不新增执行入口，命令来自 Mac 已保存模板
+        let target = TerminalTarget(
+            rawValue: UserDefaults.standard.string(forKey: "TermiPad.terminalTarget") ?? ""
+        ) ?? .systemTerminal
+        let contextualCommand = ToolLaunchContext.command(
+            tool.commandTemplate, inWorkingDirectory: tool.workingDirectoryPath)
+        do {
+            let result = try TerminalLauncher.launch(command: contextualCommand, target: target)
+            switch result {
+            case .launched(let launchTarget):
+                DiagnosticsStore.shared.record(.launchSucceeded, terminalTarget: launchTarget)
+                tool.lastLaunchedAt = Date()
+            default:
+                DiagnosticsStore.shared.record(.launchFailed, terminalTarget: target)
+            }
+        } catch {
+            DiagnosticsStore.shared.record(.launchFailed, terminalTarget: target)
+        }
+        // 4. 结果（启动交接完成即 accepted；是否真的弹出终端由终端侧决定，
+        // 与 Mac 上手动启动同一语义）
+        sendLaunchResponse(
+            MobileLaunchResponse(status: .accepted, reason: nil),
+            on: connection, using: sessionKey)
+    }
+
+    @MainActor
+    private static func fetchTool(id: UUID) -> TerminalTool? {
+        guard let modelContext = sharedModelContext else { return nil }
+        var descriptor = FetchDescriptor<TerminalTool>(
+            predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        return try? modelContext.fetch(descriptor).first
+    }
+
+    @MainActor
+    private static func sendLaunchResponse(
+        _ response: MobileLaunchResponse,
+        on connection: NWConnection,
+        using key: SymmetricKey
+    ) {
+        guard let sealed = try? MobilePairingEnvelope.seal(response, using: key) else {
+            connection.cancel()
+            return
+        }
+        connection.send(content: MobilePairingFrame.encode(sealed), completion: .contentProcessed { _ in
+            connection.cancel()
+        })
     }
 
     /// 只读目录：仅 showInMobileEntry == true 的工具，4 字段白名单

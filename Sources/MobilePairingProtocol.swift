@@ -59,12 +59,30 @@ enum MobilePairingEnvelope {
         let plaintext = try MobilePairingCrypto.open(data, using: key)
         return try JSONDecoder().decode(MobilePairingAck.self, from: plaintext)
     }
+
+    static func openLaunchResponse(_ data: Data, using key: SymmetricKey) throws -> MobileLaunchResponse {
+        let plaintext = try MobilePairingCrypto.open(data, using: key)
+        return try JSONDecoder().decode(MobileLaunchResponse.self, from: plaintext)
+    }
 }
 
 /// Mac → iPhone 配对确认（经会话密钥 AEAD 加密后发送）。
 struct MobilePairingAck: Codable, Sendable, Equatable {
     let accepted: Bool
     let deviceID: UUID
+}
+
+/// Mac → iPhone 启动请求结果（§3.3.2）。手机端只收到结果枚举与可选的
+/// 一句提示，永不收到命令正文/路径/变量/终端输出。
+struct MobileLaunchResponse: Codable, Sendable, Equatable {
+    enum Status: String, Codable, Sendable {
+        case accepted
+        case rejected
+    }
+
+    let status: Status
+    /// 拒绝时的一句人话原因（固定枚举文案，不含工具数据）。
+    let reason: String?
 }
 
 /// 4 字节大端长度前缀帧编解码。纯逻辑——分包/粘包由测试覆盖；
