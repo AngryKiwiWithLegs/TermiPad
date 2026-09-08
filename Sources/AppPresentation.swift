@@ -105,7 +105,9 @@ enum AppCopy {
             "mobileCompanionEnable": "启用同网配对", "mobileCompanionDisable": "停止配对",
             "mobileCompanionPairingCode": "配对码", "mobileCompanionFingerprint": "本机指纹（与手机端人工比对）",
             "mobileCompanionDeviceName": "设备名", "mobileCompanionRevoke": "撤销该设备", "mobileCompanionNoPairedDevices": "尚未配对任何设备。",
-            "mobileCompanionListening": "正在配对模式", "mobileCompanionOff": "未启动", "mobileCompanionFailed": "配对服务错误：%@"
+            "mobileCompanionListening": "正在配对模式", "mobileCompanionOff": "未启动", "mobileCompanionFailed": "配对服务错误：%@",
+            "mobileLaunchPromptTitle": "手机启动请求", "mobileLaunchPromptBody": "已配对设备请求启动工具「%@」。仅在你本机确认后才会交给终端。",
+            "mobileLaunchPromptAccept": "启动", "mobileLaunchPromptDeny": "拒绝"
         ]
         let english: [String: String] = [
             "allTools": "All Tools", "inbox": "Review Inbox", "favorites": "Favorites", "recent": "Recent", "hidden": "Hidden", "categories": "Categories", "toolLibrary": "Library", "settings": "Settings",
@@ -151,7 +153,9 @@ enum AppCopy {
             "mobileCompanionEnable": "Enable Local Network Pairing", "mobileCompanionDisable": "Stop Pairing",
             "mobileCompanionPairingCode": "Pairing code", "mobileCompanionFingerprint": "Local fingerprint (verify with phone)",
             "mobileCompanionDeviceName": "Device", "mobileCompanionRevoke": "Revoke this device", "mobileCompanionNoPairedDevices": "No paired devices yet.",
-            "mobileCompanionListening": "Pairing mode active", "mobileCompanionOff": "Not started", "mobileCompanionFailed": "Pairing service error: %@"
+            "mobileCompanionListening": "Pairing mode active", "mobileCompanionOff": "Not started", "mobileCompanionFailed": "Pairing service error: %@",
+            "mobileLaunchPromptTitle": "Mobile Launch Request", "mobileLaunchPromptBody": "A paired device requests launching “%@”. It reaches your terminal only after you confirm here.",
+            "mobileLaunchPromptAccept": "Launch", "mobileLaunchPromptDeny": "Deny"
         ]
         let table = language == .simplifiedChinese ? chinese : english
         return table[key] ?? key

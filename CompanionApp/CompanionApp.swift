@@ -34,6 +34,8 @@ final class CompanionPairingClient: ObservableObject {
         case awaitingAck(isResume: Bool)
         case listingTools(DiscoveredMac)
         case toolSummaries([MobileToolSummary])
+        case requestingLaunch(String)
+        case launchResult(accepted: Bool, message: String?)
         case failed(String)
     }
 
@@ -49,6 +51,8 @@ final class CompanionPairingClient: ObservableObject {
     private var pendingPhoneNonce: Data?
     private var pendingSessionKey: SymmetricKey?
     private var capturedServiceName: String?
+    /// 非 nil 时 resume 后发 requestLaunch（而非 listTools）。
+    private var pendingLaunchRequest: (toolID: UUID, name: String)?
     private let queue = DispatchQueue(label: "com.termipad.companion.network", qos: .userInitiated)
 
     init() {
@@ -167,6 +171,12 @@ final class CompanionPairingClient: ObservableObject {
             phase = .failed(error.localizedDescription)
             stopConnection()
         }
+    }
+
+    /// 手机点工具卡发起启动请求（§3.3.2）——走 resume 通道。
+    func requestLaunch(_ summary: MobileToolSummary) {
+        pendingLaunchRequest = (toolID: summary.id, name: summary.displayName)
+        startBrowsing()
     }
 
     /// 解除配对——清空 Keychain，回到首次配对。
@@ -375,22 +385,32 @@ final class CompanionPairingClient: ObservableObject {
                 macNonce: macResume.macNonce,
                 phoneNonce: phoneNonce)
             pendingSessionKey = key
-            Self.diag("MacResumeHello 校验通过，发 listTools")
-            // 立刻发 listTools 请求——一连接一请求一响应。
+            // 立刻发请求——一连接一请求一响应。有 pendingLaunchRequest 发
+            // requestLaunch，否则发 listTools。
+            let request: MobilePairingRequest
+            if let launch = pendingLaunchRequest {
+                Self.diag("MacResumeHello 校验通过，发 requestLaunch tool=\(launch.name)")
+                request = MobilePairingRequest(operation: .requestLaunch, requestID: UUID(), toolID: launch.toolID)
+                phase = .requestingLaunch(launch.name)
+            } else {
+                Self.diag("MacResumeHello 校验通过，发 listTools")
+                request = MobilePairingRequest(operation: .listTools, requestID: UUID(), toolID: nil)
+            }
             if let connection, let mac = currentDiscoveredMac {
-                let request = MobilePairingRequest(operation: .listTools, requestID: UUID(), toolID: nil)
                 let frame = MobilePairingFrame.encode(try MobilePairingEnvelope.seal(request, using: key))
-                phase = .listingTools(mac)
+                if pendingLaunchRequest == nil {
+                    phase = .listingTools(mac)
+                }
                 connection.send(content: frame, completion: .contentProcessed { [weak self] error in
                     Task { @MainActor in
                         guard let self else { return }
                         if error != nil {
-                            self.phase = .failed("发送工具目录请求失败。")
+                            self.phase = .failed("发送请求失败。")
                             self.stopConnection()
                             return
                         }
                         self.receiveOneMessage { data in
-                            Task { @MainActor in self.handleToolSummaries(data) }
+                            Task { @MainActor in self.handleResponse(data) }
                         }
                     }
                 })
@@ -401,10 +421,31 @@ final class CompanionPairingClient: ObservableObject {
         }
     }
 
-    private func handleToolSummaries(_ data: Data?) {
+    private func handleResponse(_ data: Data?) {
         guard let data, let key = pendingSessionKey else {
-            phase = .failed("未收到工具目录。")
+            phase = .failed("未收到响应。")
             stopConnection()
+            return
+        }
+        // requestLaunch 的响应先试：Mac 只回 MobileLaunchResponse。
+        if let launch = pendingLaunchRequest {
+            do {
+                let response = try MobilePairingEnvelope.openLaunchResponse(data, using: key)
+                Self.diag("启动结果 status=\(response.status.rawValue)")
+                pendingLaunchRequest = nil
+                stopConnection()
+                switch response.status {
+                case .accepted:
+                    phase = .launchResult(accepted: true, message: nil)
+                case .rejected:
+                    phase = .launchResult(accepted: false, message: response.reason)
+                }
+            } catch {
+                pendingLaunchRequest = nil
+                stopConnection()
+                phase = .failed("启动请求结果解析失败。")
+            }
+            _ = launch
             return
         }
         do {
@@ -517,6 +558,7 @@ final class CompanionPairingClient: ObservableObject {
         pendingPairingCode = nil
         pendingPhoneNonce = nil
         pendingSessionKey = nil
+        pendingLaunchRequest = nil
     }
 
     private func refreshFromKeychain() {

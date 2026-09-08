@@ -20,6 +20,7 @@ struct PreferencesView: View {
     @AppStorage(AIService.modelDefaultsKey) private var aiModel = "gpt-4o-mini"
     @AppStorage("TermiPad.updateChecksEnabled") private var updateChecksEnabled = false
     @StateObject private var pairingService = MobilePairingService()
+    @ObservedObject private var launchPrompt = MobileLaunchPromptCenter.shared
 
     @State private var apiKeyInput = ""
     @State private var hasStoredAPIKey = false
@@ -360,6 +361,26 @@ struct PreferencesView: View {
         .frame(maxWidth: embeddedInNavigation ? .infinity : 560, alignment: .topLeading)
         .onAppear {
             pairingService.configure(modelContext: modelContext)
+        }
+        .alert(
+            AppCopy.text("mobileLaunchPromptTitle", language: language),
+            isPresented: Binding(
+                get: { launchPrompt.pending != nil },
+                set: { _ in launchPrompt.respond(false) })
+        ) {
+            Button(AppCopy.text("mobileLaunchPromptAccept", language: language)) {
+                launchPrompt.respond(true)
+            }
+            Button(AppCopy.text("mobileLaunchPromptDeny", language: language), role: .cancel) {
+                launchPrompt.respond(false)
+            }
+        } message: {
+            if let pending = launchPrompt.pending {
+                Text(AppCopy.format(
+                    "mobileLaunchPromptBody",
+                    "\(pending.toolName) · \(pending.deviceName)",
+                    language: language))
+            }
         }
     }
 
