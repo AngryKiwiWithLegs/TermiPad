@@ -1,14 +1,7 @@
-// 手机端配对凭据（docs/m0-m1-mobile-entry-design.md §3.3.1）。
-// 持久化三件套：长期 X25519 身份（替代临时身份）、Mac 公钥+指纹（初次配对
-// 人工比对的信任锚点）、deviceID。全部经 KeychainStore（iOS 同一 Security API）。
+// 手机端配对凭据存储（docs/m0-m1-mobile-entry-design.md §3.3.1 + M2a 增补）。
+// CompanionPairingCredentials 结构体在共享协议层 Sources/MobilePairingProtocol.swift
+// （两端单一事实源，Mac 测试锁编解码兼容性）；本文件只管 Keychain 读写。
 import Foundation
-
-struct CompanionPairingCredentials: Codable, Sendable, Equatable {
-    let deviceID: UUID
-    let macPublicKey: Data
-    let macFingerprint: String
-    let deviceName: String
-}
 
 enum CompanionPairingStore {
     static let identityAccount = "companion.identity"
