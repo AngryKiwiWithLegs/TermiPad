@@ -1251,6 +1251,8 @@ struct ToolEditView: View {
         tool.revokeMobilePermissionAt = Date()
         tool.showInMobileEntry = false
         tool.allowMobileLaunchRequest = false
+        // 会话白名单立即失效——撤销语义不能被 5 分钟窗拖延。
+        MobileLaunchSession.shared.invalidate(toolID: tool.id)
         do {
             try modelContext.save()
             DiagnosticsStore.shared.record(.mobilePermissionRevoked)
