@@ -47,6 +47,10 @@ enum DiagnosticEventKind: String, Codable, CaseIterable {
     /// 同时 ToolTool.revokeMobilePermissionAt 时间戳被写、showInMobileEntry 与
     /// allowMobileLaunchRequest 被设回 false，iPhone 端下次心跳读到新值即停用。
     case mobilePermissionRevoked
+    /// M1.1 perSession/lowRisk 会话白名单命中、免本机确认直启时记一次。
+    /// 仅时间戳与终端目标（与 launchSucceeded 并读即知哪些启动跳过了确认）；
+    /// 隐私纪律禁止记工具名/设备名。
+    case mobileLaunchAutoConfirmed
     case mcpToolListed
     case mcpTaskProposed
     case mcpTaskStatusRead
