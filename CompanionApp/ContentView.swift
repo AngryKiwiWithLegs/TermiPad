@@ -54,7 +54,9 @@ struct ContentView: View {
             case .connecting(let mac):
                 HStack {
                     ProgressView()
-                    Text("正在连接 \(mac.serviceName)…")
+                    Text(mac.serviceName == CompanionPairingClient.tailnetServiceName
+                        ? "正在通过异地通道连接…"
+                        : "正在连接 \(mac.serviceName)…")
                 }
             case .verifyFingerprint(let mac, let fingerprint, let isResume):
                 Text("已发现 \(mac.serviceName)")

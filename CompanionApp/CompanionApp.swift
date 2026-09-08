@@ -53,6 +53,15 @@ final class CompanionPairingClient: ObservableObject {
     private var capturedServiceName: String?
     /// 非 nil 时 resume 后发 requestLaunch（而非 listTools）。
     private var pendingLaunchRequest: (toolID: UUID, name: String)?
+    // M2a 连接编排状态（LAN 优先 / tailnet 兜底 / 明确超时文案）。
+    private var tailnetFallbackWorkItem: DispatchWorkItem?
+    private var browseTimeoutWorkItem: DispatchWorkItem?
+    private var lanConnectStarted = false
+    private var tailnetAttemptInFlight = false
+    /// 隧道路径的伪服务名——connect() 据此选无接口约束的参数（tailnet 流量走
+    /// Tailscale 的 utun 接口，M1 的 .wifi 约束会把它挡死）。ContentView 亦用它
+    /// 区分连接中的文案。
+    static let tailnetServiceName = "TermiPad-tailnet"
     private let queue = DispatchQueue(label: "com.termipad.companion.network", qos: .userInitiated)
 
     init() {
@@ -104,6 +113,49 @@ final class CompanionPairingClient: ObservableObject {
         self.browser = browser
         Self.diag("browsing started for \(MobilePairingCrypto.bonjourServiceType)")
         phase = .browsing
+        // M2a：LAN 优先、tailnet 兜底、超时给明确文案——不无限转圈。
+        lanConnectStarted = false
+        tailnetAttemptInFlight = false
+        scheduleTailnetFallbackIfNeeded()
+        scheduleBrowseTimeout()
+    }
+
+    /// M2a 连接编排（docs/m2-secure-remote-session-design.md §3）：
+    /// 浏览 6 秒仍一无所获且凭据里有异地端点 → 放弃 LAN 浏览改走 tailnet 直连。
+    private func scheduleTailnetFallbackIfNeeded() {
+        tailnetFallbackWorkItem?.cancel()
+        guard let endpoint = currentCredentials?.tailnetEndpoint, !endpoint.isEmpty else { return }
+        let work = DispatchWorkItem { [weak self] in
+            Task { @MainActor in self?.fallbackToTailnet(endpoint: endpoint) }
+        }
+        tailnetFallbackWorkItem = work
+        queue.asyncAfter(deadline: .now() + 6, execute: work)
+    }
+
+    private func fallbackToTailnet(endpoint: String) {
+        guard !lanConnectStarted, case .browsing = phase else { return }
+        Self.diag("LAN 浏览 6 秒无结果，改走异地 tailnet \(endpoint)")
+        browser?.cancel()
+        browser = nil
+        tailnetAttemptInFlight = true
+        connect(to: Self.tailnetServiceName, directAddress: endpoint)
+    }
+
+    /// 浏览 10 秒仍停在 .browsing（且 tailnet 兜底未在途）→ 明确失败文案。
+    private func scheduleBrowseTimeout() {
+        browseTimeoutWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            Task { @MainActor in
+                guard let self, case .browsing = self.phase, !self.tailnetAttemptInFlight else { return }
+                let hasTailnet = !(self.currentCredentials?.tailnetEndpoint ?? "").isEmpty
+                self.stopAll()
+                self.phase = .failed(hasTailnet
+                    ? "同一 Wi-Fi 内未发现 Mac，异地 tailnet 通道也未连通。确认 Mac 已开机、TermiPad 正在运行、两端 Tailscale 在线。"
+                    : "同一 Wi-Fi 内未发现 Mac，且异地通道未开启。确认两端在同一 Wi-Fi、Mac 端配对已开启；在外网使用需在 Mac 端『设置 → 手机伴侣 → 异地访问』打开开关（需要 Tailscale）。")
+            }
+        }
+        browseTimeoutWorkItem = work
+        queue.asyncAfter(deadline: .now() + 10, execute: work)
     }
 
     func stopBrowsing() {
@@ -214,7 +266,15 @@ final class CompanionPairingClient: ObservableObject {
                 interface: nil)
             Self.diag("fallback to service endpoint for \(serviceName)")
         }
-        let connection = NWConnection(to: endpoint, using: Self.wifiParameters())
+        let connection: NWConnection
+        if serviceName == Self.tailnetServiceName {
+            // 异地 tailnet 路径：无接口约束——流量由 Tailscale 的 utun 接口承载，
+            // .wifi 约束（M1 防仿冒用）会挡掉它。
+            connection = NWConnection(to: endpoint, using: Self.tunnelParameters())
+        } else {
+            lanConnectStarted = true
+            connection = NWConnection(to: endpoint, using: Self.wifiParameters())
+        }
         Self.diag("connecting to \(serviceName)")
         // 10 秒仍停在 preparing 即视为失败——路由不可达/接口不匹配，不让用户无限转圈。
         let timeoutWorkItem = DispatchWorkItem { [weak self] in
@@ -222,7 +282,9 @@ final class CompanionPairingClient: ObservableObject {
                 guard let self, case .connecting = self.phase else { return }
                 Self.diag("connection timeout in preparing")
                 self.stopConnection()
-                self.phase = .failed("连接超时：Mac 不可达。确认两端在同一 Wi-Fi，且 Mac 端配对已开启。")
+                self.phase = .failed(serviceName == Self.tailnetServiceName
+                    ? "异地连接超时：确认 Mac 已开机、TermiPad 正在运行、两端 Tailscale 在线。"
+                    : "连接超时：Mac 不可达。确认两端在同一 Wi-Fi，且 Mac 端配对已开启。")
             }
         }
         queue.asyncAfter(deadline: .now() + 10, execute: timeoutWorkItem)
@@ -393,6 +455,14 @@ final class CompanionPairingClient: ObservableObject {
                 macNonce: macResume.macNonce,
                 phoneNonce: phoneNonce)
             pendingSessionKey = key
+            // M2a：持久化 Mac 下发的异地端点（同网引导异地，出门零操作）。
+            // nil 也写回——Mac 端关闭异地访问时清掉手机侧的旧端点。
+            if macResume.tailnetEndpoint != credentials.tailnetEndpoint {
+                var updated = credentials
+                updated.tailnetEndpoint = macResume.tailnetEndpoint
+                try? CompanionPairingStore.save(identity: identity, credentials: updated)
+                Self.diag("异地端点已更新：\(macResume.tailnetEndpoint ?? "off")")
+            }
             // 立刻发请求——一连接一请求一响应。有 pendingLaunchRequest 发
             // requestLaunch，否则发 listTools。
             // 先构造请求、取连接，最后才切 phase：currentDiscoveredMac 只在
@@ -526,6 +596,11 @@ final class CompanionPairingClient: ObservableObject {
         return parameters
     }
 
+    /// 异地 tailnet 连接参数：无接口约束（流量走 Tailscale utun）。
+    private func tunnelParameters() -> NWParameters {
+        NWParameters.tcp
+    }
+
     private func receiveOneMessage(handler: @escaping @Sendable (Data?) -> Void) {
         guard let connection else {
             handler(nil)
@@ -567,6 +642,12 @@ final class CompanionPairingClient: ObservableObject {
     }
 
     private func stopAll() {
+        tailnetFallbackWorkItem?.cancel()
+        tailnetFallbackWorkItem = nil
+        browseTimeoutWorkItem?.cancel()
+        browseTimeoutWorkItem = nil
+        lanConnectStarted = false
+        tailnetAttemptInFlight = false
         browser?.cancel()
         browser = nil
         stopConnection()
