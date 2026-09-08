@@ -19,6 +19,8 @@ struct PreferencesView: View {
     @AppStorage(AIService.baseURLDefaultsKey) private var aiBaseURL = "https://api.openai.com/v1"
     @AppStorage(AIService.modelDefaultsKey) private var aiModel = "gpt-4o-mini"
     @AppStorage("TermiPad.updateChecksEnabled") private var updateChecksEnabled = false
+    @StateObject private var pairingService = MobilePairingService()
+    @ObservedObject private var launchPrompt = MobileLaunchPromptCenter.shared
 
     @State private var apiKeyInput = ""
     @State private var hasStoredAPIKey = false
@@ -139,6 +141,79 @@ struct PreferencesView: View {
                     }
                 }
                 Text(AppCopy.text("updateChecksHint", language: language))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section(AppCopy.text("mobileCompanion", language: language)) {
+                HStack {
+                    if case .listening(let code, let fingerprint) = pairingService.state {
+                        Button(AppCopy.text("mobileCompanionDisable", language: language), action: pairingService.stopPairing)
+                            .accessibilityIdentifier("settings-mobile-companion-disable")
+                        Spacer()
+                        Label(AppCopy.text("mobileCompanionListening", language: language), systemImage: "dot.radiowaves.left.and.right")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    } else if case .failed(let message) = pairingService.state {
+                        Button(AppCopy.text("mobileCompanionEnable", language: language), action: pairingService.startPairing)
+                            .accessibilityIdentifier("settings-mobile-companion-enable")
+                        Spacer()
+                        Label(AppCopy.format("mobileCompanionFailed", message, language: language), systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    } else {
+                        Button(AppCopy.text("mobileCompanionEnable", language: language), action: pairingService.startPairing)
+                            .accessibilityIdentifier("settings-mobile-companion-enable")
+                        Spacer()
+                        Text(AppCopy.text("mobileCompanionOff", language: language))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if case .listening(let code, let fingerprint) = pairingService.state {
+                    HStack {
+                        Text(AppCopy.text("mobileCompanionPairingCode", language: language))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(code)
+                            .font(.system(.body, design: .monospaced).bold())
+                            .textSelection(.enabled)
+                            .accessibilityIdentifier("settings-mobile-companion-code")
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(AppCopy.text("mobileCompanionFingerprint", language: language))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(fingerprint)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                    }
+                }
+                let active = pairingService.activePairedDevices
+                if active.isEmpty {
+                    Text(AppCopy.text("mobileCompanionNoPairedDevices", language: language))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(active) { device in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(device.displayName)
+                                    .font(.body)
+                                Text(device.pairedAt.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button(AppCopy.text("mobileCompanionRevoke", language: language), role: .destructive) {
+                                pairingService.revoke(id: device.id)
+                            }
+                            .accessibilityIdentifier("settings-mobile-companion-revoke-\(device.id.uuidString)")
+                        }
+                    }
+                }
+                Text(AppCopy.text("mobileCompanionHint", language: language))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -284,6 +359,29 @@ struct PreferencesView: View {
         .background(theme.contentSurface)
         .padding(20)
         .frame(maxWidth: embeddedInNavigation ? .infinity : 560, alignment: .topLeading)
+        .onAppear {
+            pairingService.configure(modelContext: modelContext)
+        }
+        .alert(
+            AppCopy.text("mobileLaunchPromptTitle", language: language),
+            isPresented: Binding(
+                get: { launchPrompt.pending != nil },
+                set: { _ in launchPrompt.respond(false) })
+        ) {
+            Button(AppCopy.text("mobileLaunchPromptAccept", language: language)) {
+                launchPrompt.respond(true)
+            }
+            Button(AppCopy.text("mobileLaunchPromptDeny", language: language), role: .cancel) {
+                launchPrompt.respond(false)
+            }
+        } message: {
+            if let pending = launchPrompt.pending {
+                Text(AppCopy.format(
+                    "mobileLaunchPromptBody",
+                    "\(pending.toolName) · \(pending.deviceName)",
+                    language: language))
+            }
+        }
     }
 
     private func saveAPIKey() {
