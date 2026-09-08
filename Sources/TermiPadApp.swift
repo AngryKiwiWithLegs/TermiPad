@@ -40,6 +40,11 @@ struct TermiPadApplication: App {
             do {
                 sharedModelContainer = try TermiPadDataStore.makeContainer()
                 primaryStoreErrorDescription = nil
+                // M2a：用户上次开启过异地隧道则随 app 启动自动恢复
+                // （UI 测试模式下跳过——绝不碰真实 Keychain/CLI/网络）。
+                if !isUITest {
+                    TailnetTunnelService.shared.restoreIfNeeded()
+                }
             } catch {
                 primaryStoreErrorDescription = error.localizedDescription
                 do {

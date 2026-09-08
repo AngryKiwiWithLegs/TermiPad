@@ -64,6 +64,9 @@ final class MobilePairingService: ObservableObject {
     private var listener: NWListener?
     private let listenerQueue = DispatchQueue(label: "com.termipad.mobile-pairing", qos: .userInitiated)
     private let store: MobileSecureKeyValueStore
+    /// M2a 隧道 resume-only 入口的共享 store（静态——隧道握手无实例上下文；
+    /// 与实例 store 同为 Keychain 后端，读写同一设备记录集）。
+    nonisolated private static let tunnelResumeStore: MobileSecureKeyValueStore = KeychainMobileSecureStore()
 
     init(store: MobileSecureKeyValueStore = KeychainMobileSecureStore()) {
         self.store = store
@@ -231,6 +234,50 @@ final class MobilePairingService: ObservableObject {
         connection.start(queue: queue)
     }
 
+    /// M2a 隧道监听器专用入口：只接受已配对设备的复用握手。首次配对必须
+    /// 留在同网（人工比对指纹是设计前提）——隧道上出现的 PhoneHello 一律断连。
+    nonisolated static func beginResumeOnlyHandshake(
+        on connection: NWConnection,
+        queue: DispatchQueue
+    ) {
+        do {
+            let identity = try PairedDeviceStore.MobilePairingIdentityStore.loadOrCreate(store: tunnelResumeStore)
+            connection.stateUpdateHandler = { newState in
+                guard case .ready = newState else {
+                    if case .failed = newState { connection.cancel() }
+                    return
+                }
+                runResumeOnlyHandshake(on: connection, identity: identity, store: tunnelResumeStore)
+            }
+            connection.start(queue: queue)
+        } catch {
+            connection.cancel()
+        }
+    }
+
+    nonisolated private static func runResumeOnlyHandshake(
+        on connection: NWConnection,
+        identity: MobilePairingIdentity,
+        store: MobileSecureKeyValueStore
+    ) {
+        let macNonce = MobilePairingCrypto.generateNonce()
+        guard let frame = try? MobilePairingFrame.encode(JSONEncoder().encode(
+            MobilePairingHandshake.makeMacHello(identity: identity, macNonce: macNonce))) else {
+            connection.cancel()
+            return
+        }
+        send(frame, on: connection)
+        receiveOneMessage(on: connection, buffer: Data()) { data in
+            guard let data,
+                  case .resume(let hello) = MobilePairingHandshake.decodeIncomingHello(from: data) else {
+                // 配对 hello / 不可解析帧：隧道不接受首次配对，直接断连。
+                connection.cancel()
+                return
+            }
+            handleResumeHello(hello, connection: connection, identity: identity, macNonce: macNonce, store: store)
+        }
+    }
+
     nonisolated private static func runHandshake(
         on connection: NWConnection,
         identity: MobilePairingIdentity,
@@ -340,11 +387,14 @@ final class MobilePairingService: ObservableObject {
             }
             let sessionKeyData = try MobilePairingHandshake.deriveResumeSessionKey(
                 hello, identity: identity, macNonce: macNonce)
-            diagMac("resume 接受：\(record.displayName)，发 MacResumeHello")
+            // M2a：隧道开启时随 MacResumeHello 下发异地端点（同网引导异地，
+            // 手机持久化后出门零操作）。明文可接受——见协议层字段注释。
             let macResume = MobilePairingHandshake.MacResumeHello(
                 protocolVersion: MobilePairingHandshake.currentProtocolVersion,
                 macPublicKey: try identity.publicKeyData(),
-                macNonce: macNonce)
+                macNonce: macNonce,
+                tailnetEndpoint: TailnetTunnelService.endpointHolder.get())
+            diagMac("resume 接受：\(record.displayName)，发 MacResumeHello（tailnet=\(macResume.tailnetEndpoint ?? "off")）")
             send(MobilePairingFrame.encode(try JSONEncoder().encode(macResume)), on: connection)
             receiveOneMessage(on: connection, buffer: Data()) { requestData in
                 guard let requestData else {
