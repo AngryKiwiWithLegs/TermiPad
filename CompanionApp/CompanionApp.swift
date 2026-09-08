@@ -597,7 +597,7 @@ final class CompanionPairingClient: ObservableObject {
     }
 
     /// 异地 tailnet 连接参数：无接口约束（流量走 Tailscale utun）。
-    private func tunnelParameters() -> NWParameters {
+    private static func tunnelParameters() -> NWParameters {
         NWParameters.tcp
     }
 
