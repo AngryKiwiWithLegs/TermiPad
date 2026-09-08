@@ -67,6 +67,10 @@ final class CompanionPairingClient: ObservableObject {
 
     func startBrowsing() {
         stopAll()
+        startBrowsingInternal()
+    }
+
+    private func startBrowsingInternal() {
         let browser = NWBrowser(
             for: .bonjour(type: MobilePairingCrypto.bonjourServiceType, domain: nil),
             using: .tcp)
@@ -174,9 +178,13 @@ final class CompanionPairingClient: ObservableObject {
     }
 
     /// 手机点工具卡发起启动请求（§3.3.2）——走 resume 通道。
+    /// 注意顺序：startBrowsing 内部的 stopAll 会清 pendingLaunchRequest，
+    /// 所以标志必须在 stopAll 之后（返回的闭包里）重新写入。
     func requestLaunch(_ summary: MobileToolSummary) {
-        pendingLaunchRequest = (toolID: summary.id, name: summary.displayName)
-        startBrowsing()
+        let launch = (toolID: summary.id, name: summary.displayName)
+        stopAll()
+        pendingLaunchRequest = launch
+        startBrowsingInternal()
     }
 
     /// 解除配对——清空 Keychain，回到首次配对。
@@ -387,34 +395,43 @@ final class CompanionPairingClient: ObservableObject {
             pendingSessionKey = key
             // 立刻发请求——一连接一请求一响应。有 pendingLaunchRequest 发
             // requestLaunch，否则发 listTools。
+            // 先构造请求、取连接，最后才切 phase：currentDiscoveredMac 只在
+            // .connecting/.awaitingAck 有值，提前切 .requestingLaunch 会让
+            // 发送块被整体跳过（帧发不出去）。
             let request: MobilePairingRequest
             if let launch = pendingLaunchRequest {
                 Self.diag("MacResumeHello 校验通过，发 requestLaunch tool=\(launch.name)")
                 request = MobilePairingRequest(operation: .requestLaunch, requestID: UUID(), toolID: launch.toolID)
-                phase = .requestingLaunch(launch.name)
             } else {
                 Self.diag("MacResumeHello 校验通过，发 listTools")
                 request = MobilePairingRequest(operation: .listTools, requestID: UUID(), toolID: nil)
             }
-            if let connection, let mac = currentDiscoveredMac {
-                let frame = MobilePairingFrame.encode(try MobilePairingEnvelope.seal(request, using: key))
-                if pendingLaunchRequest == nil {
-                    phase = .listingTools(mac)
-                }
-                connection.send(content: frame, completion: .contentProcessed { [weak self] error in
-                    Task { @MainActor in
-                        guard let self else { return }
-                        if error != nil {
-                            self.phase = .failed("发送请求失败。")
-                            self.stopConnection()
-                            return
-                        }
-                        self.receiveOneMessage { data in
-                            Task { @MainActor in self.handleResponse(data) }
-                        }
-                    }
-                })
+            guard let connection, let mac = currentDiscoveredMac else {
+                Self.diag("发送时连接已不在——请求被丢弃")
+                phase = .failed("连接已断开，请重试。")
+                stopConnection()
+                return
             }
+            let frame = MobilePairingFrame.encode(try MobilePairingEnvelope.seal(request, using: key))
+            if let launch = pendingLaunchRequest {
+                phase = .requestingLaunch(launch.name)
+            } else {
+                phase = .listingTools(mac)
+            }
+            connection.send(content: frame, completion: .contentProcessed { [weak self] error in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if error != nil {
+                        self.phase = .failed("发送请求失败。")
+                        self.stopConnection()
+                        return
+                    }
+                    Self.diag("请求帧已发出（\(request.operation.rawValue)），等待 Mac 响应")
+                    self.receiveOneMessage { data in
+                        Task { @MainActor in self.handleResponse(data) }
+                    }
+                }
+            })
         } catch {
             phase = .failed("复用握手失败。")
             stopConnection()

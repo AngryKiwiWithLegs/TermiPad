@@ -324,13 +324,21 @@ final class MobilePairingService: ObservableObject {
     ) {
         do {
             guard let record = PairedDeviceStore.find(id: hello.deviceID, store: store) else {
+                diagMac("resume 拒绝：找不到设备记录 \(hello.deviceID)")
                 throw MobilePairingError.handshakeFailed
             }
-            guard record.revokedAt == nil else { throw MobilePairingError.handshakeFailed }
+            guard record.revokedAt == nil else {
+                diagMac("resume 拒绝：设备已撤销 \(record.displayName)")
+                throw MobilePairingError.handshakeFailed
+            }
             guard MobilePairingCrypto.fingerprint(forPublicKeyData: hello.phonePublicKey)
-                == record.publicKeyHash else { throw MobilePairingError.handshakeFailed }
+                == record.publicKeyHash else {
+                diagMac("resume 拒绝：公钥指纹不匹配")
+                throw MobilePairingError.handshakeFailed
+            }
             let sessionKeyData = try MobilePairingHandshake.deriveResumeSessionKey(
                 hello, identity: identity, macNonce: macNonce)
+            diagMac("resume 接受：\(record.displayName)，发 MacResumeHello")
             let macResume = MobilePairingHandshake.MacResumeHello(
                 protocolVersion: MobilePairingHandshake.currentProtocolVersion,
                 macPublicKey: try identity.publicKeyData(),
@@ -357,9 +365,11 @@ final class MobilePairingService: ObservableObject {
     ) {
         let key = SymmetricKey(data: sessionKeyData)
         guard let request = try? MobilePairingEnvelope.openRequest(data, using: key) else {
+            diagMac("加密请求解密失败——\(data.count) 字节")
             connection.cancel()
             return
         }
+        diagMac("收到请求 op=\(request.operation.rawValue) toolID=\(request.toolID?.uuidString ?? "nil")")
         switch request.operation {
         case .listTools:
             Task { @MainActor in
