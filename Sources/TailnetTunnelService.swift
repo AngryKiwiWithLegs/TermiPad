@@ -112,8 +112,10 @@ final class TailnetTunnelService: ObservableObject {
     private func finishEnable(result: ServeConfigResult, port: UInt16) {
         switch result {
         case .binaryNotFound:
+            MobilePairingService.diagMac("隧道失败：未找到 tailscale CLI（固定路径白名单）")
             state = .failed("未找到 Tailscale。请安装并登录后重试（brew install tailscale 或 App Store 版）。")
         case .cliError(let message):
+            MobilePairingService.diagMac("隧道失败：\(message)")
             state = .failed("Tailscale 配置失败：\(message)")
         case .configured(let endpoint):
             startLoopbackListener(port: Self.loopbackBackendPort, endpoint: endpoint)
@@ -135,6 +137,7 @@ final class TailnetTunnelService: ObservableObject {
         do {
             listener = try NWListener(using: parameters, on: NWEndpoint.Port(rawValue: port)!)
         } catch {
+            MobilePairingService.diagMac("隧道失败：回环监听创建失败：\(error.localizedDescription)")
             state = .failed("本地监听启动失败：\(error.localizedDescription)")
             return
         }
