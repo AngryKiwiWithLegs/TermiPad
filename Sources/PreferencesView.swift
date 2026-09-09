@@ -20,6 +20,7 @@ struct PreferencesView: View {
     @AppStorage(AIService.modelDefaultsKey) private var aiModel = "gpt-4o-mini"
     @AppStorage("TermiPad.updateChecksEnabled") private var updateChecksEnabled = false
     @StateObject private var pairingService = MobilePairingService()
+    @ObservedObject private var tunnelService = TailnetTunnelService.shared
     @ObservedObject private var launchPrompt = MobileLaunchPromptCenter.shared
 
     @State private var apiKeyInput = ""
@@ -214,6 +215,38 @@ struct PreferencesView: View {
                     }
                 }
                 Text(AppCopy.text("mobileCompanionHint", language: language))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // M2a 异地隧道（docs/m2-secure-remote-session-design.md §5）
+            Section(AppCopy.text("mobileTunnel", language: language)) {
+                HStack {
+                    Toggle(AppCopy.text("mobileTunnel", language: language), isOn: Binding(
+                        get: { UserDefaults.standard.bool(forKey: TailnetTunnelService.enabledDefaultsKey) },
+                        set: { tunnelService.setEnabled($0) }))
+                        .labelsHidden()
+                        .accessibilityIdentifier("settings-mobile-tunnel-toggle")
+                    Text(AppCopy.text("mobileTunnel", language: language))
+                    Spacer()
+                    switch tunnelService.state {
+                    case .off:
+                        Text(AppCopy.text("mobileTunnelOff", language: language))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    case .detecting:
+                        ProgressView().controlSize(.small)
+                    case .ready(let endpoint):
+                        Label(AppCopy.format("mobileTunnelReady", endpoint, language: language), systemImage: "checkmark.shield")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    case .failed(let message):
+                        Label(AppCopy.format("mobileTunnelFailed", message, language: language), systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+                Text(AppCopy.text("mobileTunnelHint", language: language))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

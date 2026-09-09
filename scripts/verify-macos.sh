@@ -144,8 +144,8 @@ swift_source_guard() {
     echo 'T1 执行器必须使用空输入输出，禁止保留或回传终端内容。' >&2
     return 1
   fi
-  if grep -RInE 'Process\(' Sources | grep -vE 'Sources/(EnvironmentReport|TaskExecutionService)\.swift'; then
-    echo '检测到 T1 之外新增的进程执行入口。' >&2
+  if grep -RInE 'Process\(' Sources | grep -vE 'Sources/(EnvironmentReport|TaskExecutionService|TailnetTunnelService)\.swift'; then
+    echo '检测到 T1 之外新增的进程执行入口（M2a 仅 TailnetTunnelService 允许跑 tailscale CLI）。' >&2
     return 1
   fi
   # 备份与任务域隔离（track-protocol §4.5）：Sources/BackupService.swift 不得引用
@@ -225,9 +225,21 @@ swift_source_guard() {
     return 1
   fi
   # 全局白名单：整个 Sources 里 NWListener/NWConnection 只允许出现在
-  # Sources/MobilePairingService.swift（M1 同网监听，默认关闭）。
-  if grep -RInE 'NWListener|NWConnection' Sources | grep -vE 'Sources/MobilePairingService\.swift'; then
-    echo '检测到 M1 配对监听文件之外的网络监听入口。' >&2
+  # Sources/MobilePairingService.swift（M1 同网监听，默认关闭）与
+  # Sources/TailnetTunnelService.swift（M2a 回环监听，默认关闭）。
+  if grep -RInE 'NWListener|NWConnection' Sources | grep -vE 'Sources/(MobilePairingService|TailnetTunnelService)\.swift'; then
+    echo '检测到 M1/M2a 监听文件之外的网络监听入口。' >&2
+    return 1
+  fi
+  # M2a 隧道守卫：tailscale CLI 的可执行路径字面量只允许出现在
+  # TailnetTunnelService.swift（固定绝对路径纪律）；任何其他文件不得拼 CLI。
+  if grep -RIn 'bin/tailscale' Sources | grep -v 'Sources/TailnetTunnelService\.swift'; then
+    echo '检测到 TailnetTunnelService 之外的 tailscale CLI 调用。' >&2
+    return 1
+  fi
+  # M2a 红线：永久禁用 Funnel（公网暴露入口）。字面量出现即验证失败。
+  if grep -RInE '"funnel| funnel |--funnel' Sources; then
+    echo '检测到 funnel 子命令引用——公网暴露红线，永久禁止。' >&2
     return 1
   fi
   # iOS 伴侣 app：NWBrowser 只允许出现在 CompanionApp/ 下；Sources/ 不得使用。

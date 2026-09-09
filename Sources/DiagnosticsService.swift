@@ -51,6 +51,10 @@ enum DiagnosticEventKind: String, Codable, CaseIterable {
     /// 仅时间戳与终端目标（与 launchSucceeded 并读即知哪些启动跳过了确认）；
     /// 隐私纪律禁止记工具名/设备名。
     case mobileLaunchAutoConfirmed
+    /// M2a 异地隧道回环监听就绪时记一次（不记 tailnet IP——隐私纪律）。
+    case remoteTunnelOpened
+    /// M2a 异地隧道关闭时记一次。
+    case remoteTunnelClosed
     case mcpToolListed
     case mcpTaskProposed
     case mcpTaskStatusRead

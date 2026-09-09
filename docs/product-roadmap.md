@@ -139,6 +139,8 @@ cd ~/TermiPad && git pull --ff-only origin master && ./scripts/verify-macos.sh
 
 **传输技术决策（2026-09-08 用户拍板）。** 异地通道采用**内置隧道**方案（参照 OpenClaw/SSH 生态验证过的模式）：Mac 上服务仅绑定回环地址，经 Tailscale 式 WireGuard 隧道（出站连接、设备双向认证、路由器零入站端口）接入手机；不上传第三方云中继、不在 Mac 开公网监听。替代方案（公网中继/自建 VPN）不采用。同网 M1 直连（Bonjour + LAN）保留为近场路径；隧道为异地路径，二者共用同一套配对/加密/撤销层。
 
+**M2a 实施与验收记录（2026-09-09）。** 依托用户自装 Tailscale：Mac 端 `tailscale serve --tcp` 把 tailnet 侧 57147 转发到仅绑回环的 57148 监听（NWListener `requiredInterfaceType = .loopback`），隧道连接与同网 resume 共用配对加密握手链（只接受已配对设备的 resume，首次配对必须同网）；同网 resume 把 `tailnetEndpoint` 随 MacResumeHello 下发持久化进手机钥匙串，出门零操作；手机端 LAN 优先、6 秒无结果或蜂窝 ENETDOWN 立即转 tailnet 兜底。G5 真机验收通过（2026-09-09：蜂窝异地通道连接、目录、启动请求、Mac 端确认、回执全链路）。排查记录：真机一度运行不含 M2a 代码的旧构建导致隧道"静默未就绪"假象——已补齐隧道三个失败分支的 pairing 诊断日志。M2b（最小状态反馈：手机可见工具运行状态与退出码，不见命令与输出）与 G5 剩余项（设备撤销异地复核、异常路径）随后续提交推进。
+
 ### 阶段 6：M3 — 远程允许窗口与任务策略成熟化
 
 **目标。** 在用户明确需要时，降低受限远程任务的确认摩擦。
