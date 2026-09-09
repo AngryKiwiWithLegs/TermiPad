@@ -133,8 +133,16 @@ final class CompanionPairingClient: ObservableObject {
     }
 
     private func fallbackToTailnet(endpoint: String) {
-        guard !lanConnectStarted, case .browsing = phase else { return }
-        Self.diag("LAN 浏览 6 秒无结果，改走异地 tailnet \(endpoint)")
+        // 唯一前置条件：LAN 尚未连上（lanConnectStarted 仅在 LAN TCP ready
+        // 时置真）且 tailnet 不在途。不按 phase 判——.waiting 触发的立即转
+        // 路径此刻 phase 已是 .connecting，按 browsing 判会永远挡掉拨号
+        // （2026-09-09 实测：日志触发两次但一次都没拨出去）。
+        guard !lanConnectStarted, !tailnetAttemptInFlight else { return }
+        Self.diag("LAN 不可用，改走异地 tailnet \(endpoint)")
+        tailnetFallbackWorkItem?.cancel()
+        tailnetFallbackWorkItem = nil
+        browseTimeoutWorkItem?.cancel()
+        browseTimeoutWorkItem = nil
         browser?.cancel()
         browser = nil
         tailnetAttemptInFlight = true
@@ -303,6 +311,17 @@ final class CompanionPairingClient: ObservableObject {
                 case .failed(let error):
                     self.stopConnection()
                     self.phase = .failed(error.localizedDescription)
+                case .waiting(let error):
+                    // POSIX 50（Network is down）= 当前接口无网（如关 Wi-Fi 后
+                    // 蜂窝未接管/VPN 未活跃）。LAN 已死——立即转 tailnet 兜底，
+                    // 不再等 6 秒定时器（此前 browse 缓存会伪装出结果，
+                    // lanConnectStarted 挡掉兜底守卫）。
+                    if !self.tailnetAttemptInFlight, Self.isNetworkDown(error),
+                       let endpoint = self.currentCredentials?.tailnetEndpoint, !endpoint.isEmpty {
+                        Self.diag("LAN 接口无网（\(error.localizedDescription)），立即转异地 tailnet")
+                        self.stopConnection()
+                        self.fallbackToTailnet(endpoint: endpoint)
+                    }
                 default:
                     break
                 }
@@ -677,6 +696,13 @@ final class CompanionPairingClient: ObservableObject {
     /// UI 用：钥匙串里是否存有异地端点（browsing 文案与失败文案据此分流）。
     var hasTailnetEndpoint: Bool {
         !(currentCredentials?.tailnetEndpoint ?? "").isEmpty
+    }
+
+    /// POSIX 50（ENETDOWN）：接口无网。iOS 上常见于关 Wi-Fi 后蜂窝/VPN
+    /// 未接管流量的窗口期——是"LAN 已死"的可靠信号。
+    private static func isNetworkDown(_ error: NWError) -> Bool {
+        if case .posix(let code) = error, code == .ENETDOWN { return true }
+        return false
     }
 
     private var currentDiscoveredMac: DiscoveredMac? {
