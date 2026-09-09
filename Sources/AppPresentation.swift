@@ -107,7 +107,14 @@ enum AppCopy {
             "mobileCompanionDeviceName": "设备名", "mobileCompanionRevoke": "撤销该设备", "mobileCompanionNoPairedDevices": "尚未配对任何设备。",
             "mobileCompanionListening": "正在配对模式", "mobileCompanionOff": "未启动", "mobileCompanionFailed": "配对服务错误：%@",
             "mobileLaunchPromptTitle": "手机启动请求", "mobileLaunchPromptBody": "已配对设备请求启动工具「%@」。仅在你本机确认后才会交给终端。",
-            "mobileLaunchPromptAccept": "启动", "mobileLaunchPromptDeny": "拒绝"
+            "mobileLaunchPromptAccept": "启动", "mobileLaunchPromptDeny": "拒绝",
+            // M2a 异地隧道（docs/m2-secure-remote-session-design.md）
+            "mobileTunnel": "异地访问（M2a，需要 Tailscale）",
+            "mobileTunnelHint": "默认关闭。开启后 TermiPad 在你的私有 Tailscale 网络（tailnet）内暴露启动通道，手机在外网也能发起启动请求；公网不可达，命令与输出永不下发。需要 Mac 与 iPhone 都安装并登录 Tailscale。",
+            "mobileTunnelOff": "已关闭——手机仅在同一个 Wi-Fi 内可用。",
+            "mobileTunnelDetecting": "正在检测 Tailscale…",
+            "mobileTunnelReady": "已就绪：%@（仅你的 tailnet 内可访问）",
+            "mobileTunnelFailed": "启动失败：%@"
         ]
         let english: [String: String] = [
             "allTools": "All Tools", "inbox": "Review Inbox", "favorites": "Favorites", "recent": "Recent", "hidden": "Hidden", "categories": "Categories", "toolLibrary": "Library", "settings": "Settings",
@@ -155,7 +162,14 @@ enum AppCopy {
             "mobileCompanionDeviceName": "Device", "mobileCompanionRevoke": "Revoke this device", "mobileCompanionNoPairedDevices": "No paired devices yet.",
             "mobileCompanionListening": "Pairing mode active", "mobileCompanionOff": "Not started", "mobileCompanionFailed": "Pairing service error: %@",
             "mobileLaunchPromptTitle": "Mobile Launch Request", "mobileLaunchPromptBody": "A paired device requests launching “%@”. It reaches your terminal only after you confirm here.",
-            "mobileLaunchPromptAccept": "Launch", "mobileLaunchPromptDeny": "Deny"
+            "mobileLaunchPromptAccept": "Launch", "mobileLaunchPromptDeny": "Deny",
+            // M2a remote tunnel (docs/m2-secure-remote-session-design.md)
+            "mobileTunnel": "Remote Access (M2a, requires Tailscale)",
+            "mobileTunnelHint": "Off by default. When enabled, TermiPad exposes its launch channel only inside your private Tailscale network (tailnet) so the phone can send launch requests away from home. Never reachable from the public internet; commands and output never leave the Mac. Both the Mac and the iPhone need Tailscale installed and signed in.",
+            "mobileTunnelOff": "Off — the phone can only connect on the same Wi-Fi.",
+            "mobileTunnelDetecting": "Detecting Tailscale…",
+            "mobileTunnelReady": "Ready: %@ (reachable from your tailnet only)",
+            "mobileTunnelFailed": "Failed to start: %@"
         ]
         let table = language == .simplifiedChinese ? chinese : english
         return table[key] ?? key

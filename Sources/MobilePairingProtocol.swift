@@ -85,6 +85,19 @@ struct MobileLaunchResponse: Codable, Sendable, Equatable {
     let reason: String?
 }
 
+/// 手机端持久化凭据（原 CompanionApp 私有类型，M2a 迁入共享协议层——
+/// Mac 测试可锁其编解码兼容性，两端单一事实源；iOS 端 Keychain 存储不变）。
+/// `tailnetEndpoint`（M2a）：同网 resume 时由 MacResumeHello 下发并持久化，
+/// 供异地直连 "100.x.x.x:57147"。可 Optional + 合成 Codable 对 Optional 用
+/// decodeIfPresent——旧凭据 JSON 无此键也能解码（恢复兼容红线，测试锁）。
+struct CompanionPairingCredentials: Codable, Sendable, Equatable {
+    let deviceID: UUID
+    let macPublicKey: Data
+    let macFingerprint: String
+    let deviceName: String
+    var tailnetEndpoint: String? = nil
+}
+
 /// 4 字节大端长度前缀帧编解码。纯逻辑——分包/粘包由测试覆盖；
 /// 网络层只做"收字节进缓冲、解出一帧、发一帧"。
 enum MobilePairingFrame {
@@ -134,6 +147,9 @@ extension MobilePairingCrypto {
     /// M1 监听固定端口（Mac 端监听用它；手机端从实例名还原直连地址时拼端口）。
     /// 跨端共享故放协议层。
     static let listenerPort: UInt16 = 57146
+    /// M2a 异地隧道监听固定端口（Mac 回环监听 + tailscale serve TCP 转发；
+    /// 与 M1 的 57146 独立——两条路径互不干扰、可独立开关、故障域隔离）。
+    static let tunnelListenerPort: UInt16 = 57147
 
     static func bonjourTXTRecord(fingerprint: String) -> [String: String] {
         [
@@ -236,10 +252,15 @@ enum MobilePairingHandshake {
     }
 
     /// Mac 回给已配对手机的明文 hello（公钥与 nonce 非机密；后续全部帧走 AEAD）。
+    /// M2a 增补：`tailnetEndpoint` 仅当 Mac 端开启"异地访问"时非 nil
+    /// （"100.x.x.x:57147"）。明文可接受——tailnet IP 的机密性由 tailnet
+    /// 成员资格天然保障，非成员路由不到 100.64/10；连接仍需应用层配对双通过。
+    /// 旧 Mac 不发此字段（解码得 nil）；旧手机忽略未知键——双向兼容。
     struct MacResumeHello: Codable, Sendable, Equatable {
         let protocolVersion: String
         let macPublicKey: Data
         let macNonce: Data
+        var tailnetEndpoint: String? = nil
     }
 
     /// Mac 收到的第一个 hello 的分流结果。
