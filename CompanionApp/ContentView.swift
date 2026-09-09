@@ -48,7 +48,9 @@ struct ContentView: View {
             case .browsing:
                 HStack {
                     ProgressView()
-                    Text("正在搜索同一 Wi-Fi 下的 Mac…")
+                    Text(client.hasTailnetEndpoint
+                        ? "正在搜索同一 Wi-Fi 下的 Mac…（若无结果，约 6 秒后自动改走异地通道）"
+                        : "正在搜索同一 Wi-Fi 下的 Mac…")
                         .foregroundStyle(.secondary)
                 }
             case .connecting(let mac):

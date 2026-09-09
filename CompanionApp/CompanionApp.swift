@@ -674,6 +674,11 @@ final class CompanionPairingClient: ObservableObject {
         return CompanionPairingStore.loadCredentials()
     }
 
+    /// UI 用：钥匙串里是否存有异地端点（browsing 文案与失败文案据此分流）。
+    var hasTailnetEndpoint: Bool {
+        !(currentCredentials?.tailnetEndpoint ?? "").isEmpty
+    }
+
     private var currentDiscoveredMac: DiscoveredMac? {
         if case .connecting(let mac) = phase { return mac }
         // resume 流程在 .awaitingAck 阶段就要发 listTools——此前用 capturedServiceName。
