@@ -39,6 +39,11 @@ final class TailnetTunnelService: ObservableObject {
 
     static let shared = TailnetTunnelService()
     static let tunnelListenerPort: UInt16 = MobilePairingCrypto.tunnelListenerPort
+    /// 回环后端端口（Mac 本机内部）。tailscaled 的 serve 前端占着 tailnet 侧
+    /// 57147 时，内核拒绝同端口号的回环绑定（EADDRINUSE，实测复现）——
+    /// OpenClaw 同款解法：前端与后端用不同端口，serve 把 tailnet:57147
+    /// 转发到 127.0.0.1:57148。手机端只见 57147，后端端口不出 Mac。
+    static let loopbackBackendPort: UInt16 = 57148
     /// 用户偏好持久化键：开启后 app 每次启动自动恢复隧道（异地能力是常驻
     /// 基础设施，不像配对模式那样需要屏显配对码）。
     static let enabledDefaultsKey = "TermiPad.mobileTailnetTunnelEnabled"
@@ -80,8 +85,8 @@ final class TailnetTunnelService: ObservableObject {
     func enable() {
         guard loopbackListener == nil, state != .detecting else { return }
         state = .detecting
-        Task.detached(priority: .userInitiated) { [port = Self.tunnelListenerPort] in
-            let result = Self.configureServe(port: port)
+        Task.detached(priority: .userInitiated) { [port = Self.tunnelListenerPort, backend = Self.loopbackBackendPort] in
+            let result = Self.configureServe(port: port, backendPort: backend)
             await MainActor.run { self.finishEnable(result: result, port: port) }
         }
     }
@@ -111,20 +116,24 @@ final class TailnetTunnelService: ObservableObject {
         case .cliError(let message):
             state = .failed("Tailscale 配置失败：\(message)")
         case .configured(let endpoint):
-            startLoopbackListener(port: port, endpoint: endpoint)
+            startLoopbackListener(port: Self.loopbackBackendPort, endpoint: endpoint)
         }
     }
 
     private func startLoopbackListener(port: UInt16, endpoint: String) {
         let parameters = NWParameters.tcp
-        // 仅绑回环：该端口对局域网/公网/其他虚拟网卡不可见，只有 tailscaled
+        // 仅绑回环接口：该端口对局域网/公网/其他虚拟网卡不可见，只有 tailscaled
         // 的 serve 转发能到达——红线"不开公网端口"的最强形态。
-        parameters.requiredLocalEndpoint = NWEndpoint.hostPort(
-            host: NWEndpoint.Host("127.0.0.1"),
-            port: NWEndpoint.Port(rawValue: port)!)
+        // 注意：requiredLocalEndpoint 只作用于出站连接，对 NWListener 的监听
+        // 绑定**无效**（曾导致"状态就绪但端口根本没绑上"）；监听绑定必须用
+        // requiredInterfaceType = .loopback（2026-09-08 实测：自连成功）。
+        parameters.requiredInterfaceType = .loopback
+        // 快速 关→开 时旧 socket 尚在 TIME_WAIT（M1 同款坑）：不设复用会报
+        // "地址已被使用"，表现为第二次打开开关必失败。
+        parameters.allowLocalEndpointReuse = true
         let listener: NWListener
         do {
-            listener = try NWListener(using: parameters)
+            listener = try NWListener(using: parameters, on: NWEndpoint.Port(rawValue: port)!)
         } catch {
             state = .failed("本地监听启动失败：\(error.localizedDescription)")
             return
@@ -133,6 +142,7 @@ final class TailnetTunnelService: ObservableObject {
             guard let self else { return }
             Task { @MainActor in
                 if case .failed(let error) = newState {
+                    MobilePairingService.diagMac("隧道监听失败：\(error.localizedDescription)")
                     self.stopLoopbackListener()
                     Self.endpointHolder.set(nil)
                     self.state = .failed("隧道监听错误：\(error.localizedDescription)")
@@ -173,12 +183,12 @@ final class TailnetTunnelService: ObservableObject {
 
     /// 顺序：serve 配置转发 → tailscale ip -4 取端点。任何一步失败即放弃
     /// （UI 显式报错，不静默降级）。
-    nonisolated private static func configureServe(port: UInt16) -> ServeConfigResult {
+    nonisolated private static func configureServe(port: UInt16, backendPort: UInt16) -> ServeConfigResult {
         guard let binary = resolveCLIBinary() else {
             return .binaryNotFound
         }
-        guard let serveOutput = runFixedCLI(
-            arguments: ["serve", "--bg", "--tcp=\(port)", "tcp://127.0.0.1:\(port)"]) else {
+        guard runFixedCLI(
+            arguments: ["serve", "--bg", "--tcp=\(port)", "tcp://127.0.0.1:\(backendPort)"]) != nil else {
             return .cliError("serve 转发配置未成功（确认 Tailscale 已登录）")
         }
         // serve 成功输出含端点行；再取本机 tailnet IPv4 拼"IP:port"。
@@ -190,7 +200,6 @@ final class TailnetTunnelService: ObservableObject {
               !tailnetIP.isEmpty else {
             return .cliError("无法读取 tailnet IP（确认 Tailscale 已连接）")
         }
-        _ = serveOutput
         return .configured(endpoint: "\(tailnetIP):\(port)")
     }
 
