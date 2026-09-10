@@ -67,4 +67,26 @@ final class MobileTheftDefenseTests: XCTestCase {
         limiter.reset()
         XCTAssertTrue(limiter.allow(now: base))
     }
+
+    // MARK: - 续命节流闸（防线 2 配套：每天最多写一次 Keychain）
+
+    func testRenewalGateAllowsOncePerDayPerDevice() {
+        let gate = MobilePairingService.RenewalGate()
+        let device = UUID()
+        let base = Date()
+        XCTAssertTrue(gate.shouldRenew(deviceID: device, lastRenewedAt: nil, now: base))
+        // 同天再连（3 秒轮询场景）——不放行，不写 Keychain。
+        XCTAssertFalse(gate.shouldRenew(deviceID: device, lastRenewedAt: base, now: base.addingTimeInterval(3)))
+        XCTAssertFalse(gate.shouldRenew(deviceID: device, lastRenewedAt: base, now: base.addingTimeInterval(3600)))
+        // 24 小时后——放行。
+        XCTAssertTrue(gate.shouldRenew(deviceID: device, lastRenewedAt: base, now: base.addingTimeInterval(24 * 3600 + 1)))
+    }
+
+    func testRenewalGateIsPerDevice() {
+        let gate = MobilePairingService.RenewalGate()
+        let base = Date()
+        XCTAssertTrue(gate.shouldRenew(deviceID: UUID(), lastRenewedAt: nil, now: base))
+        // 另一台设备不受影响。
+        XCTAssertTrue(gate.shouldRenew(deviceID: UUID(), lastRenewedAt: nil, now: base))
+    }
 }
