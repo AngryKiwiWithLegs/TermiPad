@@ -14,6 +14,40 @@ final class MobilePairingService: ObservableObject {
     /// M1 监听固定端口。固定端口让 TXT 在 listener 启动前就能带上完整地址，
     /// 手机可绕开 Bonjour 服务解析（iOS 26 对 .service 端点解析会卡 preparing）直连。
     nonisolated static let listenerPort: UInt16 = MobilePairingCrypto.listenerPort
+    /// M2b 防线 2：配对凭据最长寿命（30 天）——偷手机的人拿到的钥匙
+    /// 最多活 30 天；正常用户任一次成功 resume 即续命（pairedAt 刷新）。
+    nonisolated static let pairingCredentialLifetime: TimeInterval = 30 * 24 * 3600
+
+    /// M2b 防线 3：写操作滑动窗口限速器（每分钟 ≤10 次）。NSLock 保护——
+    /// 握手在非主线程队列跑；测试可注入 now/isAllowed 窗口参数。
+    final class WriteRateLimiter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var timestamps: [Date] = []
+        private let window: TimeInterval
+        private let maxCount: Int
+
+        init(window: TimeInterval = 60, maxCount: Int = 10) {
+            self.window = window
+            self.maxCount = maxCount
+        }
+
+        func allow(now: Date = Date()) -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            timestamps.removeAll { now.timeIntervalSince($0) > window }
+            guard timestamps.count < maxCount else { return false }
+            timestamps.append(now)
+            return true
+        }
+
+        func reset() {
+            lock.lock()
+            timestamps.removeAll()
+            lock.unlock()
+        }
+    }
+
+    nonisolated private static let rateLimiter = WriteRateLimiter()
 
     /// 枚举 en* 接口上的第一个私有 IPv4（192.168/10./172.16-31）。
     /// 不用 Process、不依赖 shell——getifaddrs 是 libc 级系统调用。
@@ -409,6 +443,20 @@ final class MobilePairingService: ObservableObject {
                 diagMac("resume 拒绝：公钥指纹不匹配")
                 throw MobilePairingError.handshakeFailed
             }
+            // M2b 防线 2（设计 §4）：配对凭据 30 天时效——超龄拒绝 resume，
+            // 手机需回同网重新配对。正常用户任一次成功 resume 即续命。
+            guard Date().timeIntervalSince(record.pairedAt) <= Self.pairingCredentialLifetime else {
+                diagMac("resume 拒绝：配对已超 30 天时效 \(record.displayName)")
+                throw MobilePairingError.handshakeFailed
+            }
+            // M2b 防线 2 续命：成功 resume 即刷新 pairedAt（30 天窗从最近一次
+            // 连接重新起算）。记录写回 Keychain 不上主线程（同 init 纪律）。
+            let deviceID = record.id
+            let storeRef = store
+            Task.detached(priority: .utility) {
+                try? PairedDeviceStore.markConnected(
+                    id: deviceID, at: Date(), store: storeRef)
+            }
             let sessionKeyData = try MobilePairingHandshake.deriveResumeSessionKey(
                 hello, identity: identity, macNonce: macNonce)
             // M2a：隧道开启时随 MacResumeHello 下发异地端点（同网引导异地，
@@ -446,6 +494,24 @@ final class MobilePairingService: ObservableObject {
             return
         }
         diagMac("收到请求 op=\(request.operation.rawValue) toolID=\(request.toolID?.uuidString ?? "nil")")
+        // M2b 防线 3（设计 §4）：写操作速率限制——每设备每分钟 ≤10 次
+        // （提交+启动合计）。超限回固定文案（防自动化滥用，丢手机攻击者
+        // 无法高频试探）。只读操作与心跳不限。
+        switch request.operation {
+        case .requestLaunch, .requestTaskProposal, .cancelTask:
+            guard rateLimiter.allow() else {
+                diagMac("速率限制：写操作超过每分钟 10 次")
+                Task { @MainActor in
+                    Self.sendSealed(
+                        MobileTaskProposalResponse(
+                            status: .rejected, reason: "请求过于频繁，请稍后再试。", taskIntentID: nil),
+                        on: connection, using: key)
+                }
+                return
+            }
+        default:
+            break
+        }
         switch request.operation {
         case .listTools:
             Task { @MainActor in

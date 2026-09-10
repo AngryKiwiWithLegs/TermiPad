@@ -262,6 +262,12 @@ swift_source_guard() {
     echo '检测到 Mac 端引入 NWBrowser——浏览器仅属于 iOS 伴侣 app。' >&2
     return 1
   fi
+  # M2b 防线 1（设计 §7）：LocalAuthentication 只允许 iOS 伴侣 app——
+  # Mac 端不引入生物识别依赖。
+  if grep -RInE 'import LocalAuthentication|LAContext' Sources; then
+    echo '检测到 Mac 端引入 LocalAuthentication——App 锁仅属于 iOS 伴侣 app。' >&2
+    return 1
+  fi
   # iOS Info.plist 必填：缺 NSLocalNetworkUsageDescription 或 NSBonjourServices 则本地发现会被静默杀。
   if ! grep -qF 'NSLocalNetworkUsageDescription' CompanionApp/Info.plist \
      || ! grep -qF '_termipad-m1._tcp' CompanionApp/Info.plist; then

@@ -59,7 +59,16 @@ enum KeychainStore {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+            // M2b 防线 1（设计 §4）：iOS 端配对凭据只在解锁状态下可读且
+            // 不随备份迁移到新设备（偷手机者刷机/换机拿不到凭据）；Mac 端
+            // 维持 AfterFirstUnlock（桌面无生物识别解锁约束的场景）。
+            kSecAttrAccessible as String: {
+                #if os(iOS)
+                kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+                #else
+                kSecAttrAccessibleAfterFirstUnlock
+                #endif
+            }()
         ]
     }
 }
