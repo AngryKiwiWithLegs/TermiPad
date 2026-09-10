@@ -219,18 +219,17 @@ final class CompanionPairingClient: ObservableObject {
         browser.browseResultsChangedHandler = { [weak self] results, _ in
             Self.diag("browse results=\(results.count) metadata=\(results.first?.metadata)")
             guard let self else { return }
-            guard let first = results.first,
-                  case .service(let name, _, _, _) = first.endpoint else { return }
-            // iOS 26 的 browse 结果不带 TXT（metadata 恒为 .none）；.service 端点
-            // 解析会卡 preparing。Mac 端把 LAN 地址编码进实例名
-            // （TermiPad-192-168-2-81），这里直接从名字还原 IP 直连。
-            guard let directAddress = Self.directAddress(fromServiceName: name) else {
-                Self.diag("实例名无 LAN 地址（\(name)）——等待 Mac 端重新开启配对广播")
-                return
+            // 竞态守卫（2026-09-10）：指纹确认与等待 ack 阶段忽略新 browse
+            // 结果——重连会覆盖 pendingMacHello/pendingIdentity/pendingNonce，
+            // 用户随后提交的配对将混用两轮连接的密钥材料（真机实测：Mac 端
+            // 「配对接受」与手机端解密失败同秒出现，即此竞态）。phase 是
+            // MainActor 隔离属性——闭包在 queue 上跑，经主线程读。
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if case .verifyFingerprint = self.phase { return }
+                if case .awaitingAck = self.phase { return }
+                self.handleBrowseResults(results)
             }
-            Self.diag("从实例名还原直连地址 \(directAddress)")
-            let finalAddress = directAddress
-            Task { @MainActor in self.connect(to: name, directAddress: finalAddress) }
         }
         browser.stateUpdateHandler = { [weak self] newState in
             Self.diag("browser state=\(newState)")
@@ -251,6 +250,21 @@ final class CompanionPairingClient: ObservableObject {
         tailnetAttemptInFlight = false
         scheduleTailnetFallbackIfNeeded()
         scheduleBrowseTimeout()
+    }
+
+    /// browse 结果的主线程处理（2026-09-10 从闭包抽出——闭包在 queue 上跑，
+    /// phase 检查必须回 MainActor）。iOS 26 的 browse 结果不带 TXT（metadata
+    /// 恒为 .none）；.service 端点解析会卡 preparing。Mac 端把 LAN 地址编码进
+    /// 实例名（TermiPad-192-168-2-81），这里直接从名字还原 IP 直连。
+    private func handleBrowseResults(_ results: Set<NWBrowser.Result>) {
+        guard let first = results.first,
+              case .service(let name, _, _, _) = first.endpoint else { return }
+        guard let directAddress = Self.directAddress(fromServiceName: name) else {
+            Self.diag("实例名无 LAN 地址（\(name)）——等待 Mac 端重新开启配对广播")
+            return
+        }
+        Self.diag("从实例名还原直连地址 \(directAddress)")
+        connect(to: name, directAddress: directAddress)
     }
 
     /// M2a 连接编排（docs/m2-secure-remote-session-design.md §3）：
@@ -580,6 +594,12 @@ final class CompanionPairingClient: ObservableObject {
     }
 
     private func handlePairingAck(_ data: Data?) {
+        Self.diag("收到配对 ack：\(data?.count ?? 0) 字节")
+        // 竞态守卫：输码期间浏览回调可能重开连接覆盖 pending 状态——旧连接
+        // 的 ack 到达时 pendingMacHello 已不是它的 MacHello（nonce 不匹配
+        // → 派生密钥不同 → 解密必然失败，2026-09-10 真机实例）。待确认的
+        // ack 只属于发起它的那次连接：awaitingAck 阶段收到新 browse 结果
+        // 直接忽略（下面 browse handler 同步拦截）。
         guard let data,
               let macHello = pendingMacHello,
               let identity = pendingIdentity,
@@ -614,6 +634,17 @@ final class CompanionPairingClient: ObservableObject {
             stopConnection()
             phase = .paired(credentials: credentials)
         } catch {
+            // 2026-09-10 真机排查：Mac 端「配对接受」与手机端解密失败同秒发生
+            // ——两端派生了不同会话密钥。打出派生输入摘要与两端比对（nonce/
+            // 公钥均为公开材料，安全）。诊断期间临时打 pairingCode 是核对传输
+            // 一致性的最小手段（同网人工比对场景下码本就屏显）。
+            func hexPrefix(_ data: Data, _ count: Int) -> String {
+                data.prefix(count).map { String(format: "%02x", $0) }.joined()
+            }
+            let phonePubHex = ((try? identity.publicKeyData()) ?? Data()).prefix(6)
+                .map { String(format: "%02x", $0) }.joined()
+            Self.diag("ack 校验失败：\(error.localizedDescription)")
+            Self.diag("派生输入摘要：macPub=\(hexPrefix(macHello.macPublicKey, 6)) macNonce=\(hexPrefix(macHello.macNonce, 4)) phoneNonce=\(hexPrefix(phoneNonce, 4)) code=\(code) phonePub=\(phonePubHex)")
             phase = .failed("配对结果校验失败：Mac 身份或配对码不一致。")
             stopConnection()
         }
