@@ -399,13 +399,20 @@ final class CompanionPairingClient: ObservableObject {
     /// 目录数据（listScopes / listFixedTasks 结果）——仅内存。
     @Published private(set) var consoleScopes: [MobileScopeSummary] = []
     @Published private(set) var consoleFixedTasks: [MobileFixedTaskSummary] = []
+    /// 目录拉取进行中（UI 显示进度条——2026-09-10 用户反馈"长时间无响应"
+    /// 无任何视觉反馈）。
+    @Published private(set) var isFetchingCatalog = false
     /// 非 nil 时 resume 后发 requestTaskProposal（kind + scopeID）。
     private var pendingTaskProposal: (kind: String, scopeID: UUID, title: String)?
 
     /// 打开"新任务"页：拉 scopes + fixedTasks 两轮目录。
+    /// 走 LAN 优先 → tailnet 兜底的完整编排（2026-09-10 用户反馈：直接
+    /// 连 tailnet 伪服务名在同 Wi-Fi 下可能不通且无兜底——长时间无响应）。
     func openNewTaskForm() {
+        stopAll()
         pendingCatalogRequests = 2
-        connectAndRequest(operation: .listScopes)
+        isFetchingCatalog = true
+        startBrowsingInternal()
     }
 
     /// 目录轮次：listScopes 回来后接着拉 listFixedTasks（一连接一请求）。
@@ -421,17 +428,23 @@ final class CompanionPairingClient: ObservableObject {
     /// 任务提交回执 → 会话页直接看状态（轮询里能看到该任务）。
     @Published private(set) var lastTaskProposalResult: MobileTaskProposalResponse?
 
-    /// 通用"连接→resume→发指定操作"入口（新任务表单的目录拉取用）。
-    private func connectAndRequest(operation: PairedDeviceOperation) {
-        guard let credentials = currentCredentials else {
-            phase = .noCredentials
-            return
-        }
-        nextCatalogOperation = operation
-        connect(to: Self.tailnetServiceName, directAddress: credentials.tailnetEndpoint)
+    /// 目录拉取第二轮（listFixedTasks）的再连接入口——新一轮走完整浏览
+    /// 编排（LAN 优先 → tailnet 兜底），不直连 tailnet（同 Wi-Fi 下 utun
+    /// 可能不可达且无兜底——2026-09-10 用户实测"长时间无响应"）。
+    private func fetchNextCatalogRound() {
+        guard pendingCatalogRequests > 0 else { return }
+        startBrowsingInternal()
     }
 
-    private var nextCatalogOperation: PairedDeviceOperation?
+    /// 目录拉取的"本轮要发什么"：pendingCatalogRequests==2 → listScopes
+    /// （首轮），==1 → listFixedTasks（第二轮）。与轮次计数同源，不会串轮。
+    private var pendingCatalogOperation: PairedDeviceOperation? {
+        switch pendingCatalogRequests {
+        case 2: return .listScopes
+        case 1: return .listFixedTasks
+        default: return nil
+        }
+    }
 
     /// 解除配对——清空 Keychain，回到首次配对。
     func unpair() {
@@ -712,8 +725,8 @@ final class CompanionPairingClient: ObservableObject {
                 request = MobilePairingRequest(
                     operation: .requestTaskProposal, requestID: UUID(), toolID: nil,
                     taskKind: proposal.kind, projectScopeID: proposal.scopeID)
-            } else if let catalog = nextCatalogOperation {
-                Self.diag("MacResumeHello 校验通过，发 \(catalog.rawValue)（目录拉取）")
+            } else if let catalog = pendingCatalogOperation {
+                Self.diag("MacResumeHello 校验通过，发 \(catalog.rawValue)（目录拉取，剩 \(pendingCatalogRequests) 轮）")
                 request = MobilePairingRequest(operation: catalog, requestID: UUID(), toolID: nil)
             } else if pendingConsoleRequest {
                 Self.diag("MacResumeHello 校验通过，发 getTaskStatus（会话轮询）")
@@ -766,29 +779,34 @@ final class CompanionPairingClient: ObservableObject {
             return
         }
         // 新任务表单目录拉取（listScopes → listFixedTasks 两轮）与任务提交回执。
-        if let catalog = nextCatalogOperation {
-            nextCatalogOperation = nil
+        // 轮次判断：pendingCatalogRequests==2 是本轮 scopes，==1 是本轮 tasks。
+        if pendingCatalogRequests > 0 {
             do {
-                switch catalog {
-                case .listScopes:
+                switch pendingCatalogRequests {
+                case 2:
                     let scopes = try MobilePairingEnvelope.openScopeSummaries(data, using: key)
                     Self.diag("范围目录 count=\(scopes.count)")
                     consoleScopes = scopes
-                case .listFixedTasks:
+                    pendingCatalogRequests = 1
+                    stopConnection()
+                    // 第二轮走完整浏览编排（LAN 优先 → tailnet 兜底）。
+                    fetchNextCatalogRound()
+                case 1:
                     let tasks = try MobilePairingEnvelope.openFixedTaskSummaries(data, using: key)
                     Self.diag("固定任务目录 count=\(tasks.count)")
                     consoleFixedTasks = tasks
+                    pendingCatalogRequests = 0
+                    isFetchingCatalog = false
+                    stopConnection()
                 default:
-                    break
-                }
-                stopConnection()
-                // 下一轮目录：scopes 到了就拉 fixedTasks。
-                if pendingCatalogRequests > 1 {
-                    pendingCatalogRequests -= 1
-                    connectAndRequest(operation: .listFixedTasks)
+                    pendingCatalogRequests = 0
+                    isFetchingCatalog = false
+                    stopConnection()
                 }
             } catch {
                 Self.diag("目录拉取解密失败")
+                pendingCatalogRequests = 0
+                isFetchingCatalog = false
                 stopConnection()
             }
             return
@@ -975,8 +993,8 @@ final class CompanionPairingClient: ObservableObject {
         pendingLaunchRequest = nil
         pendingConsoleRequest = false
         pendingTaskProposal = nil
-        nextCatalogOperation = nil
         pendingCatalogRequests = 0
+        isFetchingCatalog = false
     }
 
     private func refreshFromKeychain() {
