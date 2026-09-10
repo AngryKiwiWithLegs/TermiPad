@@ -443,7 +443,27 @@ final class MobilePairingService: ObservableObject {
                     return
                 }
                 await Self.handleLaunchRequest(
-                    toolID: toolID, connection: connection, sessionKey: key)
+                    toolID: toolID, requestID: request.requestID, connection: connection, sessionKey: key)
+            }
+        case .listScopes:
+            Task { @MainActor in
+                let summaries = Self.sharedModelContext.map {
+                    MobileTaskConsoleService.shared.scopeSummaries(modelContext: $0)
+                } ?? []
+                Self.sendSealed(summaries, on: connection, using: key)
+            }
+        case .listFixedTasks:
+            Task { @MainActor in
+                let language = AppLanguage(
+                    rawValue: UserDefaults.standard.string(forKey: "TermiPad.language") ?? ""
+                ) ?? .simplifiedChinese
+                let summaries = MobileTaskConsoleService.shared.fixedTaskSummaries(language: language)
+                Self.sendSealed(summaries, on: connection, using: key)
+            }
+        case .getTaskStatus:
+            Task { @MainActor in
+                let entries = MobileTaskConsoleService.shared.sessionEntries()
+                Self.sendSealed(entries, on: connection, using: key)
             }
         default:
             // 其余操作按设计文档节奏逐个启用；未启用即拒绝并断开。
@@ -451,11 +471,29 @@ final class MobilePairingService: ObservableObject {
         }
     }
 
+    /// 通用加密回帧：任务会话三个只读操作的回传出口（数据面结构各不相同，
+    /// 统一走 AEAD 信封 + 既有帧格式）。
+    @MainActor
+    private static func sendSealed(
+        _ value: some Encodable,
+        on connection: NWConnection,
+        using key: SymmetricKey
+    ) {
+        guard let sealed = try? MobilePairingEnvelope.seal(value, using: key) else {
+            connection.cancel()
+            return
+        }
+        connection.send(content: MobilePairingFrame.encode(sealed), completion: .contentProcessed { _ in
+            connection.cancel()
+        })
+    }
+
     /// §3.3.2 启动请求执行链（顺序不可交换）：
     /// 资格预检 → 本机确认（60s 超时=拒绝）→ 经 TerminalLauncher 交接 → 回结果。
     @MainActor
     private static func handleLaunchRequest(
         toolID: UUID,
+        requestID: UUID,
         connection: NWConnection,
         sessionKey: SymmetricKey
     ) async {
@@ -505,11 +543,25 @@ final class MobilePairingService: ObservableObject {
             case .launched(let launchTarget):
                 DiagnosticsStore.shared.record(.launchSucceeded, terminalTarget: launchTarget)
                 tool.lastLaunchedAt = Date()
+                // M2b-1：工具启动事件进手机会话条目流（仅 launched/failed，
+                // 终端交接路径无退出码无输出——红线不变）。
+                MobileTaskConsoleService.shared.recordToolLaunch(
+                    id: requestID,
+                    title: tool.mobileDisplayName ?? tool.name,
+                    succeeded: true)
             default:
                 DiagnosticsStore.shared.record(.launchFailed, terminalTarget: target)
+                MobileTaskConsoleService.shared.recordToolLaunch(
+                    id: requestID,
+                    title: tool.mobileDisplayName ?? tool.name,
+                    succeeded: false)
             }
         } catch {
             DiagnosticsStore.shared.record(.launchFailed, terminalTarget: target)
+            MobileTaskConsoleService.shared.recordToolLaunch(
+                id: requestID,
+                title: tool.mobileDisplayName ?? tool.name,
+                succeeded: false)
         }
         // 4. 结果（启动交接完成即 accepted；是否真的弹出终端由终端侧决定，
         // 与 Mac 上手动启动同一语义）

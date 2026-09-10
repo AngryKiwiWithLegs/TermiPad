@@ -55,6 +55,9 @@ enum DiagnosticEventKind: String, Codable, CaseIterable {
     case remoteTunnelOpened
     /// M2a 异地隧道关闭时记一次。
     case remoteTunnelClosed
+    /// M2b 任务会话：条目流新增/更新（工具启动或任务状态）时记一次。
+    /// 仅时间戳——隐私纪律不记工具名/任务名/设备名。
+    case mobileConsoleEntryRecorded
     case mcpToolListed
     case mcpTaskProposed
     case mcpTaskStatusRead
