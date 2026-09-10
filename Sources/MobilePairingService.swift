@@ -171,75 +171,114 @@ final class MobilePairingService: ObservableObject {
     }
 
     /// 用户开启配对：加载/生成本机身份，屏显配对码与指纹，启动 Bonjour 广播。
+    /// 快速 关→开 的竞态（2026-09-10 用户多次实测"启用配对又出错"）：
+    /// 旧 NWListener.cancel() 是异步的——新 listener 立刻绑 57146 撞上
+    /// 未释放的旧 socket，NWListener 进 .failed(EADDRINUSE) → UI 红字。
+    /// allowLocalEndpointReuse 只解 TIME_WAIT，解不了"旧对象未关完"。
+    /// 解法：绑定失败自动等待重试（3 次 × 1 秒），而非直接报错。
     func startPairing() {
         guard listener == nil else { return }
+        isPairingEnabledIntent = true
         do {
             let identity = try PairedDeviceStore.MobilePairingIdentityStore.loadOrCreate(store: store)
-            let fingerprint = MobilePairingCrypto.fingerprint(forPublicKeyData: try identity.publicKeyData())
-            let pairingCode = MobilePairingCrypto.generatePairingCode()
-            // 锁 Wi-Fi + 固定端口 + TXT 携带 LAN 地址：手机浏览时直接拿到 IP:port
-            // 用 hostPort 直连，绕开 iOS 26 对 .service 端点解析卡 preparing 的问题。
-            let parameters = NWParameters.tcp
-            parameters.requiredInterfaceType = .wifi
-            // 停止→快速重启配对时旧 socket 尚在 TIME_WAIT/异步关闭中，固定端口
-            // 会报"地址已被占用"（UI 显示一串红色错误）。允许本地端点复用，
-            // 这是 M1 固定端口设计的必然配套。
-            parameters.allowLocalEndpointReuse = true
-            let listener = try NWListener(using: parameters, on: NWEndpoint.Port(rawValue: MobilePairingService.listenerPort)!)
-            var txtDictionary = MobilePairingCrypto.bonjourTXTRecord(fingerprint: fingerprint)
-            if let lanAddress = MobilePairingService.lanIPv4Address() {
-                txtDictionary["a"] = lanAddress
-                txtDictionary["p"] = String(MobilePairingService.listenerPort)
-                Self.diagMac("TXT 带 LAN 地址 \(lanAddress):\(MobilePairingService.listenerPort)")
-            } else {
-                Self.diagMac("未找到 LAN IPv4——TXT 无地址，手机走服务端点回退路径")
-            }
-            // 实例名携带 LAN 地址（TermiPad-192-168-2-81）：iOS 26 的手机端浏览
-            // browse 结果不带 TXT（metadata 恒为 .none），.service 解析又卡
-            // preparing。地址编码进实例名是手机端唯一能自取的通道；端口固定
-            // listenerPort。实例名只影响"怎么连上"，身份仍由 MacHello 指纹决定。
-            let serviceName: String
-            if let lanAddress = MobilePairingService.lanIPv4Address() {
-                serviceName = "\(MobilePairingCrypto.bonjourServiceName)-\(lanAddress.replacingOccurrences(of: ".", with: "-"))"
-                Self.diagMac("实例名带 LAN 地址: \(serviceName)")
-            } else {
-                serviceName = MobilePairingCrypto.bonjourServiceName
-                Self.diagMac("未找到 LAN IPv4——退回无地址实例名")
-            }
-            listener.service = NWListener.Service(
-                name: serviceName,
-                type: MobilePairingCrypto.bonjourServiceType,
-                domain: "local.",
-                txtRecord: NWTXTRecord(txtDictionary))
-            listener.stateUpdateHandler = { [weak self] (newState: NWListener.State) in
-                guard let self else { return }
-                Task { @MainActor in
-                    if case .failed(let error) = newState {
-                        self.stopPairingInternal()
-                        self.state = .failed(error.localizedDescription)
-                    }
-                }
-            }
-            listener.newConnectionHandler = { [weak self] (connection: NWConnection) in
-                guard let self else { return }
-                MobilePairingService.beginHandshake(
-                    on: connection,
-                    queue: self.listenerQueue,
-                    identity: identity,
-                    pairingCode: pairingCode,
-                    store: self.store) { result in
-                        Task { @MainActor in self.finishPairing(result) }
-                    }
-            }
-            listener.start(queue: listenerQueue)
-            self.listener = listener
-            state = .listening(pairingCode: pairingCode, fingerprint: fingerprint)
+            attemptStartPairing(identity: identity, attempt: 0)
         } catch {
+            isPairingEnabledIntent = false
+            Self.diagMac("配对开启失败：identity 加载异常 \(error.localizedDescription)")
             state = .failed(error.localizedDescription)
         }
     }
 
+    private func attemptStartPairing(identity: MobilePairingIdentity, attempt: Int) {
+        let fingerprint = MobilePairingCrypto.fingerprint(forPublicKeyData: try! identity.publicKeyData())
+        let pairingCode = MobilePairingCrypto.generatePairingCode()
+        // 锁 Wi-Fi + 固定端口 + TXT 携带 LAN 地址：手机浏览时直接拿到 IP:port
+        // 用 hostPort 直连，绕开 iOS 26 对 .service 端点解析卡 preparing 的问题。
+        let parameters = NWParameters.tcp
+        parameters.requiredInterfaceType = .wifi
+        // 停止→快速重启配对时旧 socket 尚在 TIME_WAIT/异步关闭中，固定端口
+        // 会报"地址已被占用"（UI 显示一串红色错误）。允许本地端点复用，
+        // 这是 M1 固定端口设计的必然配套。
+        parameters.allowLocalEndpointReuse = true
+        let listener: NWListener
+        do {
+            listener = try NWListener(using: parameters, on: NWEndpoint.Port(rawValue: MobilePairingService.listenerPort)!)
+        } catch {
+            // 端口未释放（旧 listener 还在异步关闭）：等待后重试，最多 3 次。
+            if attempt < 3 {
+                Self.diagMac("配对端口暂不可用（第 \(attempt + 1) 次尝试），1 秒后重试")
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    guard let self, self.listener == nil, self.isPairingEnabledIntent else { return }
+                    self.attemptStartPairing(identity: identity, attempt: attempt + 1)
+                }
+                return
+            }
+            Self.diagMac("配对开启失败：端口重试 3 次仍不可用 \(error.localizedDescription)")
+            state = .failed(error.localizedDescription)
+            return
+        }
+        var txtDictionary = MobilePairingCrypto.bonjourTXTRecord(fingerprint: fingerprint)
+        if let lanAddress = MobilePairingService.lanIPv4Address() {
+            txtDictionary["a"] = lanAddress
+            txtDictionary["p"] = String(MobilePairingService.listenerPort)
+            Self.diagMac("TXT 带 LAN 地址 \(lanAddress):\(MobilePairingService.listenerPort)")
+        } else {
+            Self.diagMac("未找到 LAN IPv4——TXT 无地址，手机走服务端点回退路径")
+        }
+        // 实例名携带 LAN 地址（TermiPad-192-168-2-81）：iOS 26 的手机端浏览
+        // browse 结果不带 TXT（metadata 恒为 .none），.service 解析又卡
+        // preparing。地址编码进实例名是手机端唯一能自取的通道；端口固定
+        // listenerPort。实例名只影响"怎么连上"，身份仍由 MacHello 指纹决定。
+        let serviceName: String
+        if let lanAddress = MobilePairingService.lanIPv4Address() {
+            serviceName = "\(MobilePairingCrypto.bonjourServiceName)-\(lanAddress.replacingOccurrences(of: ".", with: "-"))"
+            Self.diagMac("实例名带 LAN 地址: \(serviceName)")
+        } else {
+            serviceName = MobilePairingCrypto.bonjourServiceName
+            Self.diagMac("未找到 LAN IPv4——退回无地址实例名")
+        }
+        listener.service = NWListener.Service(
+            name: serviceName,
+            type: MobilePairingCrypto.bonjourServiceType,
+            domain: "local.",
+            txtRecord: NWTXTRecord(txtDictionary))
+        listener.stateUpdateHandler = { [weak self] (newState: NWListener.State) in
+            guard let self else { return }
+            Task { @MainActor in
+                if case .failed(let error) = newState {
+                    // 运行中失败（非启动绑定失败——那已在 attempt 循环里处理）
+                    // 才报错；期间用户已关开关（listener 已被 stopPairingInternal
+                    // 置空）则静默退出。
+                    guard self.listener === listener else { return }
+                    Self.diagMac("配对监听器运行中失败：\(error.localizedDescription)")
+                    self.stopPairingInternal()
+                    self.state = .failed(error.localizedDescription)
+                }
+            }
+        }
+        listener.newConnectionHandler = { [weak self] (connection: NWConnection) in
+            guard let self else { return }
+            MobilePairingService.beginHandshake(
+                on: connection,
+                queue: self.listenerQueue,
+                identity: identity,
+                pairingCode: pairingCode,
+                store: self.store) { result in
+                    Task { @MainActor in self.finishPairing(result) }
+                }
+        }
+        listener.start(queue: listenerQueue)
+        self.listener = listener
+        state = .listening(pairingCode: pairingCode, fingerprint: fingerprint)
+    }
+
+    /// 用户开启配对的意图标志：attempt 重试期间用户可能已点关闭——重试
+    /// 只在意图仍在时继续。
+    private var isPairingEnabledIntent = false
+
     func stopPairing() {
+        isPairingEnabledIntent = false
         stopPairingInternal()
         state = .off
     }
