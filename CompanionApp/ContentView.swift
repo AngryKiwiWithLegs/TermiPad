@@ -5,55 +5,225 @@ struct ContentView: View {
     // M2b-3 新任务表单的选择状态（本地 UI 状态，不进模型）。
     @State private var selectedScopeID: UUID?
     @State private var selectedTaskKind: String?
+    /// 底部功能页签（2026-09-10 用户反馈：搜索后无返回按钮、各功能互斥
+    /// 只能重启 app 切换）——改成显式页签导航，任何状态都可切换。
+    enum Tab: String, CaseIterable, Identifiable {
+        case tools
+        case console
+        case newTask
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .tools: return "工具目录"
+            case .console: return "任务会话"
+            case .newTask: return "提交新任务"
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .tools: return "square.grid.2x2"
+            case .console: return "list.bullet.rectangle"
+            case .newTask: return "plus.square.on.square"
+            }
+        }
+    }
+    @State private var selectedTab: Tab = .tools
 
     var body: some View {
         NavigationStack {
-            Form {
-                // M2b-1 任务会话页：consoleEntries 非空即显示（数据驱动，
-                // 轮询期间 phase 保持稳定——视图不闪动）。
-                if !client.consoleEntries.isEmpty {
-                    consoleSection
-                }
-                // M2b-3 新任务提交回执。
-                if let result = client.lastTaskProposalResult {
-                    Section {
-                        if result.status == .accepted {
-                            Label("任务已提交，运行状态见上方会话", systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                        } else {
-                            Label(result.reason ?? "任务被拒绝", systemImage: "xmark.circle")
-                                .foregroundStyle(.orange)
-                        }
-                    } header: {
-                        Text("任务提交")
+            VStack(spacing: 0) {
+                // 配对状态/引导常驻顶部（占位小，不抢功能空间）。
+                pairingStatusHeader
+                // 功能页内容。
+                Form {
+                    switch selectedTab {
+                    case .tools:
+                        toolsTab
+                    case .console:
+                        consoleTab
+                    case .newTask:
+                        newTaskTab
                     }
                 }
-                // M2b-3 新任务表单：scopes 与 fixedTasks 目录都到齐后渲染。
-                if !client.consoleScopes.isEmpty && !client.consoleFixedTasks.isEmpty {
-                    newTaskSection
-                }
-                pairingSection
-                if case .paired = client.phase {
-                    Section("已配对 Mac") {
-                        Button("查看任务会话") {
-                            client.openTaskConsole()
-                        }
-                        .accessibilityIdentifier("companion-open-console")
-                        Button("提交新任务") {
-                            client.openNewTaskForm()
-                        }
-                        .accessibilityIdentifier("companion-open-newtask")
-                        Button("刷新工具目录") { client.resumeAndFetchTools() }
-                            .accessibilityIdentifier("companion-resume-fetch")
-                        Button("解除配对", role: .destructive) { client.unpair() }
-                            .accessibilityIdentifier("companion-unpair")
+                // 底部页签：三功能常驻可点，不再依赖 phase 出现/消失。
+                Picker("", selection: $selectedTab) {
+                    ForEach(Tab.allCases) { tab in
+                        Label(tab.title, systemImage: tab.symbol).tag(tab)
                     }
                 }
-                if case .toolSummaries(let summaries) = client.phase {
-                    toolsSection(summaries: summaries)
-                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+                .accessibilityIdentifier("companion-tab-picker")
             }
             .navigationTitle("TermiPad 伴侣")
+        }
+    }
+
+    /// 配对状态条：未配对时给引导，已配对时收成一行（设备名 + 解除配对
+    /// 收进菜单避免误触）。
+    @ViewBuilder
+    private var pairingStatusHeader: some View {
+        switch client.phase {
+        case .noCredentials:
+            VStack(spacing: 6) {
+                Text("尚未配对 Mac。请确认 Mac 端已在『设置 → 手机伴侣 → 启用同网配对』。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("搜索附近的 Mac") { client.startBrowsing() }
+                    .accessibilityIdentifier("companion-start-browsing")
+            }
+            .padding(.vertical, 10)
+        case .browsing, .connecting, .verifyFingerprint, .awaitingAck, .listingTools, .requestingLaunch:
+            pairingSection
+        case .failed(let message):
+            VStack(spacing: 6) {
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.red)
+                    .font(.caption)
+                Button("重新搜索") { client.startBrowsing() }
+            }
+            .padding(.vertical, 10)
+        default:
+            EmptyView()
+        }
+    }
+
+    // MARK: - 工具目录页
+
+    @ViewBuilder
+    private var toolsTab: some View {
+        Section {
+            switch client.phase {
+            case .paired(let credentials):
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("已与 Mac 配对").font(.body.bold())
+                    Text("设备名：\(credentials.deviceName)").font(.caption)
+                    Text("deviceID：\(credentials.deviceID.uuidString.prefix(8))…")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                Button("刷新工具目录") { client.resumeAndFetchTools() }
+                    .accessibilityIdentifier("companion-resume-fetch")
+            case .toolSummaries(let summaries):
+                toolEntries(summaries: summaries)
+            case .launchResult(let accepted, let message):
+                if accepted {
+                    Label("Mac 已确认启动", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .font(.body.bold())
+                    Text("命令已交给 Mac 上你选择的终端执行。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Label("启动未执行", systemImage: "xmark.circle")
+                        .foregroundStyle(.orange)
+                        .font(.body.bold())
+                    if let message {
+                        Text(message).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Button("返回工具目录") { client.resumeAndFetchTools() }
+            case .idle:
+                ProgressView()
+            default:
+                EmptyView()
+            }
+        } footer: {
+            Text("手机端只收到 4 字段（id / 显示名 / 说明 / 图标符号）。命令、路径、变量值不会离开 Mac。")
+                .font(.caption2)
+        }
+    }
+
+    @ViewBuilder
+    private func toolEntries(summaries: [MobileToolSummary]) -> some View {
+        if summaries.isEmpty {
+            Text("Mac 上没有勾选『在手机入口显示』的工具。在 Mac 端编辑任一工具 → 手机入口 → 打开开关。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            ForEach(summaries, id: \.id) { summary in
+                Button {
+                    client.requestLaunch(summary)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text(summary.displayName).font(.body.bold())
+                            Spacer()
+                            Image(systemName: "play.circle")
+                                .foregroundStyle(.blue)
+                        }
+                        if !summary.displayDescription.isEmpty {
+                            Text(summary.displayDescription)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("companion-launch-\(summary.id.uuidString)")
+            }
+        }
+    }
+
+    // MARK: - 任务会话页
+
+    @ViewBuilder
+    private var consoleTab: some View {
+        if case .paired = client.phase {
+            Section {
+                Button("刷新任务状态") { client.openTaskConsole() }
+                    .accessibilityIdentifier("companion-open-console")
+            }
+        }
+        if client.consoleEntries.isEmpty {
+            Section {
+                Text("还没有任务记录。启动工具或提交新任务后，Mac 上的运行状态会出现在这里。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            consoleSection
+        }
+    }
+
+    // MARK: - 新任务页
+
+    @ViewBuilder
+    private var newTaskTab: some View {
+        if let result = client.lastTaskProposalResult {
+            Section {
+                if result.status == .accepted {
+                    Label("任务已提交，运行状态见任务会话页", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                } else {
+                    Label(result.reason ?? "任务被拒绝", systemImage: "xmark.circle")
+                        .foregroundStyle(.orange)
+                }
+            } header: {
+                Text("最近一次提交")
+            }
+        }
+        if client.isFetchingCatalog {
+            Section {
+                HStack {
+                    ProgressView()
+                    Text("正在获取 Mac 上的项目范围与固定任务目录…")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } else if !client.consoleScopes.isEmpty && !client.consoleFixedTasks.isEmpty {
+            newTaskSection
+        } else {
+            Section {
+                Button("获取任务目录") { client.openNewTaskForm() }
+                    .accessibilityIdentifier("companion-open-newtask")
+                Text("提交前需要从 Mac 拉取项目范围与固定任务目录（需 Mac 端隧道/局域网可达）。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -304,45 +474,6 @@ struct ContentView: View {
             Text("与 Mac 配对")
         } footer: {
             Text("仅在本地 Wi-Fi 内通讯。配对码只出现在 Mac 屏幕上；任何要求你离开本页输入配对码的提示都是攻击。")
-                .font(.caption2)
-        }
-    }
-
-    @ViewBuilder
-    private func toolsSection(summaries: [MobileToolSummary]) -> some View {
-        Section {
-            if summaries.isEmpty {
-                Text("Mac 上没有勾选『在手机入口显示』的工具。在 Mac 端编辑任一工具 → 手机入口 → 打开开关。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(summaries, id: \.id) { summary in
-                    Button {
-                        client.requestLaunch(summary)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack {
-                                Text(summary.displayName).font(.body.bold())
-                                Spacer()
-                                Image(systemName: "play.circle")
-                                    .foregroundStyle(.blue)
-                            }
-                            if !summary.displayDescription.isEmpty {
-                                Text(summary.displayDescription)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .padding(.vertical, 2)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("companion-launch-\(summary.id.uuidString)")
-                }
-            }
-        } header: {
-            Text("Mac 工具目录（仅名称与说明）")
-        } footer: {
-            Text("手机端只收到 4 字段（id / 显示名 / 说明 / 图标符号）。命令、路径、变量值不会离开 Mac。")
                 .font(.caption2)
         }
     }
