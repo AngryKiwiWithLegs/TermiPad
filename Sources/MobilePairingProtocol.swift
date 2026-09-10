@@ -23,11 +23,19 @@ enum PairedDeviceOperation: String, Codable, CaseIterable, Sendable {
 /// iPhone → Mac 请求的最小载荷。字段集合是产品红线（最小数据回传）：
 /// 任何 commit 不得新增 command/path/parameter/environment 字段——
 /// MobilePairingProtocolTests 锁死编码后的 key 集合。
+/// M2b 增量（docs/m2b-remote-task-console-design.md §3.1）：三个任务引用
+/// 字段全部是 UUID / 白名单枚举字符串，且仅对任务操作有义——
+/// requestTaskProposal 用 taskKind+projectScopeID（引用 FixedTaskCatalog
+/// 与已登记 scope，不下发路径），getTaskStatus/cancelTask 用 taskIntentID。
+/// Optional + 合成 Codable（decodeIfPresent 语义）——旧手机/Mac 双向兼容。
 struct MobilePairingRequest: Codable, Sendable, Equatable {
     let operation: PairedDeviceOperation
     let requestID: UUID
     /// 仅 listTools / heartbeat 等无目标操作为 nil。
     let toolID: UUID?
+    var taskKind: String? = nil
+    var projectScopeID: UUID? = nil
+    var taskIntentID: UUID? = nil
 }
 
 /// Mac → iPhone 工具目录条目：手机端只允许看到这 4 个字段。
@@ -64,6 +72,28 @@ enum MobilePairingEnvelope {
         let plaintext = try MobilePairingCrypto.open(data, using: key)
         return try JSONDecoder().decode(MobileLaunchResponse.self, from: plaintext)
     }
+
+    // MARK: M2b 任务会话信封解码（与既有 open* 同模式）
+
+    static func openScopeSummaries(_ data: Data, using key: SymmetricKey) throws -> [MobileScopeSummary] {
+        let plaintext = try MobilePairingCrypto.open(data, using: key)
+        return try JSONDecoder().decode([MobileScopeSummary].self, from: plaintext)
+    }
+
+    static func openFixedTaskSummaries(_ data: Data, using key: SymmetricKey) throws -> [MobileFixedTaskSummary] {
+        let plaintext = try MobilePairingCrypto.open(data, using: key)
+        return try JSONDecoder().decode([MobileFixedTaskSummary].self, from: plaintext)
+    }
+
+    static func openSessionEntries(_ data: Data, using key: SymmetricKey) throws -> [MobileSessionEntry] {
+        let plaintext = try MobilePairingCrypto.open(data, using: key)
+        return try JSONDecoder().decode([MobileSessionEntry].self, from: plaintext)
+    }
+
+    static func openTaskProposalResponse(_ data: Data, using key: SymmetricKey) throws -> MobileTaskProposalResponse {
+        let plaintext = try MobilePairingCrypto.open(data, using: key)
+        return try JSONDecoder().decode(MobileTaskProposalResponse.self, from: plaintext)
+    }
 }
 
 /// Mac → iPhone 配对确认（经会话密钥 AEAD 加密后发送）。
@@ -83,6 +113,58 @@ struct MobileLaunchResponse: Codable, Sendable, Equatable {
     let status: Status
     /// 拒绝时的一句人话原因（固定枚举文案，不含工具数据）。
     let reason: String?
+}
+
+// MARK: - M2b 任务会话回传（docs/m2b-remote-task-console-design.md §3.2）
+// 数据最小化纪律与 M1 目录一致：手机只见引用、显示名与固定枚举，
+// 永不见 rootPath / 命令 / 参数 / 变量 / 工具启动的终端输出。
+
+/// 项目范围条目：id + 显示名（rootPath 永不下发——范围路径是本机数据）。
+struct MobileScopeSummary: Codable, Sendable, Equatable {
+    let id: UUID
+    let displayName: String
+}
+
+/// 固定任务目录条目：kind + 双语用途 + 固定命令预览（全部是
+/// FixedTaskCatalog 字面量，非用户数据；任务提交只回传 kind 引用）。
+struct MobileFixedTaskSummary: Codable, Sendable, Equatable {
+    let kind: String
+    let purpose: String
+    let commandPreview: String
+}
+
+/// 会话条目：工具启动与固定任务统一形态（§3.3——状态字符串全部来自
+/// T1 TaskExecutionState 原样枚举，工具启动仅 launched/launchFailed）。
+struct MobileSessionEntry: Codable, Sendable, Equatable {
+    enum SessionKind: String, Codable, Sendable {
+        case toolLaunch
+        case fixedTask
+    }
+
+    let id: UUID
+    let title: String
+    let kind: SessionKind
+    let executionState: String
+    let exitCode: Int?
+    let startedAt: Date?
+    let finishedAt: Date?
+    /// 仅输出档位 ≥ restricted 且条目为 T1 固定任务时非 nil（§5.4）；
+    /// 工具启动（终端交接路径）永无输出。
+    var outputSnippet: String? = nil
+}
+
+/// requestTaskProposal 的回执：接受/拒绝 + 任务引用（拒绝文案固定枚举）。
+struct MobileTaskProposalResponse: Codable, Sendable, Equatable {
+    enum Status: String, Codable, Sendable {
+        case accepted
+        case rejected
+    }
+
+    let status: Status
+    /// 拒绝时的一句人话原因（固定枚举文案，无路径无命令）。
+    let reason: String?
+    /// 接受时手机后续 getTaskStatus / cancelTask 的任务引用。
+    let taskIntentID: UUID?
 }
 
 /// 手机端持久化凭据（原 CompanionApp 私有类型，M2a 迁入共享协议层——
