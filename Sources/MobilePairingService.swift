@@ -247,11 +247,22 @@ final class MobilePairingService: ObservableObject {
             guard let self else { return }
             Task { @MainActor in
                 if case .failed(let error) = newState {
-                    // 运行中失败（非启动绑定失败——那已在 attempt 循环里处理）
-                    // 才报错；期间用户已关开关（listener 已被 stopPairingInternal
-                    // 置空）则静默退出。
-                    guard self.listener === listener else { return }
-                    Self.diagMac("配对监听器运行中失败：\(error.localizedDescription)")
+                    // **异步失败也进重试**：NWListener 的绑定分两阶段——init
+                    // 同步成功后，listen 阶段仍可能撞上未释放的旧 socket
+                    // （EADDRINUSE 异步回调，2026-09-10 18:55:49 实证：上一版
+                    // 重试只盖同步 init，用户重开开关仍报错）。同样等 1 秒重试。
+                    guard self.listener === listener, self.isPairingEnabledIntent else { return }
+                    if attempt < 3 {
+                        Self.diagMac("配对监听异步失败（第 \(attempt + 1) 次尝试）：\(error.localizedDescription)，1 秒后重试")
+                        self.discardListenerQuietly(listener)
+                        Task { @MainActor [weak self] in
+                            try? await Task.sleep(nanoseconds: 1_000_000_000)
+                            guard let self, self.listener == nil, self.isPairingEnabledIntent else { return }
+                            self.attemptStartPairing(identity: identity, attempt: attempt + 1)
+                        }
+                        return
+                    }
+                    Self.diagMac("配对开启失败：异步重试 3 次仍不可用 \(error.localizedDescription)")
                     self.stopPairingInternal()
                     self.state = .failed(error.localizedDescription)
                 }
@@ -271,6 +282,14 @@ final class MobilePairingService: ObservableObject {
         listener.start(queue: listenerQueue)
         self.listener = listener
         state = .listening(pairingCode: pairingCode, fingerprint: fingerprint)
+    }
+
+    /// 重试路径专用：丢弃失败的 listener 但**不**动意图标志/状态机——
+    /// stopPairingInternal 会清白名单并写诊断，重试期间两者都不该动。
+    private func discardListenerQuietly(_ listener: NWListener) {
+        guard self.listener === listener else { return }
+        listener.cancel()
+        self.listener = nil
     }
 
     /// 用户开启配对的意图标志：attempt 重试期间用户可能已点关闭——重试
