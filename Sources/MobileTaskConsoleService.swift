@@ -233,9 +233,23 @@ final class MobileTaskConsoleService: ObservableObject {
         try? modelContext.insert(intent)
         let title = definition.purpose(language: .simplifiedChinese)
         let started = TaskExecutionCoordinator.shared.start(intent: intent, scope: scope) {}
-        if case .rejected = started {
-            return MobileTaskProposalResponse(
-                status: .rejected, reason: "任务启动预检未通过（目录或可执行文件缺失）。", taskIntentID: intent.id)
+        if case .rejected(let rejection) = started {
+            // 精确反馈（2026-09-10 用户要求）：预检失败必须说明缺什么——
+            // 红线允许回传"任务的固定目录要求"（FixedTaskCatalog 字面量，
+            // 非用户数据），不允许回传 scope 路径本身。
+            let missingPaths = definition.requiredRelativePaths.filter { relative in
+                !FileManager.default.fileExists(
+                    atPath: URL(fileURLWithPath: scope.rootPath, isDirectory: true)
+                        .appendingPathComponent(relative).path)
+            }
+            let reason: String
+            if !missingPaths.isEmpty {
+                reason = "目标目录缺少该任务必需的文件：\(missingPaths.joined(separator: "、"))。请登记一个包含这些文件的项目目录。"
+            } else {
+                reason = "任务启动预检未通过（所需可执行文件在本机不存在，或目标目录不可用）。"
+            }
+            MobilePairingService.diagMac("手机任务启动预检拒绝：\(rejection.rawValue)，缺文件=\(missingPaths.count)")
+            return MobileTaskProposalResponse(status: .rejected, reason: reason, taskIntentID: intent.id)
         }
         recordTaskState(
             id: intent.id, title: title, executionState: intent.executionState,
@@ -255,7 +269,9 @@ final class MobileTaskConsoleService: ObservableObject {
         case .unknownTaskKind: return "未知的任务类型。"
         case .taskExpired: return "任务建议已过期。"
         case .taskNotPending: return "任务不在待审状态。"
-        default: return "任务被本地策略拒绝。"
+        case .nonceReplayed: return "任务请求重放，已拒绝。"
+        case .taskCancelled: return "任务已被取消。"
+        default: return "任务被本地策略拒绝（\(reason?.rawValue ?? "未知原因")）。"
         }
     }
 
