@@ -42,6 +42,10 @@ final class CompanionPairingClient: ObservableObject {
     @Published private(set) var phase: Phase = .idle
     @Published var pairingCodeInput = ""
     @Published var deviceName = "iPhone"
+    /// M2b-1 任务会话页数据（docs/m2b-remote-task-console-design.md §6）：
+    /// 非空即渲染会话页——数据驱动而非 phase 驱动，避免轮询期间
+    /// browsing/connecting 状态导致视图闪动。仅内存，不落盘（防线 1）。
+    @Published private(set) var consoleEntries: [MobileSessionEntry] = []
 
     private var browser: NWBrowser?
     private var connection: NWConnection?
@@ -53,6 +57,14 @@ final class CompanionPairingClient: ObservableObject {
     private var capturedServiceName: String?
     /// 非 nil 时 resume 后发 requestLaunch（而非 listTools）。
     private var pendingLaunchRequest: (toolID: UUID, name: String)?
+    /// M2b-1：非 nil 时 resume 后发 getTaskStatus（会话轮询请求）。
+    private var pendingConsoleRequest = false
+    // M2b-1 会话轮询状态（设计 §6：3 秒间隔、串行——上一轮响应（或超时）
+    // 之后才排下一轮，请求永不重叠；仅 app 前台时活跃）。
+    private var consolePollWorkItem: DispatchWorkItem?
+    private var consolePollingActive = false
+    /// 手动"返回"或页面隐藏后置位；进入会话页重新拉起。
+    private var consoleDismissed = false
     // M2a 连接编排状态（LAN 优先 / tailnet 兜底 / 明确超时文案）。
     private var tailnetFallbackWorkItem: DispatchWorkItem?
     private var browseTimeoutWorkItem: DispatchWorkItem?
@@ -77,6 +89,64 @@ final class CompanionPairingClient: ObservableObject {
     func startBrowsing() {
         stopAll()
         startBrowsingInternal()
+    }
+
+    // MARK: - M2b-1 任务会话（docs/m2b-remote-task-console-design.md §6）
+
+    /// 进入会话页：立即拉一轮，成功后按 3 秒节奏轮询。数据到达即
+    /// consoleEntries 非空——会话页据此自渲染。
+    func openTaskConsole() {
+        consoleDismissed = false
+        guard !consolePollingActive else { return }
+        startConsolePollCycle()
+    }
+
+    /// 离开会话页：停轮询（连接由"一连接一请求"模型自然关闭）。
+    func closeTaskConsole() {
+        consoleDismissed = true
+        consolePollWorkItem?.cancel()
+        consolePollWorkItem = nil
+    }
+
+    private func startConsolePollCycle() {
+        consolePollingActive = true
+        guard let credentials = currentCredentials,
+              let endpoint = credentials.tailnetEndpoint, !endpoint.isEmpty
+                || phaseIsConnectedOrBrowsing else {
+            // 没有端点且不在近场——走既有浏览流程兜底。
+            consolePollingActive = false
+            startBrowsing()
+            return
+        }
+        pollConsoleOnce()
+    }
+
+    private func pollConsoleOnce() {
+        guard consolePollingActive, !consoleDismissed else { return }
+        let serviceName = Self.tailnetServiceName
+        let directAddress = currentCredentials?.tailnetEndpoint
+        // 连接编排复用既有路径：resume 握手 → getTaskStatus 一问一答。
+        // 会话轮询请求在 resume 完成后发出（pendingConsoleRequest）。
+        pendingConsoleRequest = true
+        connect(to: serviceName, directAddress: directAddress)
+        Self.diag("会话轮询：连接 Mac（\(directAddress ?? "LAN")）")
+    }
+
+    /// 上一轮响应/失败后调用：排 3 秒后的下一轮（串行，永不重叠）。
+    private func scheduleNextConsolePoll() {
+        guard consolePollingActive, !consoleDismissed else { return }
+        consolePollWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            Task { @MainActor in self?.pollConsoleOnce() }
+        }
+        consolePollWorkItem = work
+        queue.asyncAfter(deadline: .now() + 3, execute: work)
+    }
+
+    private var phaseIsConnectedOrBrowsing: Bool {
+        if case .browsing = phase { return true }
+        if case .connecting = phase { return true }
+        return false
     }
 
     private func startBrowsingInternal() {
@@ -246,6 +316,45 @@ final class CompanionPairingClient: ObservableObject {
         pendingLaunchRequest = launch
         startBrowsingInternal()
     }
+
+    // MARK: - M2b-3 新任务提交（docs/m2b-remote-task-console-design.md §6）
+
+    /// 目录数据（listScopes / listFixedTasks 结果）——仅内存。
+    @Published private(set) var consoleScopes: [MobileScopeSummary] = []
+    @Published private(set) var consoleFixedTasks: [MobileFixedTaskSummary] = []
+    /// 非 nil 时 resume 后发 requestTaskProposal（kind + scopeID）。
+    private var pendingTaskProposal: (kind: String, scopeID: UUID, title: String)?
+
+    /// 打开"新任务"页：拉 scopes + fixedTasks 两轮目录。
+    func openNewTaskForm() {
+        pendingCatalogRequests = 2
+        connectAndRequest(operation: .listScopes)
+    }
+
+    /// 目录轮次：listScopes 回来后接着拉 listFixedTasks（一连接一请求）。
+    private var pendingCatalogRequests = 0
+
+    /// 发起任务提交（新任务页的提交按钮）。
+    func submitTaskProposal(kind: String, scopeID: UUID, title: String) {
+        stopAll()
+        pendingTaskProposal = (kind, scopeID, title)
+        startBrowsingInternal()
+    }
+
+    /// 任务提交回执 → 会话页直接看状态（轮询里能看到该任务）。
+    @Published private(set) var lastTaskProposalResult: MobileTaskProposalResponse?
+
+    /// 通用"连接→resume→发指定操作"入口（新任务表单的目录拉取用）。
+    private func connectAndRequest(operation: PairedDeviceOperation) {
+        guard let credentials = currentCredentials else {
+            phase = .noCredentials
+            return
+        }
+        nextCatalogOperation = operation
+        connect(to: Self.tailnetServiceName, directAddress: credentials.tailnetEndpoint)
+    }
+
+    private var nextCatalogOperation: PairedDeviceOperation?
 
     /// 解除配对——清空 Keychain，回到首次配对。
     func unpair() {
@@ -482,8 +591,8 @@ final class CompanionPairingClient: ObservableObject {
                 try? CompanionPairingStore.save(identity: identity, credentials: updated)
                 Self.diag("异地端点已更新：\(macResume.tailnetEndpoint ?? "off")")
             }
-            // 立刻发请求——一连接一请求一响应。有 pendingLaunchRequest 发
-            // requestLaunch，否则发 listTools。
+            // 立刻发请求——一连接一请求一响应。优先级：requestLaunch >
+            // getTaskStatus（会话轮询）> listTools。
             // 先构造请求、取连接，最后才切 phase：currentDiscoveredMac 只在
             // .connecting/.awaitingAck 有值，提前切 .requestingLaunch 会让
             // 发送块被整体跳过（帧发不出去）。
@@ -491,6 +600,17 @@ final class CompanionPairingClient: ObservableObject {
             if let launch = pendingLaunchRequest {
                 Self.diag("MacResumeHello 校验通过，发 requestLaunch tool=\(launch.name)")
                 request = MobilePairingRequest(operation: .requestLaunch, requestID: UUID(), toolID: launch.toolID)
+            } else if let proposal = pendingTaskProposal {
+                Self.diag("MacResumeHello 校验通过，发 requestTaskProposal kind=\(proposal.kind)")
+                request = MobilePairingRequest(
+                    operation: .requestTaskProposal, requestID: UUID(), toolID: nil,
+                    taskKind: proposal.kind, projectScopeID: proposal.scopeID)
+            } else if let catalog = nextCatalogOperation {
+                Self.diag("MacResumeHello 校验通过，发 \(catalog.rawValue)（目录拉取）")
+                request = MobilePairingRequest(operation: catalog, requestID: UUID(), toolID: nil)
+            } else if pendingConsoleRequest {
+                Self.diag("MacResumeHello 校验通过，发 getTaskStatus（会话轮询）")
+                request = MobilePairingRequest(operation: .getTaskStatus, requestID: UUID(), toolID: nil)
             } else {
                 Self.diag("MacResumeHello 校验通过，发 listTools")
                 request = MobilePairingRequest(operation: .listTools, requestID: UUID(), toolID: nil)
@@ -504,6 +624,10 @@ final class CompanionPairingClient: ObservableObject {
             let frame = MobilePairingFrame.encode(try MobilePairingEnvelope.seal(request, using: key))
             if let launch = pendingLaunchRequest {
                 phase = .requestingLaunch(launch.name)
+            } else if pendingConsoleRequest {
+                // 会话轮询期间 phase 保持在连接/列表态——会话页由
+                // consoleEntries 数据驱动，轮询不产生 phase 闪动。
+                phase = .listingTools(mac)
             } else {
                 phase = .listingTools(mac)
             }
@@ -531,6 +655,69 @@ final class CompanionPairingClient: ObservableObject {
         guard let data, let key = pendingSessionKey else {
             phase = .failed("未收到响应。")
             stopConnection()
+            if consolePollingActive { scheduleNextConsolePoll() }
+            return
+        }
+        // 新任务表单目录拉取（listScopes → listFixedTasks 两轮）与任务提交回执。
+        if let catalog = nextCatalogOperation {
+            nextCatalogOperation = nil
+            do {
+                switch catalog {
+                case .listScopes:
+                    let scopes = try MobilePairingEnvelope.openScopeSummaries(data, using: key)
+                    Self.diag("范围目录 count=\(scopes.count)")
+                    consoleScopes = scopes
+                case .listFixedTasks:
+                    let tasks = try MobilePairingEnvelope.openFixedTaskSummaries(data, using: key)
+                    Self.diag("固定任务目录 count=\(tasks.count)")
+                    consoleFixedTasks = tasks
+                default:
+                    break
+                }
+                stopConnection()
+                // 下一轮目录：scopes 到了就拉 fixedTasks。
+                if pendingCatalogRequests > 1 {
+                    pendingCatalogRequests -= 1
+                    connectAndRequest(operation: .listFixedTasks)
+                }
+            } catch {
+                Self.diag("目录拉取解密失败")
+                stopConnection()
+            }
+            return
+        }
+        if let proposal = pendingTaskProposal {
+            pendingTaskProposal = nil
+            _ = proposal
+            do {
+                let response = try MobilePairingEnvelope.openTaskProposalResponse(data, using: key)
+                Self.diag("任务提交回执 status=\(response.status.rawValue) reason=\(response.reason ?? "-")")
+                lastTaskProposalResult = response
+                stopConnection()
+                // 提交后立即进会话页看状态。
+                openTaskConsole()
+            } catch {
+                Self.diag("任务提交回执解析失败")
+                stopConnection()
+                openTaskConsole()
+            }
+            return
+        }
+        // 会话轮询响应先试：Mac 只回 [MobileSessionEntry]（一问一答模型下
+        // 与其他响应类型按 pending 标志互斥，不会误判）。
+        if pendingConsoleRequest {
+            pendingConsoleRequest = false
+            do {
+                let entries = try MobilePairingEnvelope.openSessionEntries(data, using: key)
+                Self.diag("会话快照 count=\(entries.count)")
+                consoleEntries = entries
+                stopConnection()
+                scheduleNextConsolePoll()
+            } catch {
+                Self.diag("会话快照解密失败")
+                stopConnection()
+                scheduleNextConsolePoll()
+            }
             return
         }
         // requestLaunch 的响应先试：Mac 只回 MobileLaunchResponse。
@@ -665,6 +852,9 @@ final class CompanionPairingClient: ObservableObject {
         tailnetFallbackWorkItem = nil
         browseTimeoutWorkItem?.cancel()
         browseTimeoutWorkItem = nil
+        consolePollWorkItem?.cancel()
+        consolePollWorkItem = nil
+        consolePollingActive = false
         lanConnectStarted = false
         tailnetAttemptInFlight = false
         browser?.cancel()
@@ -676,6 +866,10 @@ final class CompanionPairingClient: ObservableObject {
         pendingPhoneNonce = nil
         pendingSessionKey = nil
         pendingLaunchRequest = nil
+        pendingConsoleRequest = false
+        pendingTaskProposal = nil
+        nextCatalogOperation = nil
+        pendingCatalogRequests = 0
     }
 
     private func refreshFromKeychain() {
