@@ -49,6 +49,45 @@ final class MobilePairingService: ObservableObject {
 
     nonisolated private static let rateLimiter = WriteRateLimiter()
 
+    /// 续命节流闸（防线 2 配套）：每设备每天最多放行一次 Keychain 写。
+    /// NSLock 保护——握手在非主线程队列跑；测试可注入 now/间隔。
+    final class RenewalGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var lastRenewals: [UUID: Date] = [:]
+        private let minimumInterval: TimeInterval
+
+        init(minimumInterval: TimeInterval = 24 * 3600) {
+            self.minimumInterval = minimumInterval
+        }
+
+        func shouldRenew(
+            deviceID: UUID, lastRenewedAt: Date?, now: Date = Date()
+        ) -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            // 双闸：进程内内存闸（本进程已写过）+ 记录级闸（记录里的
+            // lastConnectedAt——app 重启后凭它继续节流）。
+            if let inProcess = lastRenewals[deviceID],
+               now.timeIntervalSince(inProcess) < minimumInterval {
+                return false
+            }
+            if let persisted = lastRenewedAt,
+               now.timeIntervalSince(persisted) < minimumInterval {
+                return false
+            }
+            lastRenewals[deviceID] = now
+            return true
+        }
+
+        func reset() {
+            lock.lock()
+            lastRenewals.removeAll()
+            lock.unlock()
+        }
+    }
+
+    nonisolated private static let renewalGate = RenewalGate()
+
     /// 枚举 en* 接口上的第一个私有 IPv4（192.168/10./172.16-31）。
     /// 不用 Process、不依赖 shell——getifaddrs 是 libc 级系统调用。
     nonisolated static func lanIPv4Address() -> String? {
@@ -452,13 +491,21 @@ final class MobilePairingService: ObservableObject {
                 diagMac("resume 拒绝：配对已超 30 天时效 \(record.displayName)")
                 throw MobilePairingError.handshakeFailed
             }
-            // M2b 防线 2 续命：成功 resume 即刷新 pairedAt（30 天窗从最近一次
-            // 连接重新起算）。记录写回 Keychain 不上主线程（同 init 纪律）。
+            // M2b 防线 2 续命：成功 resume 刷新 pairedAt，但**节流**——每设备
+            // 每天最多写一次 Keychain。3 秒轮询场景下逐次写会 (a) 疯狂触发
+            // 系统钥匙串授权弹窗（2026-09-10 用户实测"越来越频繁"）、(b) 写
+            // 授权被拒时把 UI 状态带进 failed（"配对服务错误"假警报）。
+            // 30 天时效语义不变：窗口从最近一次续命起算，日常使用每天一次
+            // 足以续命；丢手机场景 30 天上限照样成立。
             let deviceID = record.id
             let storeRef = store
-            Task.detached(priority: .utility) {
-                try? PairedDeviceStore.markConnected(
-                    id: deviceID, at: Date(), store: storeRef)
+            let shouldRenew = Self.renewalGate.shouldRenew(
+                deviceID: deviceID, lastRenewedAt: record.lastConnectedAt)
+            if shouldRenew {
+                Task.detached(priority: .utility) {
+                    try? PairedDeviceStore.markConnected(
+                        id: deviceID, at: Date(), store: storeRef)
+                }
             }
             let sessionKeyData = try MobilePairingHandshake.deriveResumeSessionKey(
                 hello, identity: identity, macNonce: macNonce)
