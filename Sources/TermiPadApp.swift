@@ -92,7 +92,11 @@ struct TermiPadApplication: App {
             .softMacWindow(appearanceKey: appearanceRawValue)
         }
         .defaultSize(
-            width: TermiPadWorkspaceMetrics.iPadReferenceSize.width,
+            // UI 测试用宽窗口：729pt 实际默认宽度下外观分段控件会被挤进
+            // 工具栏溢出弹层，identifier 查找失败（2026-09-09 快照实证）。
+            // 只在 TERMIPAD_UI_TEST_MODE 下加宽，不影响真实窗口默认值。
+            width: ProcessInfo.processInfo.environment["TERMIPAD_UI_TEST_MODE"] == "1"
+                ? 1_600 : TermiPadWorkspaceMetrics.iPadReferenceSize.width,
             height: TermiPadWorkspaceMetrics.iPadReferenceSize.height
         )
         .modelContainer(sharedModelContainer)
