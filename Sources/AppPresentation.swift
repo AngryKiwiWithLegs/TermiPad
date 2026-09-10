@@ -114,7 +114,13 @@ enum AppCopy {
             "mobileTunnelOff": "已关闭——手机仅在同一个 Wi-Fi 内可用。",
             "mobileTunnelDetecting": "正在检测 Tailscale…",
             "mobileTunnelReady": "已就绪：%@（仅你的 tailnet 内可访问）",
-            "mobileTunnelFailed": "启动失败：%@"
+            "mobileTunnelFailed": "启动失败：%@",
+            // M2b 输出档位（docs/m2b-remote-task-console-design.md §5.4）
+            "remoteOutputVisibility": "任务输出档位（M2b）",
+            "remoteOutputVisibilityMinimal": "最小（仅状态与退出码）",
+            "remoteOutputVisibilityRestricted": "受限（末尾 32 行，已脱敏）",
+            "remoteOutputVisibilityFull": "完整（仍脱敏且限 32 KB）",
+            "remoteOutputVisibilityHint": "仅作用于固定任务的输出回传；工具启动（终端交接）永远不回传输出。受限/完整档位会先经过密钥模式脱敏，输出仅存 Mac 内存、10 分钟后清除、不进备份。"
         ]
         let english: [String: String] = [
             "allTools": "All Tools", "inbox": "Review Inbox", "favorites": "Favorites", "recent": "Recent", "hidden": "Hidden", "categories": "Categories", "toolLibrary": "Library", "settings": "Settings",
@@ -169,7 +175,13 @@ enum AppCopy {
             "mobileTunnelOff": "Off — the phone can only connect on the same Wi-Fi.",
             "mobileTunnelDetecting": "Detecting Tailscale…",
             "mobileTunnelReady": "Ready: %@ (reachable from your tailnet only)",
-            "mobileTunnelFailed": "Failed to start: %@"
+            "mobileTunnelFailed": "Failed to start: %@",
+            // M2b output visibility (docs/m2b-remote-task-console-design.md §5.4)
+            "remoteOutputVisibility": "Task Output Visibility (M2b)",
+            "remoteOutputVisibilityMinimal": "Minimal (status and exit code only)",
+            "remoteOutputVisibilityRestricted": "Restricted (last 32 lines, redacted)",
+            "remoteOutputVisibilityFull": "Full (still redacted, 32 KB cap)",
+            "remoteOutputVisibilityHint": "Applies only to fixed-task output sent to the phone; tool launches (terminal handoff) never send output. Restricted/Full pass through key-pattern redaction first; output lives in Mac memory only, is cleared after 10 minutes, and never enters backups."
         ]
         let table = language == .simplifiedChinese ? chinese : english
         return table[key] ?? key

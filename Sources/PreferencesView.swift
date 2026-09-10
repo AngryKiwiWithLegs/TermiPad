@@ -249,6 +249,25 @@ struct PreferencesView: View {
                 Text(AppCopy.text("mobileTunnelHint", language: language))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                // M2b 输出档位（docs/m2b-remote-task-console-design.md §5.4）：
+                // Mac 是权威——手机端不持有档位状态，回传内容自然体现档位效果。
+                Picker(AppCopy.text("remoteOutputVisibility", language: language), selection: Binding(
+                    get: {
+                        MobileTaskConsoleService.OutputVisibility(
+                            rawValue: UserDefaults.standard.string(
+                                forKey: MobileTaskConsoleService.outputVisibilityDefaultsKey) ?? "")
+                            ?? .restricted
+                    },
+                    set: { UserDefaults.standard.set($0.rawValue, forKey: MobileTaskConsoleService.outputVisibilityDefaultsKey) }
+                )) {
+                    Text(AppCopy.text("remoteOutputVisibilityMinimal", language: language)).tag(MobileTaskConsoleService.OutputVisibility.minimal)
+                    Text(AppCopy.text("remoteOutputVisibilityRestricted", language: language)).tag(MobileTaskConsoleService.OutputVisibility.restricted)
+                    Text(AppCopy.text("remoteOutputVisibilityFull", language: language)).tag(MobileTaskConsoleService.OutputVisibility.full)
+                }
+                .accessibilityIdentifier("settings-output-visibility-picker")
+                Text(AppCopy.text("remoteOutputVisibilityHint", language: language))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section(AppCopy.text("aiConfiguration", language: language)) {
