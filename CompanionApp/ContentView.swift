@@ -216,6 +216,19 @@ struct ContentView: View {
             }
         } else if !client.consoleScopes.isEmpty && !client.consoleFixedTasks.isEmpty {
             newTaskSection
+        } else if !client.consoleFixedTasks.isEmpty && client.consoleScopes.isEmpty {
+            // 目录拉到了但 Mac 上没有项目范围——说清楚缺什么，而不是
+            // 静默渲染一个无法提交的空表单（2026-09-10 用户实测"没反应"）。
+            Section {
+                Label("Mac 上还没有已登记的项目范围", systemImage: "folder.badge.questionmark")
+                    .foregroundStyle(.orange)
+                Text("在 Mac 端 TermiPad → 任务工作台 → 先登记一个项目目录（选择你的项目文件夹），再开一个审阅窗口，然后回到这里点「获取任务目录」。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("重新获取") { client.openNewTaskForm() }
+            } header: {
+                Text("缺少项目范围")
+            }
         } else {
             Section {
                 Button("获取任务目录") { client.openNewTaskForm() }
