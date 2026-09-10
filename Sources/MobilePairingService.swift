@@ -387,6 +387,7 @@ final class MobilePairingService: ObservableObject {
         do {
             // Mac 侧必须核对配对码与屏显一致——这是防"同网主机静默配对"的关键。
             guard hello.pairingCode == expectedPairingCode else {
+                diagMac("配对拒绝：配对码与屏显不一致（长度 \(hello.pairingCode.utf8.count)）")
                 complete(.failure(MobilePairingError.invalidPairingCode))
                 return
             }
@@ -398,11 +399,13 @@ final class MobilePairingService: ObservableObject {
                 byPublicKeyHash: accepted.phonePublicKeyHash, store: store) {
                 try PairedDeviceStore.markConnected(id: existing.id, store: store)
                 record = existing
+                diagMac("配对接受：复用既有记录 \(existing.displayName)")
             } else {
                 record = try PairedDeviceStore.add(
                     displayName: accepted.deviceName,
                     publicKeyData: hello.phonePublicKey,
                     store: store)
+                diagMac("配对接受：新增设备 \(accepted.deviceName)")
             }
             let key = SymmetricKey(data: accepted.sessionKeyData)
             let ack = MobilePairingAck(accepted: true, deviceID: record.id)
