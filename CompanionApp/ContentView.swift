@@ -76,7 +76,17 @@ struct ContentView: View {
             }
             .padding(.vertical, 10)
         case .browsing, .connecting, .verifyFingerprint, .awaitingAck, .listingTools, .requestingLaunch:
-            pairingSection
+            // 目录/会话数据已就绪时隐藏连接进度条（2026-09-10 用户实测：
+            // 提交表单可用的同时顶部"正在获取"一直转，误导为未加载完）。
+            // 进度条只在真正握手/首次拉目录且尚无数据时有意义。
+            let hasData = !client.consoleEntries.isEmpty
+                || (!client.consoleScopes.isEmpty && !client.consoleFixedTasks.isEmpty)
+                || (selectedTab == .tools && client.hasToolSummaries)
+            if hasData && selectedTab != .tools {
+                EmptyView()
+            } else {
+                pairingSection
+            }
         case .failed(let message):
             VStack(spacing: 6) {
                 Label(message, systemImage: "exclamationmark.triangle")
@@ -294,9 +304,26 @@ struct ContentView: View {
 
     /// M2b-3 新任务表单（docs/m2b-remote-task-console-design.md §6）：
     /// 选范围 → 选固定任务 → 提交。载荷只有 kind + scopeID 引用。
+    /// 提交按钮**固定在表单顶部**（2026-09-10 用户实测：按钮在 5 项任务
+    /// 列表底部被挤出屏幕，用户以为没有提交入口）。
     @ViewBuilder
     private var newTaskSection: some View {
         Section {
+            Button {
+                if let scopeID = selectedScopeID, let kind = selectedTaskKind,
+                   let task = client.consoleFixedTasks.first(where: { $0.kind == kind }) {
+                    client.submitTaskProposal(kind: kind, scopeID: scopeID, title: task.purpose)
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "paperplane.fill")
+                    Text(selectedTaskKind == nil
+                        ? "提交任务（先在下方选择）"
+                        : "提交「\(client.consoleFixedTasks.first(where: { $0.kind == selectedTaskKind })?.purpose ?? "")」")
+                }
+            }
+            .disabled(selectedScopeID == nil || selectedTaskKind == nil)
+            .accessibilityIdentifier("companion-newtask-submit")
             Picker("项目范围", selection: $selectedScopeID) {
                 ForEach(client.consoleScopes, id: \.id) { scope in
                     Text(scope.displayName).tag(scope.id as UUID?)

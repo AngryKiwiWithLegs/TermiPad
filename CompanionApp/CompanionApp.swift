@@ -1017,6 +1017,12 @@ final class CompanionPairingClient: ObservableObject {
         !(currentCredentials?.tailnetEndpoint ?? "").isEmpty
     }
 
+    /// UI 用：工具目录是否已在手（顶部进度条收起判断）。
+    var hasToolSummaries: Bool {
+        if case .toolSummaries = phase { return true }
+        return false
+    }
+
     /// POSIX 50（ENETDOWN）：接口无网。iOS 上常见于关 Wi-Fi 后蜂窝/VPN
     /// 未接管流量的窗口期——是"LAN 已死"的可靠信号。
     private static func isNetworkDown(_ error: NWError) -> Bool {
