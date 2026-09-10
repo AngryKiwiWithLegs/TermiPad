@@ -466,7 +466,11 @@ final class CompanionPairingClient: ObservableObject {
             // .wifi 约束（M1 防仿冒用）会挡掉它。
             connection = NWConnection(to: endpoint, using: Self.tunnelParameters())
         } else {
-            lanConnectStarted = true
+            // 注意：不在这里置 lanConnectStarted——"LAN 已连上"的语义只在
+            // TCP 真正 ready 时成立（见 .ready 分支）。拨号即置位的话，
+            // .waiting(ENETDOWN) 的死连接也会把标志拉真，后续 ENETDOWN
+            // 立即转 tailnet 被 fallbackToTailnet 的 guard 挡死（2026-09-10
+            // 蜂窝实测：fallback 日志触发但「改走异地 tailnet」永不出现）。
             connection = NWConnection(to: endpoint, using: Self.wifiParameters())
         }
         Self.diag("connecting to \(serviceName)")
@@ -491,6 +495,11 @@ final class CompanionPairingClient: ObservableObject {
                 case .ready:
                     self.phase = .connecting(DiscoveredMac(serviceName: serviceName))
                     self.capturedServiceName = serviceName
+                    // "LAN 已连上"在这里才成立：TCP 真正 ready（.waiting 的
+                    // 死连接到此根本走不到）。tailnet 伪服务名不算 LAN。
+                    if serviceName != Self.tailnetServiceName {
+                        self.lanConnectStarted = true
+                    }
                     self.receiveOneMessage { data in
                         Task { @MainActor in self.handleMacHello(data) }
                     }
@@ -500,8 +509,12 @@ final class CompanionPairingClient: ObservableObject {
                 case .waiting(let error):
                     // POSIX 50（Network is down）= 当前接口无网（如关 Wi-Fi 后
                     // 蜂窝未接管/VPN 未活跃）。LAN 已死——立即转 tailnet 兜底，
-                    // 不再等 6 秒定时器（此前 browse 缓存会伪装出结果，
-                    // lanConnectStarted 挡掉兜底守卫）。
+                    // 不再等 6 秒定时器。lanConnectStarted 一并清掉：这条死
+                    // 连接从未 ready，不算"LAN 已连上"（2026-09-10 蜂窝实测：
+                    // 残留标志把 fallbackToTailnet 的 guard 挡死）。
+                    if Self.isNetworkDown(error) {
+                        self.lanConnectStarted = false
+                    }
                     if !self.tailnetAttemptInFlight, Self.isNetworkDown(error),
                        let endpoint = self.currentCredentials?.tailnetEndpoint, !endpoint.isEmpty {
                         Self.diag("LAN 接口无网（\(error.localizedDescription)），立即转异地 tailnet")
