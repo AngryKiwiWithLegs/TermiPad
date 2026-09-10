@@ -324,6 +324,14 @@ struct ContentView: View {
             }
             .disabled(selectedScopeID == nil || selectedTaskKind == nil)
             .accessibilityIdentifier("companion-newtask-submit")
+            // 范围默认选中第一项：selection=nil 的 Picker 渲染成空选择，
+            // 用户不知道要主动点它（2026-09-10 实测按钮一直灰的根因）。
+            // 数据到达时自动预选；用户仍可改选。
+            .onReceive(client.$consoleScopes) { scopes in
+                if selectedScopeID == nil, let first = scopes.first {
+                    selectedScopeID = first.id
+                }
+            }
             Picker("项目范围", selection: $selectedScopeID) {
                 ForEach(client.consoleScopes, id: \.id) { scope in
                     Text(scope.displayName).tag(scope.id as UUID?)
