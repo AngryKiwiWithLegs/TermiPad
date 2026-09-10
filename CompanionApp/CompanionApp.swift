@@ -5,16 +5,79 @@
 import SwiftUI
 import Network
 import CryptoKit
+import LocalAuthentication
 
 @main
 struct TermiPadCompanionApp: App {
     @StateObject private var client = CompanionPairingClient()
+    @StateObject private var appLock = CompanionAppLock()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(client)
+                // M2b 防线 1（设计 §4）：切回前台过 Face ID/设备密码。
+                // 锁定时盖住全部界面——偷手机的人过不了生物识别。
+                .fullScreenCover(isPresented: $appLock.isLocked) {
+                    CompanionLockView(appLock: appLock)
+                }
         }
+    }
+}
+
+/// M2b 防线 1：app 前台锁。默认开启（用户可在锁屏页暂时跳过一次会话内
+/// 不再锁——设备级安全由 iOS 系统锁兜底；配对凭据本身已
+/// WhenUnlockedThisDeviceOnly）。
+@MainActor
+final class CompanionAppLock: ObservableObject {
+    @Published var isLocked = true
+
+    func requestUnlock() {
+        let context = LAContext()
+        var error: NSError?
+        // 设备密码兜底：无 Face ID/Touch ID 的设备回落 passcode。
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+            // 无任何生物/密码保护的设备（理论罕见）——不锁死用户。
+            isLocked = false
+            return
+        }
+        context.evaluatePolicy(
+            .deviceOwnerAuthentication,
+            localizedReason: "解锁 TermiPad 伴侣以查看任务会话"
+        ) { [weak self] success, _ in
+            Task { @MainActor in
+                self?.isLocked = !success
+            }
+        }
+    }
+}
+
+/// 锁屏盖层：全屏遮罩 + 解锁按钮（点击触发 Face ID）。
+struct CompanionLockView: View {
+    @ObservedObject var appLock: CompanionAppLock
+
+    var body: some View {
+        ZStack {
+            Rectangle().fill(.regularMaterial).ignoresSafeArea()
+            VStack(spacing: 16) {
+                Image(systemName: "lock.shield")
+                    .font(.system(size: 44))
+                    .foregroundStyle(.secondary)
+                Text("TermiPad 伴侣已锁定")
+                    .font(.headline)
+                Button("使用面容 ID 解锁") {
+                    appLock.requestUnlock()
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("companion-applock-unlock")
+                Text("为防止他人使用你的手机控制 Mac，每次打开需要验证。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+        }
+        .onAppear { appLock.requestUnlock() }
     }
 }
 
