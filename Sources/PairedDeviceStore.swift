@@ -84,7 +84,17 @@ enum PairedDeviceStore {
             pairedAt: Date(),
             lastConnectedAt: nil,
             revokedAt: nil)
-        var ids = list(store: store).map(\.id)
+        // 孤儿清理（多设备语义保留——用户可同时配 iPhone+iPad）：
+        // (a) 已撤销记录——撤销后 keychain item 永生只会堆积授权弹窗
+        //     （2026-09-10 真机：12 条孤儿 item 让用户连输十几次密码），
+        //     撤销的设备要恢复只能重新配对（信任锚点已断，数据留着无义）；
+        // (b) 同指纹旧记录——同一设备重配对产生的新记录替代旧记录。
+        for stale in list(store: store) {
+            if stale.revokedAt != nil || stale.publicKeyHash == record.publicKeyHash {
+                try? store.remove(account: deviceAccount(stale.id))
+            }
+        }
+        var ids = activeDevices(store: store).map(\.id)
         ids.append(record.id)
         try store.save(try encode(record), for: deviceAccount(record.id))
         try store.save(try encode(ids), for: indexAccount)
