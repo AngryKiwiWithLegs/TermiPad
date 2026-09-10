@@ -190,6 +190,19 @@ final class MobilePairingService: ObservableObject {
     }
 
     private func attemptStartPairing(identity: MobilePairingIdentity, attempt: Int) {
+        // 指数退避（1/2/4 秒）：failed 过的 listener cancel 后内核清理
+        // （TCP 双栈 listen+backlog）比正常关闭慢得多——固定 1 秒间隔
+        // 三连撞（2026-09-10 19:34 实测：3 次全 EADDRINUSE）。
+        let backoffNanos = UInt64(pow(2.0, Double(attempt)) * 1_000_000_000)
+        if attempt > 0 {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: backoffNanos)
+                guard let self, self.listener == nil, self.isPairingEnabledIntent else { return }
+                self.attemptStartPairing(identity: identity, attempt: attempt)
+            }
+            return
+        }
+        // 递归推进 attempt+1 后会先退避再尝试（attempt>0 分支）。
         let fingerprint = MobilePairingCrypto.fingerprint(forPublicKeyData: try! identity.publicKeyData())
         let pairingCode = MobilePairingCrypto.generatePairingCode()
         // 锁 Wi-Fi + 固定端口 + TXT 携带 LAN 地址：手机浏览时直接拿到 IP:port
@@ -264,7 +277,7 @@ final class MobilePairingService: ObservableObject {
                     }
                     Self.diagMac("配对开启失败：异步重试 3 次仍不可用 \(error.localizedDescription)")
                     self.stopPairingInternal()
-                    self.state = .failed(error.localizedDescription)
+                    self.state = .failed("端口被占用，请等 10 秒后再点「启用同网配对」。\(error.localizedDescription)")
                 }
             }
         }
