@@ -414,26 +414,9 @@ struct PreferencesView: View {
         .onAppear {
             pairingService.configure(modelContext: modelContext)
         }
-        .alert(
-            AppCopy.text("mobileLaunchPromptTitle", language: language),
-            isPresented: Binding(
-                get: { launchPrompt.pending != nil },
-                set: { _ in launchPrompt.respond(false) })
-        ) {
-            Button(AppCopy.text("mobileLaunchPromptAccept", language: language)) {
-                launchPrompt.respond(true)
-            }
-            Button(AppCopy.text("mobileLaunchPromptDeny", language: language), role: .cancel) {
-                launchPrompt.respond(false)
-            }
-        } message: {
-            if let pending = launchPrompt.pending {
-                Text(AppCopy.format(
-                    "mobileLaunchPromptBody",
-                    "\(pending.toolName) · \(pending.deviceName)",
-                    language: language))
-            }
-        }
+        // 手机启动/任务确认弹窗已提升到 app 根视图（TermiPadApp 的
+        // MobileLaunchConfirmationRootView）——用户不在设置页时也要能弹，
+        // 此处保留挂载会与根视图重复弹窗。
     }
 
     private func saveAPIKey() {
