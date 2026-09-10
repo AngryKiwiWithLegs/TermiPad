@@ -198,11 +198,12 @@ final class MobileTaskConsoleService: ObservableObject {
         let existing = (try? modelContext.fetch(FetchDescriptor<TaskIntent>())) ?? []
         guard case .allowed = TaskIntentPolicy.review(
             intent, scope: scope, windows: windows, existingIntents: existing) else {
-            // 拒绝原因映射为固定文案——localReviewRequired 是最常见的：
-            // 远程提交同样要求 Mac 上开着活跃的审阅窗口（T0 语义不变）。
+            // 拒绝原因映射为固定文案；具体 reason 写 diagMac（2026-09-10：
+            // 手机端只见兜底文案无法定位，缺 reason 日志）。
             let reason = intent.rejectionReason
             let text = Self.rejectionText(reason)
             DiagnosticsStore.shared.record(.remoteTaskRejectedByPolicy)
+            MobilePairingService.diagMac("手机任务被 T0 策略拒绝：\(reason?.rawValue ?? "未知（rejectionReason 为 nil）")")
             return MobileTaskProposalResponse(
                 status: .rejected, reason: text, taskIntentID: nil)
         }
