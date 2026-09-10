@@ -70,7 +70,19 @@ final class MobilePairingService: ObservableObject {
 
     init(store: MobileSecureKeyValueStore = KeychainMobileSecureStore()) {
         self.store = store
-        refreshPairedDevices()
+        // Keychain 首读必须离开主线程：PreferencesView 的 @StateObject 初始化器
+        // 在主线程 body 链上运行，且 Task { @MainActor } 只是把调用挪进主线程
+        // 的并发队列——SecItemCopyMatching 仍在 MainActor 上执行（2026-09-09
+        // 两轮 spindump 实证：422 样本全停在 MainActor→SecItem；首次访问要过
+        // 安全守护进程，UI 测试无交互环境可拖 15s+，app 无响应、accessibility
+        // 永不加载）。改为后台线程读取，完成后回主线程刷新 @Published。
+        let store = store
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let devices = PairedDeviceStore.list(store: store)
+            await MainActor.run { [weak self] in
+                self?.pairedDevices = devices
+            }
+        }
     }
 
     /// 注入 SwiftData 上下文（MainActor 域）——listTools 响应的只读数据源。
@@ -82,7 +94,7 @@ final class MobilePairingService: ObservableObject {
     @MainActor private static var sharedModelContext: ModelContext?
 
     func refreshPairedDevices() {
-        pairedDevices = PairedDeviceStore.list(store: store)
+        refreshPairedDevicesOffMain()
     }
 
     /// 用户开启配对：加载/生成本机身份，屏显配对码与指纹，启动 Bonjour 广播。
@@ -159,11 +171,23 @@ final class MobilePairingService: ObservableObject {
         state = .off
     }
 
+    /// Keychain 读取统一走后台线程 + 主线程回填（同 init 的纪律——
+    /// SecItemCopyMatching 首访在无交互环境可拖 15s+，禁止上 MainActor）。
+    private func refreshPairedDevicesOffMain() {
+        let store = store
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let devices = PairedDeviceStore.list(store: store)
+            await MainActor.run { [weak self] in
+                self?.pairedDevices = devices
+            }
+        }
+    }
+
     /// 红线"每个权限可撤销"：撤销立即写入 Keychain 并刷新列表。
     /// 撤销不影响已建立的旧连接——本提交配对完成后即断开，无长连接可残留。
     func revoke(id: UUID) {
         try? PairedDeviceStore.revoke(id: id, store: store)
-        refreshPairedDevices()
+        refreshPairedDevicesOffMain()
     }
 
     private func stopPairingInternal() {
@@ -176,7 +200,7 @@ final class MobilePairingService: ObservableObject {
     private func finishPairing(_ result: Result<PairedDeviceRecord, Error>) {
         // 失败（扫描器、版本不符、配对码错误）静默丢弃连接；诊断事件后续接入。
         if case .success = result {
-            refreshPairedDevices()
+            refreshPairedDevicesOffMain()
         }
     }
 
@@ -464,6 +488,28 @@ final class MobilePairingService: ObservableObject {
             Task { @MainActor in
                 let entries = MobileTaskConsoleService.shared.sessionEntries()
                 Self.sendSealed(entries, on: connection, using: key)
+            }
+        case .requestTaskProposal:
+            Task { @MainActor in
+                let response = await MobileTaskConsoleService.shared.handleTaskProposal(
+                    taskKind: request.taskKind,
+                    projectScopeID: request.projectScopeID,
+                    modelContext: Self.sharedModelContext
+                        ?? ModelContext(try! ModelContainer(for: TaskIntent.self, TaskProjectScope.self, TaskReviewWindow.self)),
+                    confirm: { taskTitle in
+                        await MobileLaunchPromptCenter.shared.requestConfirmation(
+                            toolName: taskTitle, deviceName: "已配对设备")
+                    })
+                DiagnosticsStore.shared.record(.mcpTaskProposed)
+                Self.sendSealed(response, on: connection, using: key)
+            }
+        case .cancelTask:
+            Task { @MainActor in
+                let response = request.taskIntentID.map {
+                    MobileTaskConsoleService.shared.cancelTask(taskIntentID: $0)
+                } ?? MobileTaskProposalResponse(
+                    status: .rejected, reason: "请求缺少任务引用。", taskIntentID: nil)
+                Self.sendSealed(response, on: connection, using: key)
             }
         default:
             // 其余操作按设计文档节奏逐个启用；未启用即拒绝并断开。

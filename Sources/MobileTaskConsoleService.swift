@@ -3,8 +3,8 @@
 // 任务会话操作。数据最小化纪律：手机只见引用、显示名、状态枚举与退出码，
 // 永不见 rootPath / 命令 / 参数 / 变量 / 工具启动的终端输出。
 // M2b-1 范围：listScopes / listFixedTasks / getTaskStatus 三个只读操作 +
-// 工具启动事件的条目记录。requestTaskProposal / cancelTask 在后续批次接入
-// T0/T1 核验链（设计 §5.2），未接入前操作在分发层拒绝。
+// 工具启动事件的条目记录。M2b-3：requestTaskProposal 核验链 + cancelTask。
+import CoreGraphics
 import Foundation
 import SwiftData
 
@@ -158,5 +158,135 @@ final class MobileTaskConsoleService: ObservableObject {
                 finishedAt: entry.finishedAt,
                 outputSnippet: currentVisibility == .minimal ? nil : entry.outputSnippet)
         }
+    }
+
+    // MARK: - M2b-3 任务提交核验链（设计 §5.2——顺序即攻击面检查顺序）
+
+    /// requestTaskProposal 的完整核验与执行。返回给手机的最小回执。
+    /// 1 配对有效性由握手层保证（进入这里即已配对）；此处从锁屏开始。
+    func handleTaskProposal(
+        taskKind: String?,
+        projectScopeID: UUID?,
+        modelContext: ModelContext,
+        confirm: (String) async -> Bool
+    ) async -> MobileTaskProposalResponse {
+        // 3. 锁屏拒绝（防线 3）：Mac 锁屏期间不接受任何远程任务。
+        if Self.isLoginSessionLocked() {
+            DiagnosticsStore.shared.record(.remoteTaskBlockedScreenLocked)
+            return MobileTaskProposalResponse(
+                status: .rejected, reason: "Mac 处于锁屏状态，已拒绝远程任务。", taskIntentID: nil)
+        }
+        // 4. taskKind 白名单（FixedTaskCatalog 即攻击面）。
+        guard let taskKind, let kind = TaskKind(rawValue: taskKind),
+              let definition = FixedTaskCatalog.definition(for: kind) else {
+            return MobileTaskProposalResponse(
+                status: .rejected, reason: "未知的任务类型。", taskIntentID: nil)
+        }
+        // 5. scope 已登记、未撤销、目录可用。
+        let scopeID = projectScopeID ?? UUID()
+        var scopeDescriptor = FetchDescriptor<TaskProjectScope>(
+            predicate: #Predicate { $0.id == scopeID })
+        scopeDescriptor.fetchLimit = 1
+        guard let scope = try? modelContext.fetch(scopeDescriptor).first,
+              !scope.isRevoked, scope.directoryIsAvailable else {
+            return MobileTaskProposalResponse(
+                status: .rejected, reason: "项目范围不可用（未登记或已撤销）。", taskIntentID: nil)
+        }
+        // 6. T0 全策略核验：风险/窗口/nonce/过期。
+        let intent = TaskIntentPolicy.makeIntent(scope: scope, kind: kind)
+        let windows = (try? modelContext.fetch(FetchDescriptor<TaskReviewWindow>())) ?? []
+        let existing = (try? modelContext.fetch(FetchDescriptor<TaskIntent>())) ?? []
+        guard case .allowed = TaskIntentPolicy.review(
+            intent, scope: scope, windows: windows, existingIntents: existing) else {
+            // 拒绝原因映射为固定文案——localReviewRequired 是最常见的：
+            // 远程提交同样要求 Mac 上开着活跃的审阅窗口（T0 语义不变）。
+            let reason = intent.rejectionReason
+            let text = Self.rejectionText(reason)
+            DiagnosticsStore.shared.record(.remoteTaskRejectedByPolicy)
+            return MobileTaskProposalResponse(
+                status: .rejected, reason: text, taskIntentID: nil)
+        }
+        // 7. 确认档位（M1.1 三档推广）：lowRisk 且 risk==.low 命中白名单
+        //    免确认；其余弹 60 秒本机确认。
+        let needsConfirmation: Bool
+        switch definition.risk {
+        case .low:
+            needsConfirmation = !(MobileLaunchSession.shared.canSkipConfirmation(
+                policy: .lowRiskSessionOnly, toolID: intent.id, commandTemplate: definition.commandPreview))
+        case .standard:
+            needsConfirmation = true
+        }
+        if needsConfirmation {
+            let accepted = await confirm(definition.purpose(language: .simplifiedChinese))
+            guard accepted else {
+                DiagnosticsStore.shared.record(.remoteTaskRejectedByUser)
+                return MobileTaskProposalResponse(
+                    status: .rejected, reason: "Mac 上拒绝了本次任务。", taskIntentID: nil)
+            }
+            MobileLaunchSession.shared.recordConfirmation(toolID: intent.id)
+        } else {
+            DiagnosticsStore.shared.record(.mobileTaskAutoConfirmed)
+        }
+        // 8. approve → T1 执行（固定 executable/参数/超时/可停止/空 stdin）。
+        _ = TaskIntentPolicy.approve(intent, scope: scope, windows: windows, existingIntents: existing)
+        try? modelContext.insert(intent)
+        let title = definition.purpose(language: .simplifiedChinese)
+        let started = TaskExecutionCoordinator.shared.start(intent: intent, scope: scope) {}
+        if case .rejected = started {
+            return MobileTaskProposalResponse(
+                status: .rejected, reason: "任务启动预检未通过（目录或可执行文件缺失）。", taskIntentID: intent.id)
+        }
+        recordTaskState(
+            id: intent.id, title: title, executionState: intent.executionState,
+            exitCode: nil, startedAt: intent.executionStartedAt, finishedAt: nil,
+            outputSnippet: nil)
+        return MobileTaskProposalResponse(
+            status: .accepted, reason: nil, taskIntentID: intent.id)
+    }
+
+    /// T0 拒绝原因 → 手机端固定文案（无路径无命令——枚举语义，不是数据）。
+    private static func rejectionText(_ reason: TaskRejectionReason?) -> String {
+        switch reason {
+        case .localReviewRequired: return "Mac 上没有开启活跃的项目审阅窗口。"
+        case .reviewWindowExpired: return "项目审阅窗口已过期，请在 Mac 上重新开启。"
+        case .riskNotPermitted: return "任务风险等级超出审阅窗口允许范围。"
+        case .projectScopeUnavailable: return "项目范围不可用（未登记或已撤销）。"
+        case .unknownTaskKind: return "未知的任务类型。"
+        case .taskExpired: return "任务建议已过期。"
+        case .taskNotPending: return "任务不在待审状态。"
+        default: return "任务被本地策略拒绝。"
+        }
+    }
+
+    /// Mac 登录会话锁屏检测（防线 3）。CGSessionCopyCurrentDictionary 单点
+    /// 守卫（verify-macos.sh 白名单仅本文件）。
+    nonisolated static func isLoginSessionLocked() -> Bool {
+        guard let session = CGSessionCopyCurrentDictionary() as? [String: Any] else {
+            // 取不到会话字典（无 GUI/异常环境）按保守处理：视为锁屏。
+            return true
+        }
+        if let locked = session["CGSSessionScreenIsLocked"] as? Bool {
+            return locked
+        }
+        return false
+    }
+
+    // MARK: - M2b-3 cancelTask（设计 §5.1：仅手机提交且 running 的任务）
+
+    /// 取消运行中的任务。手机只能停 T1 任务（工具启动是终端交接，停止
+    /// 权在终端侧——不新增执行入口）。
+    func cancelTask(taskIntentID: UUID) -> MobileTaskProposalResponse {
+        let coordinator = TaskExecutionCoordinator.shared
+        if coordinator.runningIntentIDs.contains(taskIntentID) {
+            // 找回 intent 对象由 coordinator 内部 activeIntents 管理；
+            // stop 需要 intent——通过条目登记生命周期即可停进程。
+            if let intent = coordinator.intent(forID: taskIntentID) {
+                coordinator.stop(intent: intent)
+                return MobileTaskProposalResponse(
+                    status: .accepted, reason: nil, taskIntentID: taskIntentID)
+            }
+        }
+        return MobileTaskProposalResponse(
+            status: .rejected, reason: "任务不在运行中，无法停止。", taskIntentID: nil)
     }
 }
