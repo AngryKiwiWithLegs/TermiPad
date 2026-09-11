@@ -730,6 +730,16 @@ final class MobilePairingService: ObservableObject {
         connection: NWConnection,
         sessionKey: SymmetricKey
     ) async {
+        // 0. 锁屏拒绝（M2b 防线 3 补口，2026-09-10 验收发现：锁屏检查
+        // 此前只盖任务提交链，工具启动链漏防——小偷捡到手机仍可远程点
+        // 工具。与任务提交同一检查、同一文案族）。
+        if MobileTaskConsoleService.isLoginSessionLocked() {
+            DiagnosticsStore.shared.record(.remoteTaskBlockedScreenLocked)
+            sendLaunchResponse(
+                MobileLaunchResponse(status: .rejected, reason: "Mac 处于锁屏状态，已拒绝远程启动。"),
+                on: connection, using: sessionKey)
+            return
+        }
         // 1. 资格预检
         guard let tool = fetchTool(id: toolID),
               tool.showInMobileEntry,
