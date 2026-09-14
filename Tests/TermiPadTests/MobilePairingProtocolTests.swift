@@ -22,13 +22,51 @@ final class MobilePairingProtocolTests: XCTestCase {
 
     func testRequestEncodesOnlyWhitelistedKeys() throws {
         let request = MobilePairingRequest(
-            operation: .requestLaunch,
+            operation: .requestTaskProposal,
             requestID: UUID(),
-            toolID: UUID())
+            toolID: nil,
+            taskKind: "swiftPackageTests",
+            projectScopeID: UUID(),
+            taskIntentID: nil)
         let json = try JSONEncoder().encode(request)
         let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: json) as? [String: Any])
+        // M2b：任务引用三键（taskKind/projectScopeID/taskIntentID）之外，
         // 任何新增字段（command/path/param/env）都会让这个集合扩大而失败。
-        XCTAssertEqual(Set(object.keys), Set(["operation", "requestID", "toolID"]))
+        // nil 的 Optional 键不进编码产物（JSONEncoder 默认行为）——集合
+        // 即"本请求实际下发的全部键"。
+        XCTAssertEqual(Set(object.keys), Set([
+            "operation", "requestID",
+            "taskKind", "projectScopeID"]))
+    }
+
+    /// 旧载荷（M1/M2a 三字段）仍可解码——decodeIfPresent 语义（恢复兼容红线）。
+    func testRequestDecodesLegacyThreeFieldPayload() throws {
+        let legacyJSON = """
+        {"operation":"listTools","requestID":"\(UUID().uuidString)","toolID":null}
+        """
+        let decoded = try JSONDecoder().decode(MobilePairingRequest.self, from: Data(legacyJSON.utf8))
+        XCTAssertEqual(decoded.operation, .listTools)
+        XCTAssertNil(decoded.taskKind)
+        XCTAssertNil(decoded.projectScopeID)
+        XCTAssertNil(decoded.taskIntentID)
+    }
+
+    /// taskKind 是白名单枚举引用——不是自由命令通道。锁住合法字符集。
+    func testRequestTaskKindIsWhitelistedReference() throws {
+        let request = MobilePairingRequest(
+            operation: .requestTaskProposal,
+            requestID: UUID(),
+            toolID: nil,
+            taskKind: "swiftPackageTests",
+            projectScopeID: UUID(),
+            taskIntentID: nil)
+        let json = try JSONEncoder().encode(request)
+        let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: json) as? [String: Any])
+        let kind = try XCTUnwrap(object["taskKind"] as? String)
+        // FixedTaskCatalog 全部 kind 均为纯小写字母驼峰标识符（无空格/元字符/
+        // shell 语法）——正则锁死，防 taskKind 变成隐藏命令通道。
+        XCTAssertTrue(kind.range(of: "^[a-zA-Z][a-zA-Z0-9]{0,63}$", options: .regularExpression) != nil,
+                      "taskKind 必须是白名单标识符形态，实际：\(kind)")
     }
 
     func testToolSummaryEncodesOnlyWhitelistedKeys() throws {
@@ -243,5 +281,82 @@ final class MobilePairingProtocolTests: XCTestCase {
                 phonePublicKey: phonePub,
                 phoneNonce: MobilePairingCrypto.generateNonce()),
             identity: mac, macNonce: MobilePairingCrypto.generateNonce()))
+    }
+
+    // MARK: - M2b 任务会话回传契约（docs/m2b-remote-task-console-design.md §3.2）
+
+    /// 信封回环：五个新回传结构经 AEAD 加密后手机侧可原样解回。
+    func testTaskConsoleEnvelopeRoundTrip() throws {
+        let key = try makeSessionKey()
+
+        let scopes = [MobileScopeSummary(id: UUID(), displayName: "TermiPad")]
+        XCTAssertEqual(try MobilePairingEnvelope.openScopeSummaries(
+            try MobilePairingEnvelope.seal(scopes, using: key), using: key), scopes)
+
+        let tasks = [MobileFixedTaskSummary(
+            kind: "swiftPackageTests",
+            purpose: "运行项目的 Swift Package 单元测试。",
+            commandPreview: "swift test")]
+        XCTAssertEqual(try MobilePairingEnvelope.openFixedTaskSummaries(
+            try MobilePairingEnvelope.seal(tasks, using: key), using: key), tasks)
+
+        let entries = [
+            MobileSessionEntry(
+                id: UUID(), title: "swift test", kind: .fixedTask,
+                executionState: TaskExecutionState.running.rawValue,
+                exitCode: nil, startedAt: Date(), finishedAt: nil, outputSnippet: nil),
+            MobileSessionEntry(
+                id: UUID(), title: "构建", kind: .toolLaunch,
+                executionState: "launched",
+                exitCode: nil, startedAt: Date(), finishedAt: nil)
+        ]
+        XCTAssertEqual(try MobilePairingEnvelope.openSessionEntries(
+            try MobilePairingEnvelope.seal(entries, using: key), using: key), entries)
+
+        let accepted = MobileTaskProposalResponse(
+            status: .accepted, reason: nil, taskIntentID: UUID())
+        XCTAssertEqual(try MobilePairingEnvelope.openTaskProposalResponse(
+            try MobilePairingEnvelope.seal(accepted, using: key), using: key), accepted)
+
+        let rejected = MobileTaskProposalResponse(
+            status: .rejected, reason: "锁屏期间拒绝远程任务", taskIntentID: nil)
+        XCTAssertEqual(try MobilePairingEnvelope.openTaskProposalResponse(
+            try MobilePairingEnvelope.seal(rejected, using: key), using: key), rejected)
+    }
+
+    /// 会话条目编码 key 集合锁：outputSnippet 之外不得新增内容性字段。
+    func testSessionEntryEncodesOnlyWhitelistedKeys() throws {
+        let entry = MobileSessionEntry(
+            id: UUID(), title: "swift test", kind: .fixedTask,
+            executionState: TaskExecutionState.succeeded.rawValue,
+            exitCode: 0, startedAt: Date(), finishedAt: Date(),
+            outputSnippet: "全部通过")
+        let json = try JSONEncoder().encode(entry)
+        let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: json) as? [String: Any])
+        XCTAssertEqual(Set(object.keys), Set([
+            "id", "title", "kind", "executionState", "exitCode",
+            "startedAt", "finishedAt", "outputSnippet"]))
+    }
+
+    /// 工具启动条目无 outputSnippet 键——终端交接路径永无输出回传（编译层
+    /// Optional 默认 nil 不进编码产物，与 tailnetEndpoint 同款纪律）。
+    func testToolLaunchEntryOmitsOutputSnippet() throws {
+        let entry = MobileSessionEntry(
+            id: UUID(), title: "构建", kind: .toolLaunch,
+            executionState: "launched",
+            exitCode: nil, startedAt: Date(), finishedAt: nil)
+        let json = try JSONEncoder().encode(entry)
+        let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: json) as? [String: Any])
+        XCTAssertNil(object["outputSnippet"])
+    }
+
+    /// 旧回传结构的编码产物不含任务引用三键——M1/M2a 手机收到的帧不受影响。
+    func testLegacyRequestKeySetUnchanged() throws {
+        let request = MobilePairingRequest(
+            operation: .listTools, requestID: UUID(), toolID: UUID())
+        let json = try JSONEncoder().encode(request)
+        let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: json) as? [String: Any])
+        // toolID 非 nil 时恰 3 键；任务引用三键均 nil 不进编码产物。
+        XCTAssertEqual(Set(object.keys), Set(["operation", "requestID", "toolID"]))
     }
 }

@@ -14,6 +14,79 @@ final class MobilePairingService: ObservableObject {
     /// M1 监听固定端口。固定端口让 TXT 在 listener 启动前就能带上完整地址，
     /// 手机可绕开 Bonjour 服务解析（iOS 26 对 .service 端点解析会卡 preparing）直连。
     nonisolated static let listenerPort: UInt16 = MobilePairingCrypto.listenerPort
+    /// M2b 防线 2：配对凭据最长寿命（30 天）——偷手机的人拿到的钥匙
+    /// 最多活 30 天；正常用户任一次成功 resume 即续命（pairedAt 刷新）。
+    nonisolated static let pairingCredentialLifetime: TimeInterval = 30 * 24 * 3600
+
+    /// M2b 防线 3：写操作滑动窗口限速器（每分钟 ≤10 次）。NSLock 保护——
+    /// 握手在非主线程队列跑；测试可注入 now/isAllowed 窗口参数。
+    final class WriteRateLimiter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var timestamps: [Date] = []
+        private let window: TimeInterval
+        private let maxCount: Int
+
+        init(window: TimeInterval = 60, maxCount: Int = 10) {
+            self.window = window
+            self.maxCount = maxCount
+        }
+
+        func allow(now: Date = Date()) -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            timestamps.removeAll { now.timeIntervalSince($0) > window }
+            guard timestamps.count < maxCount else { return false }
+            timestamps.append(now)
+            return true
+        }
+
+        func reset() {
+            lock.lock()
+            timestamps.removeAll()
+            lock.unlock()
+        }
+    }
+
+    nonisolated private static let rateLimiter = WriteRateLimiter()
+
+    /// 续命节流闸（防线 2 配套）：每设备每天最多放行一次 Keychain 写。
+    /// NSLock 保护——握手在非主线程队列跑；测试可注入 now/间隔。
+    final class RenewalGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var lastRenewals: [UUID: Date] = [:]
+        private let minimumInterval: TimeInterval
+
+        init(minimumInterval: TimeInterval = 24 * 3600) {
+            self.minimumInterval = minimumInterval
+        }
+
+        func shouldRenew(
+            deviceID: UUID, lastRenewedAt: Date?, now: Date = Date()
+        ) -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            // 双闸：进程内内存闸（本进程已写过）+ 记录级闸（记录里的
+            // lastConnectedAt——app 重启后凭它继续节流）。
+            if let inProcess = lastRenewals[deviceID],
+               now.timeIntervalSince(inProcess) < minimumInterval {
+                return false
+            }
+            if let persisted = lastRenewedAt,
+               now.timeIntervalSince(persisted) < minimumInterval {
+                return false
+            }
+            lastRenewals[deviceID] = now
+            return true
+        }
+
+        func reset() {
+            lock.lock()
+            lastRenewals.removeAll()
+            lock.unlock()
+        }
+    }
+
+    nonisolated private static let renewalGate = RenewalGate()
 
     /// 枚举 en* 接口上的第一个私有 IPv4（192.168/10./172.16-31）。
     /// 不用 Process、不依赖 shell——getifaddrs 是 libc 级系统调用。
@@ -70,7 +143,19 @@ final class MobilePairingService: ObservableObject {
 
     init(store: MobileSecureKeyValueStore = KeychainMobileSecureStore()) {
         self.store = store
-        refreshPairedDevices()
+        // Keychain 首读必须离开主线程：PreferencesView 的 @StateObject 初始化器
+        // 在主线程 body 链上运行，且 Task { @MainActor } 只是把调用挪进主线程
+        // 的并发队列——SecItemCopyMatching 仍在 MainActor 上执行（2026-09-09
+        // 两轮 spindump 实证：422 样本全停在 MainActor→SecItem；首次访问要过
+        // 安全守护进程，UI 测试无交互环境可拖 15s+，app 无响应、accessibility
+        // 永不加载）。改为后台线程读取，完成后回主线程刷新 @Published。
+        let store = store
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let devices = PairedDeviceStore.list(store: store)
+            await MainActor.run { [weak self] in
+                self?.pairedDevices = devices
+            }
+        }
     }
 
     /// 注入 SwiftData 上下文（MainActor 域）——listTools 响应的只读数据源。
@@ -82,88 +167,171 @@ final class MobilePairingService: ObservableObject {
     @MainActor private static var sharedModelContext: ModelContext?
 
     func refreshPairedDevices() {
-        pairedDevices = PairedDeviceStore.list(store: store)
+        refreshPairedDevicesOffMain()
     }
 
     /// 用户开启配对：加载/生成本机身份，屏显配对码与指纹，启动 Bonjour 广播。
+    /// 快速 关→开 的竞态（2026-09-10 用户多次实测"启用配对又出错"）：
+    /// 旧 NWListener.cancel() 是异步的——新 listener 立刻绑 57146 撞上
+    /// 未释放的旧 socket，NWListener 进 .failed(EADDRINUSE) → UI 红字。
+    /// allowLocalEndpointReuse 只解 TIME_WAIT，解不了"旧对象未关完"。
+    /// 解法：绑定失败自动等待重试（3 次 × 1 秒），而非直接报错。
     func startPairing() {
         guard listener == nil else { return }
+        isPairingEnabledIntent = true
         do {
             let identity = try PairedDeviceStore.MobilePairingIdentityStore.loadOrCreate(store: store)
-            let fingerprint = MobilePairingCrypto.fingerprint(forPublicKeyData: try identity.publicKeyData())
-            let pairingCode = MobilePairingCrypto.generatePairingCode()
-            // 锁 Wi-Fi + 固定端口 + TXT 携带 LAN 地址：手机浏览时直接拿到 IP:port
-            // 用 hostPort 直连，绕开 iOS 26 对 .service 端点解析卡 preparing 的问题。
-            let parameters = NWParameters.tcp
-            parameters.requiredInterfaceType = .wifi
-            // 停止→快速重启配对时旧 socket 尚在 TIME_WAIT/异步关闭中，固定端口
-            // 会报"地址已被占用"（UI 显示一串红色错误）。允许本地端点复用，
-            // 这是 M1 固定端口设计的必然配套。
-            parameters.allowLocalEndpointReuse = true
-            let listener = try NWListener(using: parameters, on: NWEndpoint.Port(rawValue: MobilePairingService.listenerPort)!)
-            var txtDictionary = MobilePairingCrypto.bonjourTXTRecord(fingerprint: fingerprint)
-            if let lanAddress = MobilePairingService.lanIPv4Address() {
-                txtDictionary["a"] = lanAddress
-                txtDictionary["p"] = String(MobilePairingService.listenerPort)
-                Self.diagMac("TXT 带 LAN 地址 \(lanAddress):\(MobilePairingService.listenerPort)")
-            } else {
-                Self.diagMac("未找到 LAN IPv4——TXT 无地址，手机走服务端点回退路径")
-            }
-            // 实例名携带 LAN 地址（TermiPad-192-168-2-81）：iOS 26 的手机端浏览
-            // browse 结果不带 TXT（metadata 恒为 .none），.service 解析又卡
-            // preparing。地址编码进实例名是手机端唯一能自取的通道；端口固定
-            // listenerPort。实例名只影响"怎么连上"，身份仍由 MacHello 指纹决定。
-            let serviceName: String
-            if let lanAddress = MobilePairingService.lanIPv4Address() {
-                serviceName = "\(MobilePairingCrypto.bonjourServiceName)-\(lanAddress.replacingOccurrences(of: ".", with: "-"))"
-                Self.diagMac("实例名带 LAN 地址: \(serviceName)")
-            } else {
-                serviceName = MobilePairingCrypto.bonjourServiceName
-                Self.diagMac("未找到 LAN IPv4——退回无地址实例名")
-            }
-            listener.service = NWListener.Service(
-                name: serviceName,
-                type: MobilePairingCrypto.bonjourServiceType,
-                domain: "local.",
-                txtRecord: NWTXTRecord(txtDictionary))
-            listener.stateUpdateHandler = { [weak self] (newState: NWListener.State) in
-                guard let self else { return }
-                Task { @MainActor in
-                    if case .failed(let error) = newState {
-                        self.stopPairingInternal()
-                        self.state = .failed(error.localizedDescription)
-                    }
-                }
-            }
-            listener.newConnectionHandler = { [weak self] (connection: NWConnection) in
-                guard let self else { return }
-                MobilePairingService.beginHandshake(
-                    on: connection,
-                    queue: self.listenerQueue,
-                    identity: identity,
-                    pairingCode: pairingCode,
-                    store: self.store) { result in
-                        Task { @MainActor in self.finishPairing(result) }
-                    }
-            }
-            listener.start(queue: listenerQueue)
-            self.listener = listener
-            state = .listening(pairingCode: pairingCode, fingerprint: fingerprint)
+            attemptStartPairing(identity: identity, attempt: 0)
         } catch {
+            isPairingEnabledIntent = false
+            Self.diagMac("配对开启失败：identity 加载异常 \(error.localizedDescription)")
             state = .failed(error.localizedDescription)
         }
     }
 
+    private func attemptStartPairing(identity: MobilePairingIdentity, attempt: Int) {
+        // 指数退避（1/2/4 秒）：failed 过的 listener cancel 后内核清理
+        // （TCP 双栈 listen+backlog）比正常关闭慢得多——固定 1 秒间隔
+        // 三连撞（2026-09-10 19:34 实测：3 次全 EADDRINUSE）。
+        let backoffNanos = UInt64(pow(2.0, Double(attempt)) * 1_000_000_000)
+        if attempt > 0 {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: backoffNanos)
+                guard let self, self.listener == nil, self.isPairingEnabledIntent else { return }
+                self.attemptStartPairing(identity: identity, attempt: attempt)
+            }
+            return
+        }
+        // 递归推进 attempt+1 后会先退避再尝试（attempt>0 分支）。
+        let fingerprint = MobilePairingCrypto.fingerprint(forPublicKeyData: try! identity.publicKeyData())
+        let pairingCode = MobilePairingCrypto.generatePairingCode()
+        // 锁 Wi-Fi + 固定端口 + TXT 携带 LAN 地址：手机浏览时直接拿到 IP:port
+        // 用 hostPort 直连，绕开 iOS 26 对 .service 端点解析卡 preparing 的问题。
+        let parameters = NWParameters.tcp
+        parameters.requiredInterfaceType = .wifi
+        // 停止→快速重启配对时旧 socket 尚在 TIME_WAIT/异步关闭中，固定端口
+        // 会报"地址已被占用"（UI 显示一串红色错误）。允许本地端点复用，
+        // 这是 M1 固定端口设计的必然配套。
+        parameters.allowLocalEndpointReuse = true
+        let listener: NWListener
+        do {
+            listener = try NWListener(using: parameters, on: NWEndpoint.Port(rawValue: MobilePairingService.listenerPort)!)
+        } catch {
+            // 端口未释放（旧 listener 还在异步关闭）：等待后重试，最多 3 次。
+            if attempt < 3 {
+                Self.diagMac("配对端口暂不可用（第 \(attempt + 1) 次尝试），1 秒后重试")
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    guard let self, self.listener == nil, self.isPairingEnabledIntent else { return }
+                    self.attemptStartPairing(identity: identity, attempt: attempt + 1)
+                }
+                return
+            }
+            Self.diagMac("配对开启失败：端口重试 3 次仍不可用 \(error.localizedDescription)")
+            state = .failed(error.localizedDescription)
+            return
+        }
+        var txtDictionary = MobilePairingCrypto.bonjourTXTRecord(fingerprint: fingerprint)
+        if let lanAddress = MobilePairingService.lanIPv4Address() {
+            txtDictionary["a"] = lanAddress
+            txtDictionary["p"] = String(MobilePairingService.listenerPort)
+            Self.diagMac("TXT 带 LAN 地址 \(lanAddress):\(MobilePairingService.listenerPort)")
+        } else {
+            Self.diagMac("未找到 LAN IPv4——TXT 无地址，手机走服务端点回退路径")
+        }
+        // 实例名携带 LAN 地址（TermiPad-192-168-2-81）：iOS 26 的手机端浏览
+        // browse 结果不带 TXT（metadata 恒为 .none），.service 解析又卡
+        // preparing。地址编码进实例名是手机端唯一能自取的通道；端口固定
+        // listenerPort。实例名只影响"怎么连上"，身份仍由 MacHello 指纹决定。
+        let serviceName: String
+        if let lanAddress = MobilePairingService.lanIPv4Address() {
+            serviceName = "\(MobilePairingCrypto.bonjourServiceName)-\(lanAddress.replacingOccurrences(of: ".", with: "-"))"
+            Self.diagMac("实例名带 LAN 地址: \(serviceName)")
+        } else {
+            serviceName = MobilePairingCrypto.bonjourServiceName
+            Self.diagMac("未找到 LAN IPv4——退回无地址实例名")
+        }
+        listener.service = NWListener.Service(
+            name: serviceName,
+            type: MobilePairingCrypto.bonjourServiceType,
+            domain: "local.",
+            txtRecord: NWTXTRecord(txtDictionary))
+        listener.stateUpdateHandler = { [weak self] (newState: NWListener.State) in
+            guard let self else { return }
+            Task { @MainActor in
+                if case .failed(let error) = newState {
+                    // **异步失败也进重试**：NWListener 的绑定分两阶段——init
+                    // 同步成功后，listen 阶段仍可能撞上未释放的旧 socket
+                    // （EADDRINUSE 异步回调，2026-09-10 18:55:49 实证：上一版
+                    // 重试只盖同步 init，用户重开开关仍报错）。同样等 1 秒重试。
+                    guard self.listener === listener, self.isPairingEnabledIntent else { return }
+                    if attempt < 3 {
+                        Self.diagMac("配对监听异步失败（第 \(attempt + 1) 次尝试）：\(error.localizedDescription)，1 秒后重试")
+                        self.discardListenerQuietly(listener)
+                        Task { @MainActor [weak self] in
+                            try? await Task.sleep(nanoseconds: 1_000_000_000)
+                            guard let self, self.listener == nil, self.isPairingEnabledIntent else { return }
+                            self.attemptStartPairing(identity: identity, attempt: attempt + 1)
+                        }
+                        return
+                    }
+                    Self.diagMac("配对开启失败：异步重试 3 次仍不可用 \(error.localizedDescription)")
+                    self.stopPairingInternal()
+                    self.state = .failed("端口被占用，请等 10 秒后再点「启用同网配对」。\(error.localizedDescription)")
+                }
+            }
+        }
+        listener.newConnectionHandler = { [weak self] (connection: NWConnection) in
+            guard let self else { return }
+            MobilePairingService.beginHandshake(
+                on: connection,
+                queue: self.listenerQueue,
+                identity: identity,
+                pairingCode: pairingCode,
+                store: self.store) { result in
+                    Task { @MainActor in self.finishPairing(result) }
+                }
+        }
+        listener.start(queue: listenerQueue)
+        self.listener = listener
+        state = .listening(pairingCode: pairingCode, fingerprint: fingerprint)
+    }
+
+    /// 重试路径专用：丢弃失败的 listener 但**不**动意图标志/状态机——
+    /// stopPairingInternal 会清白名单并写诊断，重试期间两者都不该动。
+    private func discardListenerQuietly(_ listener: NWListener) {
+        guard self.listener === listener else { return }
+        listener.cancel()
+        self.listener = nil
+    }
+
+    /// 用户开启配对的意图标志：attempt 重试期间用户可能已点关闭——重试
+    /// 只在意图仍在时继续。
+    private var isPairingEnabledIntent = false
+
     func stopPairing() {
+        isPairingEnabledIntent = false
         stopPairingInternal()
         state = .off
+    }
+
+    /// Keychain 读取统一走后台线程 + 主线程回填（同 init 的纪律——
+    /// SecItemCopyMatching 首访在无交互环境可拖 15s+，禁止上 MainActor）。
+    private func refreshPairedDevicesOffMain() {
+        let store = store
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let devices = PairedDeviceStore.list(store: store)
+            await MainActor.run { [weak self] in
+                self?.pairedDevices = devices
+            }
+        }
     }
 
     /// 红线"每个权限可撤销"：撤销立即写入 Keychain 并刷新列表。
     /// 撤销不影响已建立的旧连接——本提交配对完成后即断开，无长连接可残留。
     func revoke(id: UUID) {
         try? PairedDeviceStore.revoke(id: id, store: store)
-        refreshPairedDevices()
+        refreshPairedDevicesOffMain()
     }
 
     private func stopPairingInternal() {
@@ -176,7 +344,7 @@ final class MobilePairingService: ObservableObject {
     private func finishPairing(_ result: Result<PairedDeviceRecord, Error>) {
         // 失败（扫描器、版本不符、配对码错误）静默丢弃连接；诊断事件后续接入。
         if case .success = result {
-            refreshPairedDevices()
+            refreshPairedDevicesOffMain()
         }
     }
 
@@ -329,6 +497,7 @@ final class MobilePairingService: ObservableObject {
         do {
             // Mac 侧必须核对配对码与屏显一致——这是防"同网主机静默配对"的关键。
             guard hello.pairingCode == expectedPairingCode else {
+                diagMac("配对拒绝：配对码与屏显不一致（长度 \(hello.pairingCode.utf8.count)）")
                 complete(.failure(MobilePairingError.invalidPairingCode))
                 return
             }
@@ -340,11 +509,13 @@ final class MobilePairingService: ObservableObject {
                 byPublicKeyHash: accepted.phonePublicKeyHash, store: store) {
                 try PairedDeviceStore.markConnected(id: existing.id, store: store)
                 record = existing
+                diagMac("配对接受：复用既有记录 \(existing.displayName)")
             } else {
                 record = try PairedDeviceStore.add(
                     displayName: accepted.deviceName,
                     publicKeyData: hello.phonePublicKey,
                     store: store)
+                diagMac("配对接受：新增设备 \(accepted.deviceName)")
             }
             let key = SymmetricKey(data: accepted.sessionKeyData)
             let ack = MobilePairingAck(accepted: true, deviceID: record.id)
@@ -385,6 +556,28 @@ final class MobilePairingService: ObservableObject {
                 diagMac("resume 拒绝：公钥指纹不匹配")
                 throw MobilePairingError.handshakeFailed
             }
+            // M2b 防线 2（设计 §4）：配对凭据 30 天时效——超龄拒绝 resume，
+            // 手机需回同网重新配对。正常用户任一次成功 resume 即续命。
+            guard Date().timeIntervalSince(record.pairedAt) <= Self.pairingCredentialLifetime else {
+                diagMac("resume 拒绝：配对已超 30 天时效 \(record.displayName)")
+                throw MobilePairingError.handshakeFailed
+            }
+            // M2b 防线 2 续命：成功 resume 刷新 pairedAt，但**节流**——每设备
+            // 每天最多写一次 Keychain。3 秒轮询场景下逐次写会 (a) 疯狂触发
+            // 系统钥匙串授权弹窗（2026-09-10 用户实测"越来越频繁"）、(b) 写
+            // 授权被拒时把 UI 状态带进 failed（"配对服务错误"假警报）。
+            // 30 天时效语义不变：窗口从最近一次续命起算，日常使用每天一次
+            // 足以续命；丢手机场景 30 天上限照样成立。
+            let deviceID = record.id
+            let storeRef = store
+            let shouldRenew = Self.renewalGate.shouldRenew(
+                deviceID: deviceID, lastRenewedAt: record.lastConnectedAt)
+            if shouldRenew {
+                Task.detached(priority: .utility) {
+                    try? PairedDeviceStore.markConnected(
+                        id: deviceID, at: Date(), store: storeRef)
+                }
+            }
             let sessionKeyData = try MobilePairingHandshake.deriveResumeSessionKey(
                 hello, identity: identity, macNonce: macNonce)
             // M2a：隧道开启时随 MacResumeHello 下发异地端点（同网引导异地，
@@ -422,6 +615,24 @@ final class MobilePairingService: ObservableObject {
             return
         }
         diagMac("收到请求 op=\(request.operation.rawValue) toolID=\(request.toolID?.uuidString ?? "nil")")
+        // M2b 防线 3（设计 §4）：写操作速率限制——每设备每分钟 ≤10 次
+        // （提交+启动合计）。超限回固定文案（防自动化滥用，丢手机攻击者
+        // 无法高频试探）。只读操作与心跳不限。
+        switch request.operation {
+        case .requestLaunch, .requestTaskProposal, .cancelTask:
+            guard rateLimiter.allow() else {
+                diagMac("速率限制：写操作超过每分钟 10 次")
+                Task { @MainActor in
+                    Self.sendSealed(
+                        MobileTaskProposalResponse(
+                            status: .rejected, reason: "请求过于频繁，请稍后再试。", taskIntentID: nil),
+                        on: connection, using: key)
+                }
+                return
+            }
+        default:
+            break
+        }
         switch request.operation {
         case .listTools:
             Task { @MainActor in
@@ -443,7 +654,49 @@ final class MobilePairingService: ObservableObject {
                     return
                 }
                 await Self.handleLaunchRequest(
-                    toolID: toolID, connection: connection, sessionKey: key)
+                    toolID: toolID, requestID: request.requestID, connection: connection, sessionKey: key)
+            }
+        case .listScopes:
+            Task { @MainActor in
+                let summaries = Self.sharedModelContext.map {
+                    MobileTaskConsoleService.shared.scopeSummaries(modelContext: $0)
+                } ?? []
+                Self.sendSealed(summaries, on: connection, using: key)
+            }
+        case .listFixedTasks:
+            Task { @MainActor in
+                let language = AppLanguage(
+                    rawValue: UserDefaults.standard.string(forKey: "TermiPad.language") ?? ""
+                ) ?? .simplifiedChinese
+                let summaries = MobileTaskConsoleService.shared.fixedTaskSummaries(language: language)
+                Self.sendSealed(summaries, on: connection, using: key)
+            }
+        case .getTaskStatus:
+            Task { @MainActor in
+                let entries = MobileTaskConsoleService.shared.sessionEntries()
+                Self.sendSealed(entries, on: connection, using: key)
+            }
+        case .requestTaskProposal:
+            Task { @MainActor in
+                let response = await MobileTaskConsoleService.shared.handleTaskProposal(
+                    taskKind: request.taskKind,
+                    projectScopeID: request.projectScopeID,
+                    modelContext: Self.sharedModelContext
+                        ?? ModelContext(try! ModelContainer(for: TaskIntent.self, TaskProjectScope.self, TaskReviewWindow.self)),
+                    confirm: { taskTitle in
+                        await MobileLaunchPromptCenter.shared.requestConfirmation(
+                            toolName: taskTitle, deviceName: "已配对设备")
+                    })
+                DiagnosticsStore.shared.record(.mcpTaskProposed)
+                Self.sendSealed(response, on: connection, using: key)
+            }
+        case .cancelTask:
+            Task { @MainActor in
+                let response = request.taskIntentID.map {
+                    MobileTaskConsoleService.shared.cancelTask(taskIntentID: $0)
+                } ?? MobileTaskProposalResponse(
+                    status: .rejected, reason: "请求缺少任务引用。", taskIntentID: nil)
+                Self.sendSealed(response, on: connection, using: key)
             }
         default:
             // 其余操作按设计文档节奏逐个启用；未启用即拒绝并断开。
@@ -451,14 +704,42 @@ final class MobilePairingService: ObservableObject {
         }
     }
 
+    /// 通用加密回帧：任务会话三个只读操作的回传出口（数据面结构各不相同，
+    /// 统一走 AEAD 信封 + 既有帧格式）。
+    @MainActor
+    private static func sendSealed(
+        _ value: some Encodable,
+        on connection: NWConnection,
+        using key: SymmetricKey
+    ) {
+        guard let sealed = try? MobilePairingEnvelope.seal(value, using: key) else {
+            connection.cancel()
+            return
+        }
+        connection.send(content: MobilePairingFrame.encode(sealed), completion: .contentProcessed { _ in
+            connection.cancel()
+        })
+    }
+
     /// §3.3.2 启动请求执行链（顺序不可交换）：
     /// 资格预检 → 本机确认（60s 超时=拒绝）→ 经 TerminalLauncher 交接 → 回结果。
     @MainActor
     private static func handleLaunchRequest(
         toolID: UUID,
+        requestID: UUID,
         connection: NWConnection,
         sessionKey: SymmetricKey
     ) async {
+        // 0. 锁屏拒绝（M2b 防线 3 补口，2026-09-10 验收发现：锁屏检查
+        // 此前只盖任务提交链，工具启动链漏防——小偷捡到手机仍可远程点
+        // 工具。与任务提交同一检查、同一文案族）。
+        if MobileTaskConsoleService.isLoginSessionLocked() {
+            DiagnosticsStore.shared.record(.remoteTaskBlockedScreenLocked)
+            sendLaunchResponse(
+                MobileLaunchResponse(status: .rejected, reason: "Mac 处于锁屏状态，已拒绝远程启动。"),
+                on: connection, using: sessionKey)
+            return
+        }
         // 1. 资格预检
         guard let tool = fetchTool(id: toolID),
               tool.showInMobileEntry,
@@ -505,11 +786,25 @@ final class MobilePairingService: ObservableObject {
             case .launched(let launchTarget):
                 DiagnosticsStore.shared.record(.launchSucceeded, terminalTarget: launchTarget)
                 tool.lastLaunchedAt = Date()
+                // M2b-1：工具启动事件进手机会话条目流（仅 launched/failed，
+                // 终端交接路径无退出码无输出——红线不变）。
+                MobileTaskConsoleService.shared.recordToolLaunch(
+                    id: requestID,
+                    title: tool.mobileDisplayName ?? tool.name,
+                    succeeded: true)
             default:
                 DiagnosticsStore.shared.record(.launchFailed, terminalTarget: target)
+                MobileTaskConsoleService.shared.recordToolLaunch(
+                    id: requestID,
+                    title: tool.mobileDisplayName ?? tool.name,
+                    succeeded: false)
             }
         } catch {
             DiagnosticsStore.shared.record(.launchFailed, terminalTarget: target)
+            MobileTaskConsoleService.shared.recordToolLaunch(
+                id: requestID,
+                title: tool.mobileDisplayName ?? tool.name,
+                succeeded: false)
         }
         // 4. 结果（启动交接完成即 accepted；是否真的弹出终端由终端侧决定，
         // 与 Mac 上手动启动同一语义）
