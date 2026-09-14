@@ -5,16 +5,79 @@
 import SwiftUI
 import Network
 import CryptoKit
+import LocalAuthentication
 
 @main
 struct TermiPadCompanionApp: App {
     @StateObject private var client = CompanionPairingClient()
+    @StateObject private var appLock = CompanionAppLock()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(client)
+                // M2b 防线 1（设计 §4）：切回前台过 Face ID/设备密码。
+                // 锁定时盖住全部界面——偷手机的人过不了生物识别。
+                .fullScreenCover(isPresented: $appLock.isLocked) {
+                    CompanionLockView(appLock: appLock)
+                }
         }
+    }
+}
+
+/// M2b 防线 1：app 前台锁。默认开启（用户可在锁屏页暂时跳过一次会话内
+/// 不再锁——设备级安全由 iOS 系统锁兜底；配对凭据本身已
+/// WhenUnlockedThisDeviceOnly）。
+@MainActor
+final class CompanionAppLock: ObservableObject {
+    @Published var isLocked = true
+
+    func requestUnlock() {
+        let context = LAContext()
+        var error: NSError?
+        // 设备密码兜底：无 Face ID/Touch ID 的设备回落 passcode。
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+            // 无任何生物/密码保护的设备（理论罕见）——不锁死用户。
+            isLocked = false
+            return
+        }
+        context.evaluatePolicy(
+            .deviceOwnerAuthentication,
+            localizedReason: "解锁 TermiPad 伴侣以查看任务会话"
+        ) { [weak self] success, _ in
+            Task { @MainActor in
+                self?.isLocked = !success
+            }
+        }
+    }
+}
+
+/// 锁屏盖层：全屏遮罩 + 解锁按钮（点击触发 Face ID）。
+struct CompanionLockView: View {
+    @ObservedObject var appLock: CompanionAppLock
+
+    var body: some View {
+        ZStack {
+            Rectangle().fill(.regularMaterial).ignoresSafeArea()
+            VStack(spacing: 16) {
+                Image(systemName: "lock.shield")
+                    .font(.system(size: 44))
+                    .foregroundStyle(.secondary)
+                Text("TermiPad 伴侣已锁定")
+                    .font(.headline)
+                Button("使用面容 ID 解锁") {
+                    appLock.requestUnlock()
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("companion-applock-unlock")
+                Text("为防止他人使用你的手机控制 Mac，每次打开需要验证。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+        }
+        .onAppear { appLock.requestUnlock() }
     }
 }
 
@@ -42,6 +105,10 @@ final class CompanionPairingClient: ObservableObject {
     @Published private(set) var phase: Phase = .idle
     @Published var pairingCodeInput = ""
     @Published var deviceName = "iPhone"
+    /// M2b-1 任务会话页数据（docs/m2b-remote-task-console-design.md §6）：
+    /// 非空即渲染会话页——数据驱动而非 phase 驱动，避免轮询期间
+    /// browsing/connecting 状态导致视图闪动。仅内存，不落盘（防线 1）。
+    @Published private(set) var consoleEntries: [MobileSessionEntry] = []
 
     private var browser: NWBrowser?
     private var connection: NWConnection?
@@ -53,6 +120,14 @@ final class CompanionPairingClient: ObservableObject {
     private var capturedServiceName: String?
     /// 非 nil 时 resume 后发 requestLaunch（而非 listTools）。
     private var pendingLaunchRequest: (toolID: UUID, name: String)?
+    /// M2b-1：非 nil 时 resume 后发 getTaskStatus（会话轮询请求）。
+    private var pendingConsoleRequest = false
+    // M2b-1 会话轮询状态（设计 §6：3 秒间隔、串行——上一轮响应（或超时）
+    // 之后才排下一轮，请求永不重叠；仅 app 前台时活跃）。
+    private var consolePollWorkItem: DispatchWorkItem?
+    private var consolePollingActive = false
+    /// 手动"返回"或页面隐藏后置位；进入会话页重新拉起。
+    private var consoleDismissed = false
     // M2a 连接编排状态（LAN 优先 / tailnet 兜底 / 明确超时文案）。
     private var tailnetFallbackWorkItem: DispatchWorkItem?
     private var browseTimeoutWorkItem: DispatchWorkItem?
@@ -79,6 +154,64 @@ final class CompanionPairingClient: ObservableObject {
         startBrowsingInternal()
     }
 
+    // MARK: - M2b-1 任务会话（docs/m2b-remote-task-console-design.md §6）
+
+    /// 进入会话页：立即拉一轮，成功后按 3 秒节奏轮询。数据到达即
+    /// consoleEntries 非空——会话页据此自渲染。
+    func openTaskConsole() {
+        consoleDismissed = false
+        guard !consolePollingActive else { return }
+        startConsolePollCycle()
+    }
+
+    /// 离开会话页：停轮询（连接由"一连接一请求"模型自然关闭）。
+    func closeTaskConsole() {
+        consoleDismissed = true
+        consolePollWorkItem?.cancel()
+        consolePollWorkItem = nil
+    }
+
+    private func startConsolePollCycle() {
+        consolePollingActive = true
+        guard let credentials = currentCredentials,
+              let endpoint = credentials.tailnetEndpoint, !endpoint.isEmpty
+                || phaseIsConnectedOrBrowsing else {
+            // 没有端点且不在近场——走既有浏览流程兜底。
+            consolePollingActive = false
+            startBrowsing()
+            return
+        }
+        pollConsoleOnce()
+    }
+
+    private func pollConsoleOnce() {
+        guard consolePollingActive, !consoleDismissed else { return }
+        let serviceName = Self.tailnetServiceName
+        let directAddress = currentCredentials?.tailnetEndpoint
+        // 连接编排复用既有路径：resume 握手 → getTaskStatus 一问一答。
+        // 会话轮询请求在 resume 完成后发出（pendingConsoleRequest）。
+        pendingConsoleRequest = true
+        connect(to: serviceName, directAddress: directAddress)
+        Self.diag("会话轮询：连接 Mac（\(directAddress ?? "LAN")）")
+    }
+
+    /// 上一轮响应/失败后调用：排 3 秒后的下一轮（串行，永不重叠）。
+    private func scheduleNextConsolePoll() {
+        guard consolePollingActive, !consoleDismissed else { return }
+        consolePollWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            Task { @MainActor in self?.pollConsoleOnce() }
+        }
+        consolePollWorkItem = work
+        queue.asyncAfter(deadline: .now() + 3, execute: work)
+    }
+
+    private var phaseIsConnectedOrBrowsing: Bool {
+        if case .browsing = phase { return true }
+        if case .connecting = phase { return true }
+        return false
+    }
+
     private func startBrowsingInternal() {
         let browser = NWBrowser(
             for: .bonjour(type: MobilePairingCrypto.bonjourServiceType, domain: nil),
@@ -86,18 +219,17 @@ final class CompanionPairingClient: ObservableObject {
         browser.browseResultsChangedHandler = { [weak self] results, _ in
             Self.diag("browse results=\(results.count) metadata=\(results.first?.metadata)")
             guard let self else { return }
-            guard let first = results.first,
-                  case .service(let name, _, _, _) = first.endpoint else { return }
-            // iOS 26 的 browse 结果不带 TXT（metadata 恒为 .none）；.service 端点
-            // 解析会卡 preparing。Mac 端把 LAN 地址编码进实例名
-            // （TermiPad-192-168-2-81），这里直接从名字还原 IP 直连。
-            guard let directAddress = Self.directAddress(fromServiceName: name) else {
-                Self.diag("实例名无 LAN 地址（\(name)）——等待 Mac 端重新开启配对广播")
-                return
+            // 竞态守卫（2026-09-10）：指纹确认与等待 ack 阶段忽略新 browse
+            // 结果——重连会覆盖 pendingMacHello/pendingIdentity/pendingNonce，
+            // 用户随后提交的配对将混用两轮连接的密钥材料（真机实测：Mac 端
+            // 「配对接受」与手机端解密失败同秒出现，即此竞态）。phase 是
+            // MainActor 隔离属性——闭包在 queue 上跑，经主线程读。
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if case .verifyFingerprint = self.phase { return }
+                if case .awaitingAck = self.phase { return }
+                self.handleBrowseResults(results)
             }
-            Self.diag("从实例名还原直连地址 \(directAddress)")
-            let finalAddress = directAddress
-            Task { @MainActor in self.connect(to: name, directAddress: finalAddress) }
         }
         browser.stateUpdateHandler = { [weak self] newState in
             Self.diag("browser state=\(newState)")
@@ -118,6 +250,21 @@ final class CompanionPairingClient: ObservableObject {
         tailnetAttemptInFlight = false
         scheduleTailnetFallbackIfNeeded()
         scheduleBrowseTimeout()
+    }
+
+    /// browse 结果的主线程处理（2026-09-10 从闭包抽出——闭包在 queue 上跑，
+    /// phase 检查必须回 MainActor）。iOS 26 的 browse 结果不带 TXT（metadata
+    /// 恒为 .none）；.service 端点解析会卡 preparing。Mac 端把 LAN 地址编码进
+    /// 实例名（TermiPad-192-168-2-81），这里直接从名字还原 IP 直连。
+    private func handleBrowseResults(_ results: Set<NWBrowser.Result>) {
+        guard let first = results.first,
+              case .service(let name, _, _, _) = first.endpoint else { return }
+        guard let directAddress = Self.directAddress(fromServiceName: name) else {
+            Self.diag("实例名无 LAN 地址（\(name)）——等待 Mac 端重新开启配对广播")
+            return
+        }
+        Self.diag("从实例名还原直连地址 \(directAddress)")
+        connect(to: name, directAddress: directAddress)
     }
 
     /// M2a 连接编排（docs/m2-secure-remote-session-design.md §3）：
@@ -247,6 +394,58 @@ final class CompanionPairingClient: ObservableObject {
         startBrowsingInternal()
     }
 
+    // MARK: - M2b-3 新任务提交（docs/m2b-remote-task-console-design.md §6）
+
+    /// 目录数据（listScopes / listFixedTasks 结果）——仅内存。
+    @Published private(set) var consoleScopes: [MobileScopeSummary] = []
+    @Published private(set) var consoleFixedTasks: [MobileFixedTaskSummary] = []
+    /// 目录拉取进行中（UI 显示进度条——2026-09-10 用户反馈"长时间无响应"
+    /// 无任何视觉反馈）。
+    @Published private(set) var isFetchingCatalog = false
+    /// 非 nil 时 resume 后发 requestTaskProposal（kind + scopeID）。
+    private var pendingTaskProposal: (kind: String, scopeID: UUID, title: String)?
+
+    /// 打开"新任务"页：拉 scopes + fixedTasks 两轮目录。
+    /// 走 LAN 优先 → tailnet 兜底的完整编排（2026-09-10 用户反馈：直接
+    /// 连 tailnet 伪服务名在同 Wi-Fi 下可能不通且无兜底——长时间无响应）。
+    func openNewTaskForm() {
+        stopAll()
+        pendingCatalogRequests = 2
+        isFetchingCatalog = true
+        startBrowsingInternal()
+    }
+
+    /// 目录轮次：listScopes 回来后接着拉 listFixedTasks（一连接一请求）。
+    private var pendingCatalogRequests = 0
+
+    /// 发起任务提交（新任务页的提交按钮）。
+    func submitTaskProposal(kind: String, scopeID: UUID, title: String) {
+        stopAll()
+        pendingTaskProposal = (kind, scopeID, title)
+        startBrowsingInternal()
+    }
+
+    /// 任务提交回执 → 会话页直接看状态（轮询里能看到该任务）。
+    @Published private(set) var lastTaskProposalResult: MobileTaskProposalResponse?
+
+    /// 目录拉取第二轮（listFixedTasks）的再连接入口——新一轮走完整浏览
+    /// 编排（LAN 优先 → tailnet 兜底），不直连 tailnet（同 Wi-Fi 下 utun
+    /// 可能不可达且无兜底——2026-09-10 用户实测"长时间无响应"）。
+    private func fetchNextCatalogRound() {
+        guard pendingCatalogRequests > 0 else { return }
+        startBrowsingInternal()
+    }
+
+    /// 目录拉取的"本轮要发什么"：pendingCatalogRequests==2 → listScopes
+    /// （首轮），==1 → listFixedTasks（第二轮）。与轮次计数同源，不会串轮。
+    private var pendingCatalogOperation: PairedDeviceOperation? {
+        switch pendingCatalogRequests {
+        case 2: return .listScopes
+        case 1: return .listFixedTasks
+        default: return nil
+        }
+    }
+
     /// 解除配对——清空 Keychain，回到首次配对。
     func unpair() {
         CompanionPairingStore.clear()
@@ -280,7 +479,11 @@ final class CompanionPairingClient: ObservableObject {
             // .wifi 约束（M1 防仿冒用）会挡掉它。
             connection = NWConnection(to: endpoint, using: Self.tunnelParameters())
         } else {
-            lanConnectStarted = true
+            // 注意：不在这里置 lanConnectStarted——"LAN 已连上"的语义只在
+            // TCP 真正 ready 时成立（见 .ready 分支）。拨号即置位的话，
+            // .waiting(ENETDOWN) 的死连接也会把标志拉真，后续 ENETDOWN
+            // 立即转 tailnet 被 fallbackToTailnet 的 guard 挡死（2026-09-10
+            // 蜂窝实测：fallback 日志触发但「改走异地 tailnet」永不出现）。
             connection = NWConnection(to: endpoint, using: Self.wifiParameters())
         }
         Self.diag("connecting to \(serviceName)")
@@ -305,6 +508,11 @@ final class CompanionPairingClient: ObservableObject {
                 case .ready:
                     self.phase = .connecting(DiscoveredMac(serviceName: serviceName))
                     self.capturedServiceName = serviceName
+                    // "LAN 已连上"在这里才成立：TCP 真正 ready（.waiting 的
+                    // 死连接到此根本走不到）。tailnet 伪服务名不算 LAN。
+                    if serviceName != Self.tailnetServiceName {
+                        self.lanConnectStarted = true
+                    }
                     self.receiveOneMessage { data in
                         Task { @MainActor in self.handleMacHello(data) }
                     }
@@ -314,8 +522,12 @@ final class CompanionPairingClient: ObservableObject {
                 case .waiting(let error):
                     // POSIX 50（Network is down）= 当前接口无网（如关 Wi-Fi 后
                     // 蜂窝未接管/VPN 未活跃）。LAN 已死——立即转 tailnet 兜底，
-                    // 不再等 6 秒定时器（此前 browse 缓存会伪装出结果，
-                    // lanConnectStarted 挡掉兜底守卫）。
+                    // 不再等 6 秒定时器。lanConnectStarted 一并清掉：这条死
+                    // 连接从未 ready，不算"LAN 已连上"（2026-09-10 蜂窝实测：
+                    // 残留标志把 fallbackToTailnet 的 guard 挡死）。
+                    if Self.isNetworkDown(error) {
+                        self.lanConnectStarted = false
+                    }
                     if !self.tailnetAttemptInFlight, Self.isNetworkDown(error),
                        let endpoint = self.currentCredentials?.tailnetEndpoint, !endpoint.isEmpty {
                         Self.diag("LAN 接口无网（\(error.localizedDescription)），立即转异地 tailnet")
@@ -408,6 +620,12 @@ final class CompanionPairingClient: ObservableObject {
     }
 
     private func handlePairingAck(_ data: Data?) {
+        Self.diag("收到配对 ack：\(data?.count ?? 0) 字节")
+        // 竞态守卫：输码期间浏览回调可能重开连接覆盖 pending 状态——旧连接
+        // 的 ack 到达时 pendingMacHello 已不是它的 MacHello（nonce 不匹配
+        // → 派生密钥不同 → 解密必然失败，2026-09-10 真机实例）。待确认的
+        // ack 只属于发起它的那次连接：awaitingAck 阶段收到新 browse 结果
+        // 直接忽略（下面 browse handler 同步拦截）。
         guard let data,
               let macHello = pendingMacHello,
               let identity = pendingIdentity,
@@ -442,6 +660,17 @@ final class CompanionPairingClient: ObservableObject {
             stopConnection()
             phase = .paired(credentials: credentials)
         } catch {
+            // 2026-09-10 真机排查：Mac 端「配对接受」与手机端解密失败同秒发生
+            // ——两端派生了不同会话密钥。打出派生输入摘要与两端比对（nonce/
+            // 公钥均为公开材料，安全）。诊断期间临时打 pairingCode 是核对传输
+            // 一致性的最小手段（同网人工比对场景下码本就屏显）。
+            func hexPrefix(_ data: Data, _ count: Int) -> String {
+                data.prefix(count).map { String(format: "%02x", $0) }.joined()
+            }
+            let phonePubHex = ((try? identity.publicKeyData()) ?? Data()).prefix(6)
+                .map { String(format: "%02x", $0) }.joined()
+            Self.diag("ack 校验失败：\(error.localizedDescription)")
+            Self.diag("派生输入摘要：macPub=\(hexPrefix(macHello.macPublicKey, 6)) macNonce=\(hexPrefix(macHello.macNonce, 4)) phoneNonce=\(hexPrefix(phoneNonce, 4)) code=\(code) phonePub=\(phonePubHex)")
             phase = .failed("配对结果校验失败：Mac 身份或配对码不一致。")
             stopConnection()
         }
@@ -482,8 +711,8 @@ final class CompanionPairingClient: ObservableObject {
                 try? CompanionPairingStore.save(identity: identity, credentials: updated)
                 Self.diag("异地端点已更新：\(macResume.tailnetEndpoint ?? "off")")
             }
-            // 立刻发请求——一连接一请求一响应。有 pendingLaunchRequest 发
-            // requestLaunch，否则发 listTools。
+            // 立刻发请求——一连接一请求一响应。优先级：requestLaunch >
+            // getTaskStatus（会话轮询）> listTools。
             // 先构造请求、取连接，最后才切 phase：currentDiscoveredMac 只在
             // .connecting/.awaitingAck 有值，提前切 .requestingLaunch 会让
             // 发送块被整体跳过（帧发不出去）。
@@ -491,6 +720,17 @@ final class CompanionPairingClient: ObservableObject {
             if let launch = pendingLaunchRequest {
                 Self.diag("MacResumeHello 校验通过，发 requestLaunch tool=\(launch.name)")
                 request = MobilePairingRequest(operation: .requestLaunch, requestID: UUID(), toolID: launch.toolID)
+            } else if let proposal = pendingTaskProposal {
+                Self.diag("MacResumeHello 校验通过，发 requestTaskProposal kind=\(proposal.kind)")
+                request = MobilePairingRequest(
+                    operation: .requestTaskProposal, requestID: UUID(), toolID: nil,
+                    taskKind: proposal.kind, projectScopeID: proposal.scopeID)
+            } else if let catalog = pendingCatalogOperation {
+                Self.diag("MacResumeHello 校验通过，发 \(catalog.rawValue)（目录拉取，剩 \(pendingCatalogRequests) 轮）")
+                request = MobilePairingRequest(operation: catalog, requestID: UUID(), toolID: nil)
+            } else if pendingConsoleRequest {
+                Self.diag("MacResumeHello 校验通过，发 getTaskStatus（会话轮询）")
+                request = MobilePairingRequest(operation: .getTaskStatus, requestID: UUID(), toolID: nil)
             } else {
                 Self.diag("MacResumeHello 校验通过，发 listTools")
                 request = MobilePairingRequest(operation: .listTools, requestID: UUID(), toolID: nil)
@@ -504,6 +744,10 @@ final class CompanionPairingClient: ObservableObject {
             let frame = MobilePairingFrame.encode(try MobilePairingEnvelope.seal(request, using: key))
             if let launch = pendingLaunchRequest {
                 phase = .requestingLaunch(launch.name)
+            } else if pendingConsoleRequest {
+                // 会话轮询期间 phase 保持在连接/列表态——会话页由
+                // consoleEntries 数据驱动，轮询不产生 phase 闪动。
+                phase = .listingTools(mac)
             } else {
                 phase = .listingTools(mac)
             }
@@ -531,6 +775,74 @@ final class CompanionPairingClient: ObservableObject {
         guard let data, let key = pendingSessionKey else {
             phase = .failed("未收到响应。")
             stopConnection()
+            if consolePollingActive { scheduleNextConsolePoll() }
+            return
+        }
+        // 新任务表单目录拉取（listScopes → listFixedTasks 两轮）与任务提交回执。
+        // 轮次判断：pendingCatalogRequests==2 是本轮 scopes，==1 是本轮 tasks。
+        if pendingCatalogRequests > 0 {
+            do {
+                switch pendingCatalogRequests {
+                case 2:
+                    let scopes = try MobilePairingEnvelope.openScopeSummaries(data, using: key)
+                    Self.diag("范围目录 count=\(scopes.count)")
+                    consoleScopes = scopes
+                    pendingCatalogRequests = 1
+                    stopConnection()
+                    // 第二轮走完整浏览编排（LAN 优先 → tailnet 兜底）。
+                    fetchNextCatalogRound()
+                case 1:
+                    let tasks = try MobilePairingEnvelope.openFixedTaskSummaries(data, using: key)
+                    Self.diag("固定任务目录 count=\(tasks.count)")
+                    consoleFixedTasks = tasks
+                    pendingCatalogRequests = 0
+                    isFetchingCatalog = false
+                    stopConnection()
+                default:
+                    pendingCatalogRequests = 0
+                    isFetchingCatalog = false
+                    stopConnection()
+                }
+            } catch {
+                Self.diag("目录拉取解密失败")
+                pendingCatalogRequests = 0
+                isFetchingCatalog = false
+                stopConnection()
+            }
+            return
+        }
+        if let proposal = pendingTaskProposal {
+            pendingTaskProposal = nil
+            _ = proposal
+            do {
+                let response = try MobilePairingEnvelope.openTaskProposalResponse(data, using: key)
+                Self.diag("任务提交回执 status=\(response.status.rawValue) reason=\(response.reason ?? "-")")
+                lastTaskProposalResult = response
+                stopConnection()
+                // 提交后立即进会话页看状态。
+                openTaskConsole()
+            } catch {
+                Self.diag("任务提交回执解析失败")
+                stopConnection()
+                openTaskConsole()
+            }
+            return
+        }
+        // 会话轮询响应先试：Mac 只回 [MobileSessionEntry]（一问一答模型下
+        // 与其他响应类型按 pending 标志互斥，不会误判）。
+        if pendingConsoleRequest {
+            pendingConsoleRequest = false
+            do {
+                let entries = try MobilePairingEnvelope.openSessionEntries(data, using: key)
+                Self.diag("会话快照 count=\(entries.count)")
+                consoleEntries = entries
+                stopConnection()
+                scheduleNextConsolePoll()
+            } catch {
+                Self.diag("会话快照解密失败")
+                stopConnection()
+                scheduleNextConsolePoll()
+            }
             return
         }
         // requestLaunch 的响应先试：Mac 只回 MobileLaunchResponse。
@@ -665,6 +977,9 @@ final class CompanionPairingClient: ObservableObject {
         tailnetFallbackWorkItem = nil
         browseTimeoutWorkItem?.cancel()
         browseTimeoutWorkItem = nil
+        consolePollWorkItem?.cancel()
+        consolePollWorkItem = nil
+        consolePollingActive = false
         lanConnectStarted = false
         tailnetAttemptInFlight = false
         browser?.cancel()
@@ -676,6 +991,10 @@ final class CompanionPairingClient: ObservableObject {
         pendingPhoneNonce = nil
         pendingSessionKey = nil
         pendingLaunchRequest = nil
+        pendingConsoleRequest = false
+        pendingTaskProposal = nil
+        pendingCatalogRequests = 0
+        isFetchingCatalog = false
     }
 
     private func refreshFromKeychain() {
@@ -696,6 +1015,12 @@ final class CompanionPairingClient: ObservableObject {
     /// UI 用：钥匙串里是否存有异地端点（browsing 文案与失败文案据此分流）。
     var hasTailnetEndpoint: Bool {
         !(currentCredentials?.tailnetEndpoint ?? "").isEmpty
+    }
+
+    /// UI 用：工具目录是否已在手（顶部进度条收起判断）。
+    var hasToolSummaries: Bool {
+        if case .toolSummaries = phase { return true }
+        return false
     }
 
     /// POSIX 50（ENETDOWN）：接口无网。iOS 上常见于关 Wi-Fi 后蜂窝/VPN

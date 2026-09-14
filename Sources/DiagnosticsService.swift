@@ -55,6 +55,17 @@ enum DiagnosticEventKind: String, Codable, CaseIterable {
     case remoteTunnelOpened
     /// M2a 异地隧道关闭时记一次。
     case remoteTunnelClosed
+    /// M2b 任务会话：条目流新增/更新（工具启动或任务状态）时记一次。
+    /// 仅时间戳——隐私纪律不记工具名/任务名/设备名。
+    case mobileConsoleEntryRecorded
+    /// M2b-3 任务提交被 T0 本地策略拒绝（审阅窗口/风险/范围等）时记一次。
+    case remoteTaskRejectedByPolicy
+    /// M2b-3 任务提交被 Mac 本机用户拒绝（60s 确认）时记一次。
+    case remoteTaskRejectedByUser
+    /// M2b-3 lowRisk 白名单命中、免本机确认直启任务时记一次。
+    case mobileTaskAutoConfirmed
+    /// M2b-3 Mac 锁屏期间远程任务被拒（防线 3）时记一次。
+    case remoteTaskBlockedScreenLocked
     case mcpToolListed
     case mcpTaskProposed
     case mcpTaskStatusRead

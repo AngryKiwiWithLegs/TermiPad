@@ -136,12 +136,27 @@ swift_source_guard() {
   fi
   local task_execution_code
   task_execution_code="$(sed '/^[[:space:]]*\/\//d' Sources/TaskExecutionService.swift Sources/TaskIntent.swift Sources/TaskPolicyWorkbenchView.swift)"
-  if printf '%s\n' "$task_execution_code" | grep -En 'URLSession|URLRequest|NWConnection|NWListener|WebSocket|NSAppleScript|TerminalLauncher|forkpty|posix_openpt|/bin/sh|https?://|stdin|stdout|stderr|Pipe\('; then
-    echo '检测到 T1 执行器触及网络、终端自动化、PTY、Shell 或进程输出边界。' >&2
+  # M2b-2（docs/m2b-remote-task-console-design.md §5.4/§7）：受控放宽——
+  # 输出档位 ≥ restricted 时 T1 用 Pipe 捕获 stdout/stderr 进仅内存
+  # ring buffer（32KB/400 行上限，脱敏后回传末尾片段）。红线不变的部分
+  # 仍然锁死：无网络、无终端自动化、无 PTY、无 Shell、无任意 stdin。
+  if printf '%s\n' "$task_execution_code" | grep -En 'URLSession|URLRequest|NWConnection|NWListener|WebSocket|NSAppleScript|TerminalLauncher|forkpty|posix_openpt|/bin/sh|https?://|stdin'; then
+    echo '检测到 T1 执行器触及网络、终端自动化、PTY、Shell 或进程输入边界。' >&2
     return 1
   fi
-  if ! printf '%s\n' "$task_execution_code" | grep -qF 'process.standardInput = FileHandle.nullDevice' || ! printf '%s\n' "$task_execution_code" | grep -qF 'process.standardOutput = FileHandle.nullDevice' || ! printf '%s\n' "$task_execution_code" | grep -qF 'process.standardError = FileHandle.nullDevice'; then
-    echo 'T1 执行器必须使用空输入输出，禁止保留或回传终端内容。' >&2
+  # 捕获只允许出现在 attachOutputCapture 单点（设计 §5.4），且必须与
+  # 档位裁决 capturesOutput 绑定；直接 grep Pipe 计数防止散落滥用。
+  if [ "$(printf '%s\n' "$task_execution_code" | grep -cE 'Pipe\(\)')" -gt 1 ] \
+    || ! printf '%s\n' "$task_execution_code" | grep -qF 'if capturesOutput {'; then
+    echo 'T1 输出捕获必须仅在 attachOutputCapture 单点且由档位裁决开关。' >&2
+    return 1
+  fi
+  if ! printf '%s\n' "$task_execution_code" | grep -qF 'process.standardInput = FileHandle.nullDevice'; then
+    echo 'T1 执行器必须使用空输入。' >&2
+    return 1
+  fi
+  if ! printf '%s\n' "$task_execution_code" | grep -qF 'process.standardOutput = FileHandle.nullDevice' || ! printf '%s\n' "$task_execution_code" | grep -qF 'process.standardError = FileHandle.nullDevice'; then
+    echo 'T1 执行器 minimal 档位必须维持空输出（nullDevice 分支不得删除）。' >&2
     return 1
   fi
   if grep -RInE 'Process\(' Sources | grep -vE 'Sources/(EnvironmentReport|TaskExecutionService|TailnetTunnelService)\.swift'; then
@@ -245,6 +260,12 @@ swift_source_guard() {
   # iOS 伴侣 app：NWBrowser 只允许出现在 CompanionApp/ 下；Sources/ 不得使用。
   if grep -RInE 'NWBrowser' Sources; then
     echo '检测到 Mac 端引入 NWBrowser——浏览器仅属于 iOS 伴侣 app。' >&2
+    return 1
+  fi
+  # M2b 防线 1（设计 §7）：LocalAuthentication 只允许 iOS 伴侣 app——
+  # Mac 端不引入生物识别依赖。
+  if grep -RInE 'import LocalAuthentication|LAContext' Sources; then
+    echo '检测到 Mac 端引入 LocalAuthentication——App 锁仅属于 iOS 伴侣 app。' >&2
     return 1
   fi
   # iOS Info.plist 必填：缺 NSLocalNetworkUsageDescription 或 NSBonjourServices 则本地发现会被静默杀。

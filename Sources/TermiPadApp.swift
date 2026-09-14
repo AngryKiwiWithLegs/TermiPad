@@ -90,9 +90,18 @@ struct TermiPadApplication: App {
             .frame(minWidth: TermiPadWorkspaceMetrics.minimumSize.width, minHeight: TermiPadWorkspaceMetrics.minimumSize.height)
             .preferredColorScheme(appearance.colorScheme)
             .softMacWindow(appearanceKey: appearanceRawValue)
+            // M2b：手机启动/任务确认弹窗挂载在 app 根视图——此前只在
+            // PreferencesView 上挂载，用户不在设置页时弹窗无处显示，
+            // 手机端提交/启动请求无限挂起（2026-09-10 实测：任务提交
+            // "没反应"即此因）。根视图常驻 → 任何页面都能弹。
+            MobileLaunchConfirmationRootView()
         }
         .defaultSize(
-            width: TermiPadWorkspaceMetrics.iPadReferenceSize.width,
+            // UI 测试用宽窗口：729pt 实际默认宽度下外观分段控件会被挤进
+            // 工具栏溢出弹层，identifier 查找失败（2026-09-09 快照实证）。
+            // 只在 TERMIPAD_UI_TEST_MODE 下加宽，不影响真实窗口默认值。
+            width: ProcessInfo.processInfo.environment["TERMIPAD_UI_TEST_MODE"] == "1"
+                ? 1_600 : TermiPadWorkspaceMetrics.iPadReferenceSize.width,
             height: TermiPadWorkspaceMetrics.iPadReferenceSize.height
         )
         .modelContainer(sharedModelContainer)
@@ -133,5 +142,43 @@ struct TermiPadApplication: App {
         } catch {
             fatalError("Unable to insert M0 UI test fixture tool: \(error)")
         }
+    }
+}
+
+/// 手机启动/任务确认弹窗的全局挂载点（M2b，2026-09-10）。
+/// 此前弹窗只挂在 PreferencesView——用户不在设置页时 alert 无处显示，
+/// 手机端的启动/任务请求在"等本机确认"一步无限挂起。根视图常驻，
+/// 任何页面都能弹。
+struct MobileLaunchConfirmationRootView: View {
+    @ObservedObject private var launchPrompt = MobileLaunchPromptCenter.shared
+    @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.simplifiedChinese.rawValue
+
+    private var language: AppLanguage {
+        AppLanguage(rawValue: languageRawValue) ?? .simplifiedChinese
+    }
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .alert(
+                AppCopy.text("mobileLaunchPromptTitle", language: language),
+                isPresented: Binding(
+                    get: { launchPrompt.pending != nil },
+                    set: { _ in launchPrompt.respond(false) })
+            ) {
+                Button(AppCopy.text("mobileLaunchPromptAccept", language: language)) {
+                    launchPrompt.respond(true)
+                }
+                Button(AppCopy.text("mobileLaunchPromptDeny", language: language), role: .cancel) {
+                    launchPrompt.respond(false)
+                }
+            } message: {
+                if let pending = launchPrompt.pending {
+                    Text(AppCopy.format(
+                        "mobileLaunchPromptBody",
+                        "\(pending.toolName) · \(pending.deviceName)",
+                        language: language))
+                }
+            }
     }
 }
