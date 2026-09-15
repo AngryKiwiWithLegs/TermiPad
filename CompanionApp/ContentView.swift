@@ -280,6 +280,19 @@ struct ContentView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
+                        // M2c：仅手机可见的运行中条目提供停止（固定任务可停，
+                        // 工具启动是终端交接——停止权在终端侧，不放按钮）。
+                        if entry.executionState == "running" && entry.kind == .fixedTask {
+                            Button {
+                                client.cancelTask(taskIntentID: entry.id, title: entry.title)
+                            } label: {
+                                Label("停止", systemImage: "stop.circle.fill")
+                                    .font(.caption.bold())
+                            }
+                            .buttonStyle(.borderless)
+                            .tint(.red)
+                            .accessibilityIdentifier("companion-console-stop-\(entry.id.uuidString)")
+                        }
                         if let finished = entry.finishedAt {
                             Text(finished.formatted(date: .omitted, time: .shortened))
                                 .font(.caption2)

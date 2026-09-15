@@ -446,6 +446,16 @@ final class CompanionPairingClient: ObservableObject {
         }
     }
 
+    /// M2c：手机发起的任务取消（会话页 running 条目的停止按钮）。
+    private var pendingCancelTask: (taskIntentID: UUID, title: String)?
+
+    /// 发起任务取消：走 resume 通道（一连接一请求一响应）。
+    func cancelTask(taskIntentID: UUID, title: String) {
+        stopAll()
+        pendingCancelTask = (taskIntentID, title)
+        startBrowsingInternal()
+    }
+
     /// 解除配对——清空 Keychain，回到首次配对。
     func unpair() {
         CompanionPairingStore.clear()
@@ -728,6 +738,11 @@ final class CompanionPairingClient: ObservableObject {
             } else if let catalog = pendingCatalogOperation {
                 Self.diag("MacResumeHello 校验通过，发 \(catalog.rawValue)（目录拉取，剩 \(pendingCatalogRequests) 轮）")
                 request = MobilePairingRequest(operation: catalog, requestID: UUID(), toolID: nil)
+            } else if let cancel = pendingCancelTask {
+                Self.diag("MacResumeHello 校验通过，发 cancelTask task=\(cancel.taskIntentID)")
+                request = MobilePairingRequest(
+                    operation: .cancelTask, requestID: UUID(), toolID: nil,
+                    taskIntentID: cancel.taskIntentID)
             } else if pendingConsoleRequest {
                 Self.diag("MacResumeHello 校验通过，发 getTaskStatus（会话轮询）")
                 request = MobilePairingRequest(operation: .getTaskStatus, requestID: UUID(), toolID: nil)
@@ -809,6 +824,23 @@ final class CompanionPairingClient: ObservableObject {
                 isFetchingCatalog = false
                 stopConnection()
             }
+            return
+        }
+        // M2c 任务取消回执：接受/拒绝都即时反馈（本地状态标记）。
+        if let cancel = pendingCancelTask {
+            pendingCancelTask = nil
+            do {
+                let response = try MobilePairingEnvelope.openTaskProposalResponse(data, using: key)
+                Self.diag("任务取消回执 status=\(response.status.rawValue) reason=\(response.reason ?? "-")")
+                stopConnection()
+                // 无论接受与否，立拉一轮会话快照——running 条目将变 stopped。
+                pendingConsoleRequest = true
+                connect(to: Self.tailnetServiceName, directAddress: currentCredentials?.tailnetEndpoint)
+            } catch {
+                Self.diag("任务取消回执解析失败")
+                stopConnection()
+            }
+            _ = cancel
             return
         }
         if let proposal = pendingTaskProposal {
@@ -993,6 +1025,7 @@ final class CompanionPairingClient: ObservableObject {
         pendingLaunchRequest = nil
         pendingConsoleRequest = false
         pendingTaskProposal = nil
+        pendingCancelTask = nil
         pendingCatalogRequests = 0
         isFetchingCatalog = false
     }
