@@ -140,7 +140,8 @@ final class MobileTaskConsoleService: ObservableObject {
             MobileFixedTaskSummary(
                 kind: definition.kind.rawValue,
                 purpose: definition.purpose(language: language),
-                commandPreview: definition.commandPreview)
+                commandPreview: definition.commandPreview,
+                requiredRelativePaths: definition.requiredRelativePaths)
         }
     }
 
