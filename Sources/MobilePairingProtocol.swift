@@ -131,6 +131,12 @@ struct MobileFixedTaskSummary: Codable, Sendable, Equatable {
     let kind: String
     let purpose: String
     let commandPreview: String
+    /// M2c：任务对项目目录的固定要求（FixedTaskCatalog 字面量，非用户
+    /// 数据）——手机端显示"需要：Package.swift"等，让用户能自行对上
+    /// 范围与任务（2026-09-15 实测：缺文件拒绝文案精确了，但选范围时
+    /// 仍无从知道哪个范围满足哪个任务）。Optional + 合成解码——旧 Mac
+    /// 不发此键，旧手机忽略（兼容红线）。
+    var requiredRelativePaths: [String]? = nil
 }
 
 /// 会话条目：工具启动与固定任务统一形态（§3.3——状态字符串全部来自

@@ -361,6 +361,13 @@ struct ContentView: View {
                             Text(task.commandPreview)
                                 .font(.caption.monospaced())
                                 .foregroundStyle(.secondary)
+                            if let required = task.requiredRelativePaths, !required.isEmpty {
+                                // M2c：任务对项目目录的固定要求（目录字面量）
+                                // ——用户能对上"范围 × 任务"，不再盲选。
+                                Text("项目目录需包含：\(required.joined(separator: "、"))")
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                            }
                         }
                         Spacer()
                         Image(systemName: selectedTaskKind == task.kind
