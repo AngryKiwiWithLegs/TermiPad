@@ -16,3 +16,4 @@ xcuserdata/
 github_actions_*.md
 termipad_development_backlog.md
 design-ci-failed.log
+.build-companion/
