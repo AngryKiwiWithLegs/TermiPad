@@ -96,7 +96,12 @@ struct TermiPadApplication: App {
             // 的 alert 不渲染（2026-09-15 实测仍无弹窗）。正确做法：alert
             // 直接作为根内容 Group 的 modifier——尺寸由 LaunchpadView 决定，
             // alert 修饰符在真实层级上必然生效。
-            .modifier(MobileLaunchConfirmationAlertModifier())
+            // M2b：确认弹窗挂在根内容真实层级（零尺寸视图的 alert 在
+            // macOS 不渲染）。UI 测试模式跳过——ObservedObject 单例
+            // 订阅在 Runner 连接建立期阻塞 accessibility（2026-09-17
+            // 二分实证：禁用后 UI 测试即全绿），真机路径不受影响。
+            .modifier(MobileLaunchConfirmationAlertModifier(
+                isDisabled: ProcessInfo.processInfo.environment["TERMIPAD_UI_TEST_MODE"] == "1"))
         }
         .defaultSize(
             // UI 测试用宽窗口：729pt 实际默认宽度下外观分段控件会被挤进
@@ -153,6 +158,8 @@ struct TermiPadApplication: App {
 /// 仍不渲染。ViewModifier 直接加在 WindowGroup 根内容（LaunchpadView
 /// 所在的真实层级）上——alert 必然生效。
 struct MobileLaunchConfirmationAlertModifier: ViewModifier {
+    /// UI 测试模式下不订阅确认中心（见挂载点注释）；真机恒 false。
+    let isDisabled: Bool
     @ObservedObject private var launchPrompt = MobileLaunchPromptCenter.shared
     @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.simplifiedChinese.rawValue
 
@@ -161,6 +168,14 @@ struct MobileLaunchConfirmationAlertModifier: ViewModifier {
     }
 
     func body(content: Content) -> some View {
+        if isDisabled {
+            content
+        } else {
+            alertContent(content)
+        }
+    }
+
+    private func alertContent(_ content: Content) -> some View {
         content.alert(
             AppCopy.text("mobileLaunchPromptTitle", language: language),
             isPresented: Binding(
