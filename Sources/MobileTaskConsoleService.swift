@@ -140,7 +140,8 @@ final class MobileTaskConsoleService: ObservableObject {
             MobileFixedTaskSummary(
                 kind: definition.kind.rawValue,
                 purpose: definition.purpose(language: language),
-                commandPreview: definition.commandPreview)
+                commandPreview: definition.commandPreview,
+                requiredRelativePaths: definition.requiredRelativePaths)
         }
     }
 
@@ -196,14 +197,17 @@ final class MobileTaskConsoleService: ObservableObject {
         let intent = TaskIntentPolicy.makeIntent(scope: scope, kind: kind)
         let windows = (try? modelContext.fetch(FetchDescriptor<TaskReviewWindow>())) ?? []
         let existing = (try? modelContext.fetch(FetchDescriptor<TaskIntent>())) ?? []
-        guard case .allowed = TaskIntentPolicy.review(
-            intent, scope: scope, windows: windows, existingIntents: existing) else {
-            // 拒绝原因映射为固定文案；具体 reason 写 diagMac（2026-09-10：
-            // 手机端只见兜底文案无法定位，缺 reason 日志）。
-            let reason = intent.rejectionReason
+        let decision = TaskIntentPolicy.review(
+            intent, scope: scope, windows: windows, existingIntents: existing)
+        guard case .allowed = decision else {
+            // 拒绝原因映射为固定文案；具体 reason 写 diagMac（review() 是
+            // 纯判定不落 rejectionReason——直接从 decision 取，2026-09-15：
+            // 之前读 intent.rejectionReason 恒 nil）。
+            let reason: TaskRejectionReason?
+            if case .rejected(let r) = decision { reason = r } else { reason = nil }
             let text = Self.rejectionText(reason)
             DiagnosticsStore.shared.record(.remoteTaskRejectedByPolicy)
-            MobilePairingService.diagMac("手机任务被 T0 策略拒绝：\(reason?.rawValue ?? "未知（rejectionReason 为 nil）")")
+            MobilePairingService.diagMac("手机任务被 T0 策略拒绝：\(reason?.rawValue ?? "未知")")
             return MobileTaskProposalResponse(
                 status: .rejected, reason: text, taskIntentID: nil)
         }

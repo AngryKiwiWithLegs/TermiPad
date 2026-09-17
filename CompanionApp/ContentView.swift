@@ -280,6 +280,19 @@ struct ContentView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
+                        // M2c：仅手机可见的运行中条目提供停止（固定任务可停，
+                        // 工具启动是终端交接——停止权在终端侧，不放按钮）。
+                        if entry.executionState == "running" && entry.kind == .fixedTask {
+                            Button {
+                                client.cancelTask(taskIntentID: entry.id, title: entry.title)
+                            } label: {
+                                Label("停止", systemImage: "stop.circle.fill")
+                                    .font(.caption.bold())
+                            }
+                            .buttonStyle(.borderless)
+                            .tint(.red)
+                            .accessibilityIdentifier("companion-console-stop-\(entry.id.uuidString)")
+                        }
                         if let finished = entry.finishedAt {
                             Text(finished.formatted(date: .omitted, time: .shortened))
                                 .font(.caption2)
@@ -348,6 +361,13 @@ struct ContentView: View {
                             Text(task.commandPreview)
                                 .font(.caption.monospaced())
                                 .foregroundStyle(.secondary)
+                            if let required = task.requiredRelativePaths, !required.isEmpty {
+                                // M2c：任务对项目目录的固定要求（目录字面量）
+                                // ——用户能对上"范围 × 任务"，不再盲选。
+                                Text("项目目录需包含：\(required.joined(separator: "、"))")
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                            }
                         }
                         Spacer()
                         Image(systemName: selectedTaskKind == task.kind
