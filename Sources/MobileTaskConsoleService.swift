@@ -211,14 +211,20 @@ final class MobileTaskConsoleService: ObservableObject {
             return MobileTaskProposalResponse(
                 status: .rejected, reason: text, taskIntentID: nil)
         }
-        // 7. 确认档位（M1.1 三档推广）：lowRisk 且 risk==.low 命中白名单
-        //    免确认；其余弹 60 秒本机确认。
+        // 7. 确认档位（M1.1 三档推广 + M3 每日窗口）：lowRisk 且 risk==.low
+        //    命中白名单或每日远程窗口开启 → 免确认；其余弹 60 秒本机确认。
         let needsConfirmation: Bool
-        switch definition.risk {
-        case .low:
-            needsConfirmation = !(MobileLaunchSession.shared.canSkipConfirmation(
-                policy: .lowRiskSessionOnly, toolID: intent.id, commandTemplate: definition.commandPreview))
-        case .standard:
+        if definition.risk == .low,
+           MobileLaunchSession.shared.canSkipConfirmation(
+               policy: .lowRiskSessionOnly, toolID: intent.id,
+               commandTemplate: definition.commandPreview) {
+            needsConfirmation = false
+            DiagnosticsStore.shared.record(.mobileTaskAutoConfirmed)
+        } else if RemoteAllowWindow.shared.allowsSkipConfirmation() {
+            needsConfirmation = false
+            DiagnosticsStore.shared.record(.remoteAllowWindowUsed)
+            MobilePairingService.diagMac("每日远程窗口命中，任务免确认")
+        } else {
             needsConfirmation = true
         }
         if needsConfirmation {
@@ -229,8 +235,6 @@ final class MobileTaskConsoleService: ObservableObject {
                     status: .rejected, reason: "Mac 上拒绝了本次任务。", taskIntentID: nil)
             }
             MobileLaunchSession.shared.recordConfirmation(toolID: intent.id)
-        } else {
-            DiagnosticsStore.shared.record(.mobileTaskAutoConfirmed)
         }
         // 8. approve → T1 执行（固定 executable/参数/超时/可停止/空 stdin）。
         _ = TaskIntentPolicy.approve(intent, scope: scope, windows: windows, existingIntents: existing)
