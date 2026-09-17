@@ -1,3 +1,4 @@
+import LocalAuthentication
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
@@ -249,6 +250,10 @@ struct PreferencesView: View {
                 Text(AppCopy.text("mobileTunnelHint", language: language))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                // M3 每日远程窗口（docs/m3-remote-allow-window-design.md §3.4）：
+                // 触摸 ID 开窗 → 当日手机操作免本机确认；锁屏/跨日/撤销即失效。
+                RemoteAllowWindowSection()
+
                 // M2b 输出档位（docs/m2b-remote-task-console-design.md §5.4）：
                 // Mac 是权威——手机端不持有档位状态，回传内容自然体现档位效果。
                 Picker(AppCopy.text("remoteOutputVisibility", language: language), selection: Binding(
@@ -573,5 +578,73 @@ struct PreferencesView: View {
             return "新增 \(summary.addedTools) 个工具，更新 \(summary.updatedTools) 个工具；新增 \(summary.addedCandidates) 个候选，更新 \(summary.updatedCandidates) 个候选。"
         }
         return "\(summary.addedTools) tools added, \(summary.updatedTools) tools updated; \(summary.addedCandidates) candidates added, \(summary.updatedCandidates) candidates updated."
+    }
+}
+
+
+/// M3 今日远程窗口 Section（独立视图——需要自己的 LAContext 状态）。
+struct RemoteAllowWindowSection: View {
+    @ObservedObject private var allowWindow = RemoteAllowWindow.shared
+    @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.simplifiedChinese.rawValue
+    @State private var authErrorMessage: String?
+
+    private var language: AppLanguage {
+        AppLanguage(rawValue: languageRawValue) ?? .simplifiedChinese
+    }
+
+    var body: some View {
+        Section("今日远程窗口（M3）") {
+            HStack {
+                if allowWindow.isOpen {
+                    Label("已开启——今日内手机操作免确认", systemImage: "checkmark.shield")
+                        .foregroundStyle(.green)
+                    Spacer()
+                    Text("剩余 \(formatRemaining(allowWindow.secondsRemaining))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("关闭", role: .destructive) {
+                        allowWindow.close()
+                        LockStateMonitor.shared.setActive(false)
+                    }
+                } else {
+                    Button("开启今日远程窗口") { openWindowWithAuth() }
+                        .accessibilityIdentifier("settings-remote-allow-open")
+                }
+            }
+            if let authErrorMessage {
+                Text(authErrorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            Text("开启后今天内手机启动/任务免本机确认。Mac 锁屏、重启或撤销配对都会立即关闭窗口；跨天需重新解锁。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func openWindowWithAuth() {
+        authErrorMessage = nil
+        let context = LocalAuthentication.LAContext()
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+            authErrorMessage = "本机未配置触摸 ID/密码，无法开启远程窗口。"
+            return
+        }
+        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "开启今日远程窗口") { success, _ in
+            Task { @MainActor in
+                guard success else {
+                    authErrorMessage = "认证未通过，窗口未开启。"
+                    return
+                }
+                RemoteAllowWindow.shared.open(authenticated: true)
+                LockStateMonitor.shared.setActive(true)
+            }
+        }
+    }
+
+    private func formatRemaining(_ seconds: TimeInterval) -> String {
+        let hours = Int(seconds) / 3600
+        let minutes = (Int(seconds) % 3600) / 60
+        return hours > 0 ? "\(hours)小时\(minutes)分" : "\(minutes)分"
     }
 }

@@ -339,6 +339,8 @@ final class MobilePairingService: ObservableObject {
         listener = nil
         // 关闭监听即清会话白名单——免确认缓存的生命周期绝不超出监听开启期。
         MobileLaunchSession.shared.invalidateAll()
+        // M3：配对关闭/撤销联动——远程窗口立即失效（设计 §3.2 撤销联动）。
+        RemoteAllowWindow.shared.close()
     }
 
     private func finishPairing(_ result: Result<PairedDeviceRecord, Error>) {
@@ -752,8 +754,8 @@ final class MobilePairingService: ObservableObject {
             return
         }
         // 2. 本机确认（§3.3.2 增补 2026-09-08）：perSession/lowRisk 会话白名单
-        //    命中即免确认直启（记审计事件）；everyTime / 未命中 / lowRisk 元字符
-        //    第二道防线拦下的一律弹 60s 确认框。
+        //    命中即免确认直启（记审计事件）；M3 每日远程窗口开启时同样免确认
+        //    （设计 §3.3——T0/锁屏/限速检查不在此路径豁免）；其余弹 60s 确认框。
         let launchSession = MobileLaunchSession.shared
         if launchSession.canSkipConfirmation(
             policy: tool.mobileLocalConfirmPolicy,
@@ -761,6 +763,9 @@ final class MobilePairingService: ObservableObject {
             commandTemplate: tool.commandTemplate) {
             DiagnosticsStore.shared.record(.mobileLaunchAutoConfirmed)
             diagMac("会话白名单命中，免确认直启 policy=\(tool.mobileLocalConfirmPolicy.rawValue)")
+        } else if RemoteAllowWindow.shared.allowsSkipConfirmation() {
+            DiagnosticsStore.shared.record(.remoteAllowWindowUsed)
+            diagMac("每日远程窗口命中，免确认直启")
         } else {
             let accepted = await MobileLaunchPromptCenter.shared.requestConfirmation(
                 toolName: tool.mobileDisplayName ?? tool.name,
