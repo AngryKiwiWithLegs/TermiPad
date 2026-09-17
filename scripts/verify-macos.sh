@@ -262,10 +262,12 @@ swift_source_guard() {
     echo '检测到 Mac 端引入 NWBrowser——浏览器仅属于 iOS 伴侣 app。' >&2
     return 1
   fi
-  # M2b 防线 1（设计 §7）：LocalAuthentication 只允许 iOS 伴侣 app——
-  # Mac 端不引入生物识别依赖。
-  if grep -RInE 'import LocalAuthentication|LAContext' Sources; then
-    echo '检测到 Mac 端引入 LocalAuthentication——App 锁仅属于 iOS 伴侣 app。' >&2
+  # M2b 防线 1（设计 §7）+ M3 修订：LocalAuthentication 的 LAContext
+  # 允许 iOS 伴侣 app 与 Mac 端 RemoteAllowWindowSection（每日开窗认证，
+  # docs/m3-remote-allow-window-design.md §3.4）——除此之外不得引入。
+  if grep -RInE 'import LocalAuthentication|LAContext' Sources \
+    | grep -vE 'PreferencesView\.swift'; then
+    echo '检测到越界的 LocalAuthentication 引入（仅 CompanionApp 与 PreferencesView 允许）。' >&2
     return 1
   fi
   # iOS Info.plist 必填：缺 NSLocalNetworkUsageDescription 或 NSBonjourServices 则本地发现会被静默杀。
