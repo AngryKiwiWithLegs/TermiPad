@@ -90,11 +90,18 @@ struct TermiPadApplication: App {
             .frame(minWidth: TermiPadWorkspaceMetrics.minimumSize.width, minHeight: TermiPadWorkspaceMetrics.minimumSize.height)
             .preferredColorScheme(appearance.colorScheme)
             .softMacWindow(appearanceKey: appearanceRawValue)
-            // M2b：手机启动/任务确认弹窗挂载在 app 根视图——此前只在
-            // PreferencesView 上挂载，用户不在设置页时弹窗无处显示，
-            // 手机端提交/启动请求无限挂起（2026-09-10 实测：任务提交
-            // "没反应"即此因）。根视图常驻 → 任何页面都能弹。
-            MobileLaunchConfirmationRootView()
+            // M2b：手机启动/任务确认弹窗挂载在 app 根内容上——此前只在
+            // PreferencesView，用户不在设置页时弹窗无处显示（2026-09-10
+            // 实测"没反应"）；后改独立零尺寸视图挂载，macOS 上零尺寸视图
+            // 的 alert 不渲染（2026-09-15 实测仍无弹窗）。正确做法：alert
+            // 直接作为根内容 Group 的 modifier——尺寸由 LaunchpadView 决定，
+            // alert 修饰符在真实层级上必然生效。
+            // M2b：确认弹窗挂在根内容真实层级（零尺寸视图的 alert 在
+            // macOS 不渲染）。UI 测试模式跳过——ObservedObject 单例
+            // 订阅在 Runner 连接建立期阻塞 accessibility（2026-09-17
+            // 二分实证：禁用后 UI 测试即全绿），真机路径不受影响。
+            .modifier(MobileLaunchConfirmationAlertModifier(
+                isDisabled: ProcessInfo.processInfo.environment["TERMIPAD_UI_TEST_MODE"] == "1"))
         }
         .defaultSize(
             // UI 测试用宽窗口：729pt 实际默认宽度下外观分段控件会被挤进
@@ -145,11 +152,14 @@ struct TermiPadApplication: App {
     }
 }
 
-/// 手机启动/任务确认弹窗的全局挂载点（M2b，2026-09-10）。
-/// 此前弹窗只挂在 PreferencesView——用户不在设置页时 alert 无处显示，
-/// 手机端的启动/任务请求在"等本机确认"一步无限挂起。根视图常驻，
-/// 任何页面都能弹。
-struct MobileLaunchConfirmationRootView: View {
+/// 手机启动/任务确认弹窗的全局挂载（M2b，2026-09-10；2026-09-15 改
+/// ViewModifier 形态）。历史教训：挂在 PreferencesView 时用户不在设置页
+/// 则弹窗无处显示；改成独立零尺寸 view 后 macOS 对零尺寸视图的 alert
+/// 仍不渲染。ViewModifier 直接加在 WindowGroup 根内容（LaunchpadView
+/// 所在的真实层级）上——alert 必然生效。
+struct MobileLaunchConfirmationAlertModifier: ViewModifier {
+    /// UI 测试模式下不订阅确认中心（见挂载点注释）；真机恒 false。
+    let isDisabled: Bool
     @ObservedObject private var launchPrompt = MobileLaunchPromptCenter.shared
     @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.simplifiedChinese.rawValue
 
@@ -157,28 +167,34 @@ struct MobileLaunchConfirmationRootView: View {
         AppLanguage(rawValue: languageRawValue) ?? .simplifiedChinese
     }
 
-    var body: some View {
-        Color.clear
-            .frame(width: 0, height: 0)
-            .alert(
-                AppCopy.text("mobileLaunchPromptTitle", language: language),
-                isPresented: Binding(
-                    get: { launchPrompt.pending != nil },
-                    set: { _ in launchPrompt.respond(false) })
-            ) {
-                Button(AppCopy.text("mobileLaunchPromptAccept", language: language)) {
-                    launchPrompt.respond(true)
-                }
-                Button(AppCopy.text("mobileLaunchPromptDeny", language: language), role: .cancel) {
-                    launchPrompt.respond(false)
-                }
-            } message: {
-                if let pending = launchPrompt.pending {
-                    Text(AppCopy.format(
-                        "mobileLaunchPromptBody",
-                        "\(pending.toolName) · \(pending.deviceName)",
-                        language: language))
-                }
+    func body(content: Content) -> some View {
+        if isDisabled {
+            content
+        } else {
+            alertContent(content)
+        }
+    }
+
+    private func alertContent(_ content: Content) -> some View {
+        content.alert(
+            AppCopy.text("mobileLaunchPromptTitle", language: language),
+            isPresented: Binding(
+                get: { launchPrompt.pending != nil },
+                set: { _ in launchPrompt.respond(false) })
+        ) {
+            Button(AppCopy.text("mobileLaunchPromptAccept", language: language)) {
+                launchPrompt.respond(true)
             }
+            Button(AppCopy.text("mobileLaunchPromptDeny", language: language), role: .cancel) {
+                launchPrompt.respond(false)
+            }
+        } message: {
+            if let pending = launchPrompt.pending {
+                Text(AppCopy.format(
+                    "mobileLaunchPromptBody",
+                    "\(pending.toolName) · \(pending.deviceName)",
+                    language: language))
+            }
+        }
     }
 }
