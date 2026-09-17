@@ -66,6 +66,15 @@ enum DiagnosticEventKind: String, Codable, CaseIterable {
     case mobileTaskAutoConfirmed
     /// M2b-3 Mac 锁屏期间远程任务被拒（防线 3）时记一次。
     case remoteTaskBlockedScreenLocked
+    /// M3 用户触摸 ID 开启"今日远程窗口"时记一次（仅时间戳）。
+    case remoteAllowWindowOpened
+    /// M3 用户手动关闭远程窗口时记一次。
+    case remoteAllowWindowClosed
+    /// M3 Mac 锁屏触发远程窗口失效时记一次。
+    case remoteAllowWindowLocked
+    /// M3 远程操作经窗口免确认执行时记一次（与 mobileLaunchAutoConfirmed
+    /// 同隐私纪律：不记工具名/设备名）。
+    case remoteAllowWindowUsed
     case mcpToolListed
     case mcpTaskProposed
     case mcpTaskStatusRead
