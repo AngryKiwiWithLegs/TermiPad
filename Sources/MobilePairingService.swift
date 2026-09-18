@@ -717,10 +717,15 @@ final class MobilePairingService: ObservableObject {
                 let connectionID = request.requestID
                 // M4-2：手机端声明的续传偏移（断线重连从断点续传）。
                 let resumeOffset = request.streamResumeOffset
-                let cursor = TaskOutputStreamService.shared.subscribe(
-                    connectionID: connectionID, taskID: taskID, resumeOffset: resumeOffset)
-                // 长连接：注册推送出口（闭包持有 connection），回执游标后不断开。
+                // 长连接：先注册推送出口（存量回放要走它），再订阅。
                 TaskOutputStreamService.shared.registerSink(connectionID) { chunk in
+                    guard let sealed = try? MobilePairingEnvelope.seal(chunk, using: key) else { return }
+                    connection.send(
+                        content: MobilePairingFrame.encode(sealed),
+                        completion: .contentProcessed { _ in })
+                }
+                let cursor = TaskOutputStreamService.shared.subscribe(
+                    connectionID: connectionID, taskID: taskID, resumeOffset: resumeOffset) { chunk in
                     guard let sealed = try? MobilePairingEnvelope.seal(chunk, using: key) else { return }
                     connection.send(
                         content: MobilePairingFrame.encode(sealed),
