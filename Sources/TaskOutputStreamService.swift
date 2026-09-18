@@ -54,14 +54,25 @@ final class TaskOutputStreamService: ObservableObject {
     // MARK: - 订阅生命周期
 
     /// 订阅任务输出流。返回续传游标（从该偏移之后开始推）。
-    /// resumeOffset 由手机端声明（断线重连场景）；nil = 全新订阅从当前末尾。
+    /// resumeOffset 由手机端声明（断线重连场景）；nil = 全新订阅——回放
+    /// 缓冲尾部 8KB 作为上下文（2026-09-18 实测：任务秒完成时订阅点之后
+    /// 无新输出，手机永远"等待输出"；回放尾部让用户立刻看到已完成内容）。
     func subscribe(connectionID: UUID, taskID: UUID, resumeOffset: Int?) -> Int {
         var buffer = buffers[taskID] ?? TaskBuffer()
         buffers[taskID] = buffer
-        let start = min(resumeOffset ?? buffer.byteCount, buffer.byteCount)
+        let start: Int
+        if let resumeOffset {
+            start = min(resumeOffset, buffer.byteCount)
+        } else {
+            // 全新订阅：游标定在"尾部 8KB 之前"——回放已有上下文。
+            start = max(0, buffer.byteCount - Self.contextReplayBytes)
+        }
         subscriptions[connectionID] = Subscription(taskID: taskID, consumedOffset: start)
         return start
     }
+
+    /// 全新订阅回放的上下文长度。
+    static let contextReplayBytes = 8 * 1024
 
     /// 退订。
     func unsubscribe(connectionID: UUID) {

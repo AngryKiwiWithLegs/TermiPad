@@ -1026,9 +1026,17 @@ final class CompanionPairingClient: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if error != nil || (isComplete && content == nil) {
-                    Self.diag("流连接断开（offset=\(self.streamConsumedOffset)）——等待重连")
+                    Self.diag("流连接断开（offset=\(self.streamConsumedOffset)）——3 秒后自动重连")
                     self.streamConnection = nil
-                    // 不主动关 isStreaming：详情页显示"重连中"，用户点重试。
+                    // 自动重连：带游标续传（streamResumeOffset）。
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                        Task { @MainActor [weak self] in
+                            guard let self, self.isStreaming, self.streamingTaskID != nil,
+                                  self.streamConnection == nil else { return }
+                            self.pendingStreamRequest = true
+                            self.startBrowsingInternal()
+                        }
+                    }
                     return
                 }
                 if let content { self.streamReceiveBuffer.append(content) }
