@@ -715,9 +715,8 @@ final class MobilePairingService: ObservableObject {
                     return
                 }
                 let connectionID = request.requestID
-                // M4-2 扩展：手机端声明续传偏移（当前请求协议无该字段——
-                // 先全量从末尾订阅，断线重连场景 M4-2 引入协议字段）。
-                let resumeOffset: Int? = nil
+                // M4-2：手机端声明的续传偏移（断线重连从断点续传）。
+                let resumeOffset = request.streamResumeOffset
                 let cursor = TaskOutputStreamService.shared.subscribe(
                     connectionID: connectionID, taskID: taskID, resumeOffset: resumeOffset)
                 // 长连接：注册推送出口（闭包持有 connection），回执游标后不断开。
