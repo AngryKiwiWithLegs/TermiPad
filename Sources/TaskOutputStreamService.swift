@@ -57,7 +57,11 @@ final class TaskOutputStreamService: ObservableObject {
     /// resumeOffset 由手机端声明（断线重连场景）；nil = 全新订阅——回放
     /// 缓冲尾部 8KB 作为上下文（2026-09-18 实测：任务秒完成时订阅点之后
     /// 无新输出，手机永远"等待输出"；回放尾部让用户立刻看到已完成内容）。
-    func subscribe(connectionID: UUID, taskID: UUID, resumeOffset: Int?) -> Int {
+    /// **订阅时立即推送存量**（start→缓冲末尾）：dispatchOutput 只在 T1
+    /// 新输出时触发，任务已结束则永不再推——存量必须在此处推（真机
+    /// 00:34 实证：游标 30634 被接受但手机一个 chunk 都没收到）。
+    func subscribe(connectionID: UUID, taskID: UUID, resumeOffset: Int?,
+                   push: @escaping PushSink) -> Int {
         var buffer = buffers[taskID] ?? TaskBuffer()
         buffers[taskID] = buffer
         let start: Int
@@ -68,7 +72,17 @@ final class TaskOutputStreamService: ObservableObject {
             start = max(0, buffer.byteCount - Self.contextReplayBytes)
         }
         subscriptions[connectionID] = Subscription(taskID: taskID, consumedOffset: start)
-        return start
+        // 立即推送存量（脱敏 + 合帧）。
+        let totalBytes = buffer.byteCount
+        let pending = Self.substring(fromUTF8Offset: start, of: buffer.text)
+        if !pending.isEmpty {
+            let redacted = OutputRedactor.redact(pending)
+            for chunk in Self.splitIntoChunks(redacted, limit: Self.chunkByteLimit) {
+                push(MobileStreamChunk(streamID: taskID, offset: start, text: chunk))
+            }
+        }
+        subscriptions[connectionID]?.consumedOffset = totalBytes
+        return totalBytes
     }
 
     /// 全新订阅回放的上下文长度。
