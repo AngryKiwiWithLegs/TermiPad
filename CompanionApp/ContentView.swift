@@ -57,6 +57,10 @@ struct ContentView: View {
                 .accessibilityIdentifier("companion-tab-picker")
             }
             .navigationTitle("TermiPad 伴侣")
+            .sheet(item: $selectedStreamEntry) { entry in
+                TaskStreamDetailView(entry: entry)
+                    .environmentObject(client)
+            }
         }
     }
 
@@ -256,6 +260,31 @@ struct ContentView: View {
     private var consoleSection: some View {
         Section {
             ForEach(client.consoleEntries, id: \.id) { entry in
+                Button {
+                    // M4：固定任务条目点进交互会话详情（流式输出）。
+                    if entry.kind == .fixedTask {
+                        selectedStreamEntry = entry
+                    }
+                } label: {
+                    consoleEntryRow(entry)
+                }
+                .buttonStyle(.plain)
+                .disabled(entry.kind != .fixedTask)
+                .accessibilityIdentifier("companion-console-entry-tap-\(entry.id.uuidString)")
+            }
+        } header: {
+            Text("任务会话（Mac 实时状态）")
+        } footer: {
+            Text("显示 Mac 上工具启动与固定任务的运行状态。命令与完整输出不会下发到手机。")
+                .font(.caption2)
+        }
+    }
+
+    @State private var selectedStreamEntry: MobileSessionEntry?
+
+    /// 单条会话条目渲染（从 ForEach 抽出——详情页复用状态样式）。
+    @ViewBuilder
+    private func consoleEntryRow(_ entry: MobileSessionEntry) -> some View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Image(systemName: Self.stateSymbol(for: entry.executionState, kind: entry.kind))
@@ -302,15 +331,6 @@ struct ContentView: View {
                 }
                 .padding(.vertical, 2)
                 .accessibilityIdentifier("companion-console-entry-\(entry.id.uuidString)")
-            }
-            Button("暂停刷新", role: .destructive) { client.closeTaskConsole() }
-                .font(.caption)
-        } header: {
-            Text("任务会话（Mac 实时状态）")
-        } footer: {
-            Text("显示 Mac 上工具启动与固定任务的运行状态。命令与完整输出不会下发到手机。")
-                .font(.caption2)
-        }
     }
 
     // MARK: - 会话状态渲染（T1 TaskExecutionState 原样字符串 + 工具启动两态）
@@ -406,7 +426,7 @@ struct ContentView: View {
         }
     }
 
-    private static func stateColor(for state: String) -> Color {
+    static func stateColor(for state: String) -> Color {
         switch state {
         case "running": return .blue
         case "succeeded", "launched": return .green
@@ -416,7 +436,7 @@ struct ContentView: View {
         }
     }
 
-    private static func stateText(for state: String) -> String {
+    static func stateText(for state: String) -> String {
         switch state {
         case "running": return "运行中"
         case "succeeded": return "成功"
@@ -549,4 +569,115 @@ struct ContentView: View {
 
 #Preview {
     ContentView().environmentObject(CompanionPairingClient())
+}
+
+
+/// M4 交互会话详情页（docs/m4-interactive-session-design.md §3）：
+/// 原生大字流式输出 + 自动滚动/暂停 + 停止。HIG 对齐：系统字体语义色、
+/// NavigationStack、工具栏图标按钮、Dynamic Type 跟随。
+struct TaskStreamDetailView: View {
+    let entry: MobileSessionEntry
+    @EnvironmentObject private var client: CompanionPairingClient
+    @Environment(\.dismiss) private var dismiss
+    @State private var isPaused = false
+    @State private var showReconnectHint = false
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if client.isStreaming || !client.streamText.isEmpty {
+                    streamContent
+                } else {
+                    unavailableContent
+                }
+            }
+            .navigationTitle(entry.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("完成") {
+                        client.closeStream()
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    if !client.streamText.isEmpty {
+                        Button {
+                            isPaused.toggle()
+                        } label: {
+                            Image(systemName: isPaused ? "play.circle" : "pause.circle")
+                        }
+                        .accessibilityIdentifier("companion-stream-pause")
+                    }
+                }
+            }
+            .onAppear {
+                client.openStream(taskID: entry.id)
+            }
+        }
+    }
+
+    /// 输出流主体：ScrollView + 等宽大字 + 底部自动跟随（暂停时停住）。
+    private var streamContent: some View {
+        VStack(spacing: 0) {
+            // 状态条（原生语义色）。
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(ContentView.stateColor(for: client.streamState ?? "running"))
+                    .frame(width: 8, height: 8)
+                Text(client.streamState.map(ContentView.stateText) ?? "实时输出中")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if isPaused {
+                    Label("已暂停", systemImage: "pause.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(.bar)
+
+            Divider()
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    Text(client.streamText.isEmpty ? "等待输出…" : client.streamText)
+                        .font(.system(.callout, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .textSelection(.enabled)
+                    Color.clear.frame(height: 1).id("stream-bottom")
+                }
+                .onChange(of: client.streamText) { _ in
+                    guard !isPaused else { return }
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        proxy.scrollTo("stream-bottom", anchor: .bottom)
+                    }
+                }
+            }
+        }
+    }
+
+    /// 无法订阅（窗口未开/任务不可流）的空态——原生空态卡片。
+    private var unavailableContent: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "rectangle.slash")
+                .font(.system(size: 44))
+                .foregroundStyle(.secondary)
+            Text("会话流不可用")
+                .font(.headline)
+            Text("今日远程窗口未开启，或该任务不支持流式输出。在 Mac 上开启「今日远程窗口」后重试。")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            Button("重试") {
+                client.openStream(taskID: entry.id)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
 }

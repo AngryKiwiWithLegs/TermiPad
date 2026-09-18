@@ -41,6 +41,9 @@ struct MobilePairingRequest: Codable, Sendable, Equatable {
     var taskKind: String? = nil
     var projectScopeID: UUID? = nil
     var taskIntentID: UUID? = nil
+    /// M4：openTaskStream 的续传偏移（断线重连场景）——从该 UTF-8 字节
+    /// 偏移之后继续推送；nil = 全新订阅。旧端忽略（兼容红线）。
+    var streamResumeOffset: Int? = nil
 }
 
 /// Mac → iPhone 工具目录条目：手机端只允许看到这 4 个字段。
@@ -106,6 +109,16 @@ enum MobilePairingEnvelope {
         let plaintext = try MobilePairingCrypto.open(data, using: key)
         return try JSONDecoder().decode(MobileStreamResponse.self, from: plaintext)
     }
+
+    static func openStreamChunk(_ data: Data, using key: SymmetricKey) throws -> MobileStreamChunk {
+        let plaintext = try MobilePairingCrypto.open(data, using: key)
+        return try JSONDecoder().decode(MobileStreamChunk.self, from: plaintext)
+    }
+
+    static func openStreamStateChange(_ data: Data, using key: SymmetricKey) throws -> MobileStreamStateChange {
+        let plaintext = try MobilePairingCrypto.open(data, using: key)
+        return try JSONDecoder().decode(MobileStreamStateChange.self, from: plaintext)
+    }
 }
 
 /// Mac → iPhone 配对确认（经会话密钥 AEAD 加密后发送）。
@@ -153,7 +166,7 @@ struct MobileFixedTaskSummary: Codable, Sendable, Equatable {
 
 /// 会话条目：工具启动与固定任务统一形态（§3.3——状态字符串全部来自
 /// T1 TaskExecutionState 原样枚举，工具启动仅 launched/launchFailed）。
-struct MobileSessionEntry: Codable, Sendable, Equatable {
+struct MobileSessionEntry: Codable, Sendable, Equatable, Identifiable {
     enum SessionKind: String, Codable, Sendable {
         case toolLaunch
         case fixedTask
