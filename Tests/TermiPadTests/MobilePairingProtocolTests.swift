@@ -85,11 +85,12 @@ final class MobilePairingProtocolTests: XCTestCase {
     // MARK: - 操作白名单
 
     func testOperationWhitelistMatchesDesignDoc() {
-        // §3.4 的 8 个 case 固定——新增操作必须先改设计文档与本测试。
+        // §3.4 的 8 个基础 case + M4 两个流操作固定——新增操作必须先改设计文档与本测试。
         XCTAssertEqual(
             Set(PairedDeviceOperation.allCases.map(\.rawValue)),
             Set(["listTools", "requestLaunch", "listScopes", "listFixedTasks",
-                 "requestTaskProposal", "getTaskStatus", "cancelTask", "heartbeat"]))
+                 "requestTaskProposal", "getTaskStatus", "cancelTask", "heartbeat",
+                 "openTaskStream", "closeTaskStream"]))
     }
 
     // MARK: - AEAD 信封

@@ -700,6 +700,49 @@ final class MobilePairingService: ObservableObject {
                     status: .rejected, reason: "请求缺少任务引用。", taskIntentID: nil)
                 Self.sendSealed(response, on: connection, using: key)
             }
+        case .openTaskStream:
+            Task { @MainActor in
+                // M4：流订阅前置 = 每日远程窗口开启（设计 §2.3）。
+                guard RemoteAllowWindow.shared.isOpen, let taskID = request.taskIntentID else {
+                    Self.sendSealed(
+                        MobileStreamResponse(
+                            status: .rejected,
+                            reason: RemoteAllowWindow.shared.isOpen
+                                ? "请求缺少任务引用。"
+                                : "今日远程窗口未开启，请在 Mac 上开启后重试。",
+                            resumeOffset: nil),
+                        on: connection, using: key)
+                    return
+                }
+                let connectionID = request.requestID
+                // M4-2 扩展：手机端声明续传偏移（当前请求协议无该字段——
+                // 先全量从末尾订阅，断线重连场景 M4-2 引入协议字段）。
+                let resumeOffset: Int? = nil
+                let cursor = TaskOutputStreamService.shared.subscribe(
+                    connectionID: connectionID, taskID: taskID, resumeOffset: resumeOffset)
+                // 长连接：注册推送出口（闭包持有 connection），回执游标后不断开。
+                TaskOutputStreamService.shared.registerSink(connectionID) { chunk in
+                    guard let sealed = try? MobilePairingEnvelope.seal(chunk, using: key) else { return }
+                    connection.send(
+                        content: MobilePairingFrame.encode(sealed),
+                        completion: .contentProcessed { _ in })
+                }
+                Self.sendSealed(
+                    MobileStreamResponse(status: .accepted, reason: nil, resumeOffset: cursor),
+                    on: connection, using: key,
+                    keepConnectionOpen: true)
+            }
+        case .closeTaskStream:
+            Task { @MainActor in
+                if let taskID = request.taskIntentID {
+                    TaskOutputStreamService.shared.unsubscribe(connectionID: request.requestID)
+                    _ = taskID
+                }
+                // 一问一答路径：退订回执后自然断开。
+                Self.sendSealed(
+                    MobileStreamResponse(status: .accepted, reason: nil, resumeOffset: nil),
+                    on: connection, using: key)
+            }
         default:
             // 其余操作按设计文档节奏逐个启用；未启用即拒绝并断开。
             connection.cancel()
@@ -712,13 +755,15 @@ final class MobilePairingService: ObservableObject {
     private static func sendSealed(
         _ value: some Encodable,
         on connection: NWConnection,
-        using key: SymmetricKey
+        using key: SymmetricKey,
+        keepConnectionOpen: Bool = false
     ) {
         guard let sealed = try? MobilePairingEnvelope.seal(value, using: key) else {
             connection.cancel()
             return
         }
         connection.send(content: MobilePairingFrame.encode(sealed), completion: .contentProcessed { _ in
+            guard !keepConnectionOpen else { return }
             connection.cancel()
         })
     }

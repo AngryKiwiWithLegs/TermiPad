@@ -249,6 +249,10 @@ final class TaskExecutionCoordinator: ObservableObject {
                 for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
                     self.outputCaptures[intentID]?.append(String(line))
                 }
+                // M4 流式分发：捕获的每段文本即推给活跃订阅者
+                // （TaskOutputStreamService 内部做游标、合帧、脱敏、背压）。
+                TaskOutputStreamService.shared.dispatchOutput(
+                    taskID: intentID, rawText: text)
             }
         }
         source.setCancelHandler { [weak self] in
