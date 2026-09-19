@@ -452,6 +452,16 @@ final class CompanionPairingClient: ObservableObject {
     private var pendingStreamClose = false
     private var pendingStreamCloseTaskID: UUID?
 
+    /// M4-3 提交互选择：走一次短连接（流长连接保持不断——Mac 端
+    /// respondInteraction 是独立一问一答）。
+    func submitInteractionSelection(_ selection: String) {
+        guard let taskID = streamingTaskID else { return }
+        pendingInteraction = nil
+        pendingInteractionResponse = (taskID, selection)
+        // 流长连接保留；响应走 startBrowsing 的新连接。
+        startBrowsingInternal()
+    }
+
     // MARK: M4 交互会话流（docs/m4-interactive-session-design.md §6）
 
     /// 流式输出缓冲（仅内存；窗口关闭/退订即清）。
@@ -468,6 +478,10 @@ final class CompanionPairingClient: ObservableObject {
     private var streamConnection: NWConnection?
     /// 流接收缓冲（帧解码粘包处理）。
     private var streamReceiveBuffer = Data()
+    /// M4-3 待响应交互点（详情页渲染选择卡）。
+    @Published private(set) var pendingInteraction: MobileStreamInteraction?
+    /// 交互响应发送标志。
+    private var pendingInteractionResponse: (taskID: UUID, selection: String)?
 
     /// 发起任务取消：走 resume 通道（一连接一请求一响应）。
     func cancelTask(taskIntentID: UUID, title: String) {
@@ -794,6 +808,12 @@ final class CompanionPairingClient: ObservableObject {
                 request = MobilePairingRequest(
                     operation: .cancelTask, requestID: UUID(), toolID: nil,
                     taskIntentID: cancel.taskIntentID)
+            } else if let response = pendingInteractionResponse {
+                Self.diag("MacResumeHello 校验通过，发 respondInteraction 选=\(response.selection)")
+                request = MobilePairingRequest(
+                    operation: .respondInteraction, requestID: UUID(), toolID: nil,
+                    taskIntentID: response.taskID,
+                    interactionSelection: response.selection)
             } else if pendingStreamRequest, let streamTask = streamingTaskID {
                 Self.diag("MacResumeHello 校验通过，发 openTaskStream task=\(streamTask) offset=\(streamConsumedOffset)")
                 request = MobilePairingRequest(
@@ -821,7 +841,7 @@ final class CompanionPairingClient: ObservableObject {
             let frame = MobilePairingFrame.encode(try MobilePairingEnvelope.seal(request, using: key))
             if let launch = pendingLaunchRequest {
                 phase = .requestingLaunch(launch.name)
-            } else if pendingStreamRequest || pendingStreamClose {
+            } else if pendingInteractionResponse != nil || pendingStreamRequest || pendingStreamClose {
                 // 流请求：详情页由 isStreaming/streamText 数据驱动，
                 // phase 保持列表态避免闪动。
                 phase = .listingTools(mac)
@@ -890,6 +910,14 @@ final class CompanionPairingClient: ObservableObject {
                 isFetchingCatalog = false
                 stopConnection()
             }
+            return
+        }
+        // M4-3 交互响应：Mac 静默断开无回执帧——直接收尾。
+        if let responded = pendingInteractionResponse {
+            pendingInteractionResponse = nil
+            Self.diag("交互响应已发送：\(responded.selection)")
+            stopConnection()
+            // 流长连接若已被 stopConnection 断开，靠自动重连续传。
             return
         }
         // M4 流回执：openTaskStream 接受 → 当前连接转为长连接收推送循环；
@@ -1070,6 +1098,12 @@ final class CompanionPairingClient: ObservableObject {
             }
             return
         }
+        // M4-3 交互请求帧：弹选择卡。
+        if let interaction = try? MobilePairingEnvelope.openStreamInteraction(data, using: key) {
+            Self.diag("收到交互请求：\(interaction.prompt.prefix(20))…")
+            pendingInteraction = interaction
+            return
+        }
         Self.diag("流帧无法识别——忽略")
     }
 
@@ -1204,6 +1238,8 @@ final class CompanionPairingClient: ObservableObject {
         pendingStreamRequest = false
         pendingStreamClose = false
         pendingStreamCloseTaskID = nil
+        pendingInteraction = nil
+        pendingInteractionResponse = nil
         streamConnection?.cancel()
         streamConnection = nil
         streamReceiveBuffer.removeAll()

@@ -12,6 +12,8 @@ enum TaskKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case swiftPackageCheck
     case macOSVerification
     case xcodegenGeneration
+    /// M4-3 交互点演示：脚本提问 → 手机选择卡 → stdin 写回。
+    case interactionDemo
 
     var id: String { rawValue }
 }
@@ -215,6 +217,11 @@ struct FixedTaskDefinition: Equatable, Identifiable {
     let purposeChinese: String
     let purposeEnglish: String
     let risk: TaskRiskLevel
+    /// M4-3 交互点（docs/m4-interactive-session-design.md §2.2）：任务声明
+    /// 的结构化提问——stdout 匹配 triggerPattern 时推送 prompt+options 给
+    /// 手机，选中项经 stdin 写回。全部字面量（目录级，非运行时生成）；
+    /// 声明了交互点的任务 T1 才开放 stdin 管道，其余维持空输入。
+    var interactionPoints: [TaskInteractionPoint]? = nil
 
     var id: TaskKind { kind }
 
@@ -224,6 +231,16 @@ struct FixedTaskDefinition: Equatable, Identifiable {
         case .english: return purposeEnglish
         }
     }
+}
+
+/// 交互点定义：任务声明的"何时问、怎么问、有哪些选项"。
+struct TaskInteractionPoint: Equatable {
+    /// stdout 匹配此模式（正则字面量）即触发交互。
+    let triggerPattern: String
+    /// 推送给手机的提问文案。
+    let prompt: String
+    /// 固定选项（手机渲染为按钮；选中项的 label 经 stdin 写回）。
+    let options: [String]
 }
 
 /// 仅允许固定绝对路径候选或项目范围内固定相对可执行文件，禁止 Shell 和 PATH 搜索。
@@ -277,6 +294,23 @@ enum FixedTaskCatalog {
             purposeChinese: "运行 TermiPad 的集中 macOS 验证脚本。",
             purposeEnglish: "Run TermiPad's one-shot macOS verification script.",
             risk: .standard
+        ),
+        .init(
+            kind: .interactionDemo,
+            commandPreview: "./scripts/interaction-demo.sh",
+            executable: .projectRelative("scripts/interaction-demo.sh"),
+            arguments: [],
+            requiredRelativePaths: ["scripts/interaction-demo.sh"],
+            timeout: 120,
+            purposeChinese: "交互演示：脚本会提问，在手机上选择回答。",
+            purposeEnglish: "Interaction demo: script asks, answer on the phone.",
+            risk: .low,
+            interactionPoints: [
+                TaskInteractionPoint(
+                    triggerPattern: "INTERACT_CONTINUE[?]",
+                    prompt: "演示脚本暂停等待你的决定：",
+                    options: ["yes", "no"])
+            ]
         ),
         .init(
             kind: .xcodegenGeneration,

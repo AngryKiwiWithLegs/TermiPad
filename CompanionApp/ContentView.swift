@@ -620,6 +620,28 @@ struct TaskStreamDetailView: View {
     /// 输出流主体：ScrollView + 等宽大字 + 底部自动跟随（暂停时停住）。
     private var streamContent: some View {
         VStack(spacing: 0) {
+            // M4-3 交互选择卡：任务需要决策时置顶弹出（原生 HIG 卡片）。
+            if let interaction = client.pendingInteraction {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label(interaction.prompt, systemImage: "questionmark.circle")
+                        .font(.subheadline.bold())
+                    ForEach(interaction.options, id: \.self) { option in
+                        Button {
+                            client.submitInteractionSelection(option)
+                        } label: {
+                            Text(option)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("companion-interaction-\(option)")
+                    }
+                }
+                .padding()
+                .background(.bar)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal)
+                .padding(.top, 8)
+            }
             // 状态条（原生语义色）。
             HStack(spacing: 6) {
                 Circle()

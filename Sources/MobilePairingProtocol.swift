@@ -23,6 +23,8 @@ enum PairedDeviceOperation: String, Codable, CaseIterable, Sendable {
     // closeTaskStream 退订。前置条件：每日远程窗口开启。
     case openTaskStream
     case closeTaskStream
+    /// M4-3：交互点选择回传（taskIntentID + interactionSelection）。
+    case respondInteraction
 }
 
 /// iPhone → Mac 请求的最小载荷。字段集合是产品红线（最小数据回传）：
@@ -44,6 +46,8 @@ struct MobilePairingRequest: Codable, Sendable, Equatable {
     /// M4：openTaskStream 的续传偏移（断线重连场景）——从该 UTF-8 字节
     /// 偏移之后继续推送；nil = 全新订阅。旧端忽略（兼容红线）。
     var streamResumeOffset: Int? = nil
+    /// M4-3：交互点选中的选项（respondInteraction 用）。
+    var interactionSelection: String? = nil
 }
 
 /// Mac → iPhone 工具目录条目：手机端只允许看到这 4 个字段。
@@ -118,6 +122,11 @@ enum MobilePairingEnvelope {
     static func openStreamStateChange(_ data: Data, using key: SymmetricKey) throws -> MobileStreamStateChange {
         let plaintext = try MobilePairingCrypto.open(data, using: key)
         return try JSONDecoder().decode(MobileStreamStateChange.self, from: plaintext)
+    }
+
+    static func openStreamInteraction(_ data: Data, using key: SymmetricKey) throws -> MobileStreamInteraction {
+        let plaintext = try MobilePairingCrypto.open(data, using: key)
+        return try JSONDecoder().decode(MobileStreamInteraction.self, from: plaintext)
     }
 }
 

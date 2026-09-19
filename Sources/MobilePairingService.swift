@@ -739,6 +739,27 @@ final class MobilePairingService: ObservableObject {
                         content: MobilePairingFrame.encode(sealed),
                         completion: .contentProcessed { _ in })
                 }
+                // M4-3 交互请求走独立帧类型（手机端按字段名区分）。
+                TaskOutputStreamService.shared.addInteractionHandler { [weak connection] targetConnectionID, interaction in
+                    guard targetConnectionID == connectionID, let connection else { return }
+                    guard let sealed = try? MobilePairingEnvelope.seal(interaction, using: key) else { return }
+                    connection.send(
+                        content: MobilePairingFrame.encode(sealed),
+                        completion: .contentProcessed { _ in })
+                }
+            }
+        case .respondInteraction:
+            Task { @MainActor in
+                // M4-3：手机选中项写回任务 stdin。
+                guard let taskID = request.taskIntentID,
+                      let selection = request.interactionSelection else {
+                    connection.cancel()
+                    return
+                }
+                TaskExecutionCoordinator.shared.respondInteraction(
+                    intentID: taskID, selection: selection)
+                // 静默断开（一问一答链路无回执必要——流里会看到任务继续）。
+                connection.cancel()
             }
         case .closeTaskStream:
             Task { @MainActor in

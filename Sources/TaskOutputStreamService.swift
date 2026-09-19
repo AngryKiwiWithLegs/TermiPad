@@ -142,6 +142,25 @@ final class TaskOutputStreamService: ObservableObject {
         stateChangeHandlers.forEach { $0(taskID, state, exitCode, finishedAt) }
     }
 
+    /// M4-3 交互请求推送：任务需要决策 → 推给该任务的活跃订阅者。
+    func dispatchInteraction(taskID: UUID, prompt: String, options: [String]) {
+        let interaction = MobileStreamInteraction(
+            streamID: taskID, prompt: prompt, options: options)
+        for (connectionID, subscription) in subscriptions where subscription.taskID == taskID {
+            guard let sink = sinks[connectionID] else { continue }
+            sink(MobileStreamChunk(streamID: taskID, offset: 0, text: ""))  // 刷新信号
+            guard let sealed = try? JSONEncoder().encode(interaction) else { continue }
+            _ = sealed
+            interactionHandlers.forEach { $0(connectionID, interaction) }
+        }
+    }
+
+    /// 连接层注册的交互请求转发器。
+    private var interactionHandlers: [(UUID, MobileStreamInteraction) -> Void] = []
+    func addInteractionHandler(_ handler: @escaping (UUID, MobileStreamInteraction) -> Void) {
+        interactionHandlers.append(handler)
+    }
+
     /// 连接层注册的状态变化转发器（解耦：服务不知道连接细节）。
     private var stateChangeHandlers: [(UUID, String, Int?, Date?) -> Void] = []
     func addStateChangeHandler(_ handler: @escaping (UUID, String, Int?, Date?) -> Void) {
