@@ -494,7 +494,13 @@ final class CompanionPairingClient: ObservableObject {
 
     /// 进入详情页：订阅任务输出流（前置 = 每日远程窗口开启）。
     func openStream(taskID: UUID) {
-        stopAll()
+        // 注意：**不用 stopAll**——它会清 pendingIdentity，而 resume 流程
+        // 需要它；曾被清后 handleMacResumeHello(nil) 误判"凭据已被撤销"
+        // 把钥匙串凭据也清了（2026-09-19 真机：详情页订阅全断的根源）。
+        // 这里只需要停浏览器/连接，保留身份状态。
+        browser?.cancel()
+        browser = nil
+        stopConnection()
         streamingTaskID = taskID
         streamText = ""
         streamState = nil
@@ -756,12 +762,13 @@ final class CompanionPairingClient: ObservableObject {
               let credentials = currentCredentials,
               let identity = pendingIdentity,
               let phoneNonce = pendingPhoneNonce else {
-            // Mac 对被撤销/未知设备的 resume 静默断连（不回错误细节防探测）。
-            // 凭据已失效——清除并回到配对界面，而不是留一句含糊的报错。
-            Self.diag("resume 未收到 MacResumeHello——凭据很可能已被 Mac 撤销")
-            CompanionPairingStore.clear()
-            stopAll()
-            phase = .failed("Mac 已撤销本设备的配对。请重新走一次配对流程。")
+            // Mac 端静默断连的原因多样：撤销/时效/瞬时抖动/限速。不清凭据
+            // （2026-09-19 真机：openStream 竞态下误判导致凭据被清、订阅
+            // 全断）。给明确文案让用户重试；真撤销时下次操作仍会被拒，
+            // 届时 Mac 端诊断日志可查。
+            Self.diag("resume 未收到 MacResumeHello——连接被 Mac 断开（原因不明）")
+            stopConnection()
+            phase = .failed("Mac 断开了连接，请重试。若反复出现，请在 Mac 上确认配对状态。")
             return
         }
         do {
