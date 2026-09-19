@@ -90,7 +90,7 @@ final class MobilePairingProtocolTests: XCTestCase {
             Set(PairedDeviceOperation.allCases.map(\.rawValue)),
             Set(["listTools", "requestLaunch", "listScopes", "listFixedTasks",
                  "requestTaskProposal", "getTaskStatus", "cancelTask", "heartbeat",
-                 "openTaskStream", "closeTaskStream"]))
+                 "openTaskStream", "closeTaskStream", "respondInteraction"]))
     }
 
     // MARK: - AEAD 信封
