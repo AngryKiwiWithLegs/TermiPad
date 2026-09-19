@@ -717,24 +717,28 @@ final class MobilePairingService: ObservableObject {
                 let connectionID = request.requestID
                 // M4-2：手机端声明的续传偏移（断线重连从断点续传）。
                 let resumeOffset = request.streamResumeOffset
-                // 长连接：先注册推送出口（存量回放要走它），再订阅。
+                // **帧顺序关键**：订阅回执必须是手机收到的第一帧——手机在
+                // 处理回执后才启动推送接收循环，先推存量/注册 sink 的话，
+                // 回放 chunk 会被手机当回执解析（2026-09-19 真机实证）。
+                // 顺序：先发回执 → 再注册 sink → 再订阅（订阅内的存量回放
+                // 走已注册的 sink，此时手机已进入推送循环）。
+                Self.sendSealed(
+                    MobileStreamResponse(status: .accepted, reason: nil, resumeOffset: 0),
+                    on: connection, using: key,
+                    keepConnectionOpen: true)
                 TaskOutputStreamService.shared.registerSink(connectionID) { chunk in
                     guard let sealed = try? MobilePairingEnvelope.seal(chunk, using: key) else { return }
                     connection.send(
                         content: MobilePairingFrame.encode(sealed),
                         completion: .contentProcessed { _ in })
                 }
-                let cursor = TaskOutputStreamService.shared.subscribe(
+                _ = TaskOutputStreamService.shared.subscribe(
                     connectionID: connectionID, taskID: taskID, resumeOffset: resumeOffset) { chunk in
                     guard let sealed = try? MobilePairingEnvelope.seal(chunk, using: key) else { return }
                     connection.send(
                         content: MobilePairingFrame.encode(sealed),
                         completion: .contentProcessed { _ in })
                 }
-                Self.sendSealed(
-                    MobileStreamResponse(status: .accepted, reason: nil, resumeOffset: cursor),
-                    on: connection, using: key,
-                    keepConnectionOpen: true)
             }
         case .closeTaskStream:
             Task { @MainActor in

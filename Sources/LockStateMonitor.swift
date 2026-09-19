@@ -13,7 +13,9 @@ final class LockStateMonitor: ObservableObject {
     /// 最近一次检测到的锁屏状态（UI 无需展示，仅供测试断言）。
     private(set) var lastKnownLocked: Bool?
 
-    /// 窗口开启时启动监测；关闭时停止。
+    /// 窗口开启时启动监测；关闭时停止。首轮检查延迟 5 秒——开窗的 LA
+    /// 认证过程中系统报告的锁定状态不可靠（2026-09-19 真机：开窗即被
+    /// 判定锁屏关窗），延迟避开认证窗口期。
     func setActive(_ active: Bool) {
         guard active != (timer != nil) else { return }
         if active {
@@ -21,8 +23,6 @@ final class LockStateMonitor: ObservableObject {
                 Task { @MainActor in self?.checkOnce() }
             }
             self.timer = timer
-            // 立即查一次——开窗瞬间 Mac 恰已锁屏则窗口立即失效。
-            checkOnce()
         } else {
             timer?.invalidate()
             timer = nil
