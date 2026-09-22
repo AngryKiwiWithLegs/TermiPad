@@ -501,6 +501,11 @@ final class CompanionPairingClient: ObservableObject {
         browser?.cancel()
         browser = nil
         stopConnection()
+        // 旧流长连接也取消——否则它的自动重连和新订阅竞态
+        // （2026-09-22 实测：两次订阅接受交替出现）。
+        streamConnection?.cancel()
+        streamConnection = nil
+        streamReceiveBuffer.removeAll()
         streamingTaskID = taskID
         streamText = ""
         streamState = nil
