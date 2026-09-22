@@ -74,6 +74,7 @@ final class TaskOutputStreamService: ObservableObject {
         subscriptions[connectionID] = Subscription(taskID: taskID, consumedOffset: start)
         // 立即推送存量（脱敏 + 合帧）。
         let totalBytes = buffer.byteCount
+        MobilePairingService.diagMac("流订阅：task=\(taskID) 缓冲=\(totalBytes)B 起点回放=\(start) resume=\(resumeOffset.map(String.init) ?? "nil")")
         let pending = Self.substring(fromUTF8Offset: start, of: buffer.text)
         if !pending.isEmpty {
             let redacted = OutputRedactor.redact(pending)
@@ -103,6 +104,9 @@ final class TaskOutputStreamService: ObservableObject {
     /// T1 捕获管道每段原始文本进来：入缓冲（截断背压）→ 对每个活跃
     /// 订阅按游标切片 → 脱敏 → 推送。
     func dispatchOutput(taskID: UUID, rawText: String) {
+        if buffers[taskID] == nil {
+            MobilePairingService.diagMac("流分发：任务首段输出入缓冲（\(rawText.utf8.count)B）")
+        }
         var buffer = buffers[taskID] ?? TaskBuffer()
         buffer.text += rawText
         // 背压：超限丢最旧（按字符裁剪到限内）。
