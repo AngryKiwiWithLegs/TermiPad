@@ -733,17 +733,27 @@ final class MobilePairingService: ObservableObject {
                     on: connection, using: key,
                     keepConnectionOpen: true)
                 TaskOutputStreamService.shared.registerSink(connectionID) { chunk in
-                    guard let sealed = try? MobilePairingEnvelope.seal(chunk, using: key) else { return }
+                    guard let sealed = try? MobilePairingEnvelope.seal(chunk, using: key) else {
+                        diagMac("流推送：chunk 加密失败")
+                        return
+                    }
                     connection.send(
                         content: MobilePairingFrame.encode(sealed),
-                        completion: .contentProcessed { _ in })
+                        completion: .contentProcessed { error in
+                            if let error { diagMac("流推送 send 失败：\(error.localizedDescription)") }
+                        })
                 }
                 _ = TaskOutputStreamService.shared.subscribe(
                     connectionID: connectionID, taskID: taskID, resumeOffset: resumeOffset) { chunk in
-                    guard let sealed = try? MobilePairingEnvelope.seal(chunk, using: key) else { return }
+                    guard let sealed = try? MobilePairingEnvelope.seal(chunk, using: key) else {
+                        diagMac("流回放：chunk 加密失败")
+                        return
+                    }
                     connection.send(
                         content: MobilePairingFrame.encode(sealed),
-                        completion: .contentProcessed { _ in })
+                        completion: .contentProcessed { error in
+                            if let error { diagMac("流回放 send 失败：\(error.localizedDescription)") }
+                        })
                 }
                 // M4-3 交互请求走独立帧类型（手机端按字段名区分）。
                 TaskOutputStreamService.shared.addInteractionHandler { [weak connection] targetConnectionID, interaction in

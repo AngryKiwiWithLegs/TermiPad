@@ -36,7 +36,9 @@ final class TaskOutputStreamService: ObservableObject {
     /// 连接层注册的推送出口（connectionID → sink）。
     private var sinks: [UUID: PushSink] = [:]
 
-    private init() {}
+    /// 与 MobileTaskConsoleService/RemoteAllowWindow 同款测试模式：单例走
+    /// 共享状态，测试注入独立实例。
+    init() {}
 
     // MARK: - 连接层注册
 
