@@ -448,12 +448,88 @@ final class CompanionPairingClient: ObservableObject {
 
     /// M2c：手机发起的任务取消（会话页 running 条目的停止按钮）。
     private var pendingCancelTask: (taskIntentID: UUID, title: String)?
+    private var pendingStreamRequest = false
+    private var pendingStreamClose = false
+    private var pendingStreamCloseTaskID: UUID?
+
+    /// M4-3 提交互选择：走一次短连接（流长连接保持不断——Mac 端
+    /// respondInteraction 是独立一问一答）。
+    func submitInteractionSelection(_ selection: String) {
+        guard let taskID = streamingTaskID else { return }
+        pendingInteraction = nil
+        pendingInteractionResponse = (taskID, selection)
+        // 流长连接保留；响应走 startBrowsing 的新连接。
+        startBrowsingInternal()
+    }
+
+    // MARK: M4 交互会话流（docs/m4-interactive-session-design.md §6）
+
+    /// 流式输出缓冲（仅内存；窗口关闭/退订即清）。
+    @Published private(set) var streamText: String = ""
+    /// 流状态（任务结束推送时更新 UI）。
+    @Published private(set) var streamState: String?
+    /// 流连接中（详情页顶部细进度条）。
+    @Published private(set) var isStreaming = false
+    /// 当前流任务（详情页上下文）。
+    private(set) var streamingTaskID: UUID?
+    /// 已消费字节数（重连续传）。
+    private var streamConsumedOffset = 0
+    /// 流长连接引用（区别于一问一答的 connection——退订/锁屏时显式关）。
+    private var streamConnection: NWConnection?
+    /// 流接收缓冲（帧解码粘包处理）。
+    private var streamReceiveBuffer = Data()
+    /// M4-3 待响应交互点（详情页渲染选择卡）。
+    @Published private(set) var pendingInteraction: MobileStreamInteraction?
+    /// 交互响应发送标志。
+    private var pendingInteractionResponse: (taskID: UUID, selection: String)?
 
     /// 发起任务取消：走 resume 通道（一连接一请求一响应）。
     func cancelTask(taskIntentID: UUID, title: String) {
         stopAll()
         pendingCancelTask = (taskIntentID, title)
         startBrowsingInternal()
+    }
+
+    // MARK: M4 流订阅（会话详情页进出时调用）
+
+    /// 进入详情页：订阅任务输出流（前置 = 每日远程窗口开启）。
+    func openStream(taskID: UUID) {
+        // 注意：**不用 stopAll**——它会清 pendingIdentity，而 resume 流程
+        // 需要它；曾被清后 handleMacResumeHello(nil) 误判"凭据已被撤销"
+        // 把钥匙串凭据也清了（2026-09-19 真机：详情页订阅全断的根源）。
+        // 这里只需要停浏览器/连接，保留身份状态。
+        browser?.cancel()
+        browser = nil
+        stopConnection()
+        // 旧流长连接也取消——否则它的自动重连和新订阅竞态
+        // （2026-09-22 实测：两次订阅接受交替出现）。
+        streamConnection?.cancel()
+        streamConnection = nil
+        streamReceiveBuffer.removeAll()
+        streamingTaskID = taskID
+        streamText = ""
+        streamState = nil
+        streamConsumedOffset = 0
+        pendingStreamRequest = true
+        isStreaming = true
+        startBrowsingInternal()
+    }
+
+    /// 离开详情页：退订并清缓冲。
+    func closeStream() {
+        guard let taskID = streamingTaskID else { return }
+        streamingTaskID = nil
+        isStreaming = false
+        streamText = ""
+        streamState = nil
+        // 退订走一次短连接（若流连接已死）。
+        if streamConnection == nil {
+            pendingStreamClose = true
+            pendingStreamCloseTaskID = taskID
+            startBrowsingInternal()
+        } else {
+            sendStreamClose(on: streamConnection!, taskID: taskID)
+        }
     }
 
     /// 解除配对——清空 Keychain，回到首次配对。
@@ -691,12 +767,13 @@ final class CompanionPairingClient: ObservableObject {
               let credentials = currentCredentials,
               let identity = pendingIdentity,
               let phoneNonce = pendingPhoneNonce else {
-            // Mac 对被撤销/未知设备的 resume 静默断连（不回错误细节防探测）。
-            // 凭据已失效——清除并回到配对界面，而不是留一句含糊的报错。
-            Self.diag("resume 未收到 MacResumeHello——凭据很可能已被 Mac 撤销")
-            CompanionPairingStore.clear()
-            stopAll()
-            phase = .failed("Mac 已撤销本设备的配对。请重新走一次配对流程。")
+            // Mac 端静默断连的原因多样：撤销/时效/瞬时抖动/限速。不清凭据
+            // （2026-09-19 真机：openStream 竞态下误判导致凭据被清、订阅
+            // 全断）。给明确文案让用户重试；真撤销时下次操作仍会被拒，
+            // 届时 Mac 端诊断日志可查。
+            Self.diag("resume 未收到 MacResumeHello——连接被 Mac 断开（原因不明）")
+            stopConnection()
+            phase = .failed("Mac 断开了连接，请重试。若反复出现，请在 Mac 上确认配对状态。")
             return
         }
         do {
@@ -743,6 +820,23 @@ final class CompanionPairingClient: ObservableObject {
                 request = MobilePairingRequest(
                     operation: .cancelTask, requestID: UUID(), toolID: nil,
                     taskIntentID: cancel.taskIntentID)
+            } else if let response = pendingInteractionResponse {
+                Self.diag("MacResumeHello 校验通过，发 respondInteraction 选=\(response.selection)")
+                request = MobilePairingRequest(
+                    operation: .respondInteraction, requestID: UUID(), toolID: nil,
+                    taskIntentID: response.taskID,
+                    interactionSelection: response.selection)
+            } else if pendingStreamRequest, let streamTask = streamingTaskID {
+                Self.diag("MacResumeHello 校验通过，发 openTaskStream task=\(streamTask) offset=\(streamConsumedOffset)")
+                request = MobilePairingRequest(
+                    operation: .openTaskStream, requestID: UUID(), toolID: nil,
+                    taskIntentID: streamTask,
+                    streamResumeOffset: streamConsumedOffset > 0 ? streamConsumedOffset : nil)
+            } else if pendingStreamClose, let closeTask = pendingStreamCloseTaskID {
+                Self.diag("MacResumeHello 校验通过，发 closeTaskStream task=\(closeTask)")
+                request = MobilePairingRequest(
+                    operation: .closeTaskStream, requestID: UUID(), toolID: nil,
+                    taskIntentID: closeTask)
             } else if pendingConsoleRequest {
                 Self.diag("MacResumeHello 校验通过，发 getTaskStatus（会话轮询）")
                 request = MobilePairingRequest(operation: .getTaskStatus, requestID: UUID(), toolID: nil)
@@ -759,6 +853,10 @@ final class CompanionPairingClient: ObservableObject {
             let frame = MobilePairingFrame.encode(try MobilePairingEnvelope.seal(request, using: key))
             if let launch = pendingLaunchRequest {
                 phase = .requestingLaunch(launch.name)
+            } else if pendingInteractionResponse != nil || pendingStreamRequest || pendingStreamClose {
+                // 流请求：详情页由 isStreaming/streamText 数据驱动，
+                // phase 保持列表态避免闪动。
+                phase = .listingTools(mac)
             } else if pendingConsoleRequest {
                 // 会话轮询期间 phase 保持在连接/列表态——会话页由
                 // consoleEntries 数据驱动，轮询不产生 phase 闪动。
@@ -776,7 +874,7 @@ final class CompanionPairingClient: ObservableObject {
                     }
                     Self.diag("请求帧已发出（\(request.operation.rawValue)），等待 Mac 响应")
                     self.receiveOneMessage { data in
-                        Task { @MainActor in self.handleResponse(data) }
+                        Task { @MainActor in self.handleResponse(data, connection: connection) }
                     }
                 }
             })
@@ -786,7 +884,7 @@ final class CompanionPairingClient: ObservableObject {
         }
     }
 
-    private func handleResponse(_ data: Data?) {
+    private func handleResponse(_ data: Data?, connection: NWConnection) {
         guard let data, let key = pendingSessionKey else {
             phase = .failed("未收到响应。")
             stopConnection()
@@ -824,6 +922,47 @@ final class CompanionPairingClient: ObservableObject {
                 isFetchingCatalog = false
                 stopConnection()
             }
+            return
+        }
+        // M4-3 交互响应：Mac 静默断开无回执帧——直接收尾。
+        if let responded = pendingInteractionResponse {
+            pendingInteractionResponse = nil
+            Self.diag("交互响应已发送：\(responded.selection)")
+            stopConnection()
+            // 流长连接若已被 stopConnection 断开，靠自动重连续传。
+            return
+        }
+        // M4 流回执：openTaskStream 接受 → 当前连接转为长连接收推送循环；
+        // 拒绝（含窗口未开）→ 停止并显示原因。
+        if pendingStreamRequest {
+            pendingStreamRequest = false
+            do {
+                let response = try MobilePairingEnvelope.openStreamResponse(data, using: key)
+                guard response.status == .accepted, let start = response.resumeOffset else {
+                    Self.diag("流订阅被拒：\(response.reason ?? "-")")
+                    isStreaming = false
+                    streamingTaskID = nil
+                    stopConnection()
+                    return
+                }
+                Self.diag("流订阅接受，游标=\(start)")
+                streamConsumedOffset = start
+                // 当前连接升级为流长连接：不停接收循环，推送块逐帧入缓冲。
+                streamConnection = connection
+                receiveStreamFrames(on: connection)
+            } catch {
+                Self.diag("流回执解析失败")
+                isStreaming = false
+                streamingTaskID = nil
+                stopConnection()
+            }
+            return
+        }
+        if pendingStreamClose {
+            pendingStreamClose = false
+            pendingStreamCloseTaskID = nil
+            // 退订回执：无需内容，连接自然关闭。
+            stopConnection()
             return
         }
         // M2c 任务取消回执：接受/拒绝都即时反馈（本地状态标记）。
@@ -915,6 +1054,88 @@ final class CompanionPairingClient: ObservableObject {
             phase = .failed("工具目录解密失败。")
             stopConnection()
         }
+    }
+
+    // MARK: M4 流长连接接收循环
+
+    /// 流连接的持续接收：解帧 → 判类型（chunk/state/interaction）→ 更新
+    /// streamText/state。断线时保留游标供重连续传（isStreaming 保持，
+    /// 由详情页的重试按钮或自动重连触发新一轮 openTaskStream）。
+    private func receiveStreamFrames(on connection: NWConnection) {
+        Self.diag("流接收循环启动")
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] content, _, isComplete, error in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if error != nil || (isComplete && content == nil) {
+                    Self.diag("流连接断开（offset=\(self.streamConsumedOffset)）——3 秒后自动重连")
+                    self.streamConnection = nil
+                    // 自动重连：带游标续传（streamResumeOffset）。
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                        Task { @MainActor [weak self] in
+                            guard let self, self.isStreaming, self.streamingTaskID != nil,
+                                  self.streamConnection == nil else { return }
+                            self.pendingStreamRequest = true
+                            self.startBrowsingInternal()
+                        }
+                    }
+                    return
+                }
+                if let content { self.streamReceiveBuffer.append(content) }
+                // 解出所有完整帧。
+                while case .message(let message, let remainder) =
+                        MobilePairingFrame.decodeOne(from: self.streamReceiveBuffer) {
+                    self.streamReceiveBuffer = remainder
+                    self.handleStreamFrame(message)
+                }
+                if self.streamConnection === connection {
+                    self.receiveStreamFrames(on: connection)
+                }
+            }
+        }
+    }
+
+    /// 单帧流消息分发。
+    private func handleStreamFrame(_ data: Data) {
+        Self.diag("流帧到达：\(data.count)B key=\(pendingSessionKey != nil ? "有" : "无")")
+        guard let key = pendingSessionKey, !data.isEmpty else { return }
+        // 推送块（最常见）先试；状态变化次之。
+        if let chunk = try? MobilePairingEnvelope.openStreamChunk(data, using: key) {
+            streamText += chunk.text
+            streamConsumedOffset = chunk.offset + chunk.text.utf8.count
+            return
+        }
+        if let state = try? MobilePairingEnvelope.openStreamStateChange(data, using: key) {
+            streamState = state.executionState
+            if state.finishedAt != nil {
+                // 任务结束：保留文本供阅读，连接可退订。
+                Self.diag("流状态更新：\(state.executionState) exit=\(state.exitCode.map(String.init) ?? "-")")
+            }
+            return
+        }
+        // M4-3 交互请求帧：弹选择卡。
+        if let interaction = try? MobilePairingEnvelope.openStreamInteraction(data, using: key) {
+            Self.diag("收到交互请求：\(interaction.prompt.prefix(20))…")
+            pendingInteraction = interaction
+            return
+        }
+        Self.diag("流帧无法识别——忽略")
+    }
+
+    /// 退订发送（流连接还活着时走原连接；否则走一次短连接）。
+    private func sendStreamClose(on connection: NWConnection, taskID: UUID) {
+        guard let key = pendingSessionKey else {
+            connection.cancel()
+            streamConnection = nil
+            return
+        }
+        let request = MobilePairingRequest(
+            operation: .closeTaskStream, requestID: UUID(), toolID: nil,
+            taskIntentID: taskID)
+        if let frame = try? MobilePairingFrame.encode(MobilePairingEnvelope.seal(request, using: key)) {
+            connection.send(content: frame, completion: .contentProcessed { _ in })
+        }
+        streamConnection = nil
+        // 原连接关闭由 Mac 端退订回执触发。
     }
 
     // MARK: - 诊断
@@ -1028,6 +1249,14 @@ final class CompanionPairingClient: ObservableObject {
         pendingCancelTask = nil
         pendingCatalogRequests = 0
         isFetchingCatalog = false
+        pendingStreamRequest = false
+        pendingStreamClose = false
+        pendingStreamCloseTaskID = nil
+        pendingInteraction = nil
+        pendingInteractionResponse = nil
+        streamConnection?.cancel()
+        streamConnection = nil
+        streamReceiveBuffer.removeAll()
     }
 
     private func refreshFromKeychain() {

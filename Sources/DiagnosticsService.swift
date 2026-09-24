@@ -75,6 +75,8 @@ enum DiagnosticEventKind: String, Codable, CaseIterable {
     /// M3 远程操作经窗口免确认执行时记一次（与 mobileLaunchAutoConfirmed
     /// 同隐私纪律：不记工具名/设备名）。
     case remoteAllowWindowUsed
+    /// M4-3 手机对任务交互点作出选择时记一次（仅时间戳，不记选项内容）。
+    case mobileInteractionResponded
     case mcpToolListed
     case mcpTaskProposed
     case mcpTaskStatusRead

@@ -151,6 +151,12 @@ final class TaskExecutionCoordinator: ObservableObject {
     private var outputCaptures: [UUID: OutputCapture] = [:]
     private var outputPipes: [UUID: Pipe] = [:]
     private var outputSources: [UUID: DispatchSourceRead] = [:]
+    /// M4-3：声明了交互点的任务的 stdin 管道（手机选中项写回进程）。
+    private var inputPipes: [UUID: Pipe] = [:]
+    /// 该任务声明的交互点（启动时从定义拷贝）。
+    private var interactionPoints: [UUID: [TaskInteractionPoint]] = [:]
+    /// 已触发过的交互点（同一任务每个交互点只触发一次）。
+    private var triggeredInteractions: [UUID: Set<Int>] = [:]
 
     /// 是否捕获输出（档位裁决——读取 Mac 端权威设置）。
     var capturesOutput: Bool {
@@ -189,6 +195,16 @@ final class TaskExecutionCoordinator: ObservableObject {
             // minimal 档位：维持原行为——stdout/stderr 全丢弃。
             process.standardOutput = FileHandle.nullDevice
             process.standardError = FileHandle.nullDevice
+        }
+        // M4-3：任务声明了交互点 → stdin 用管道（手机选择项写回）；
+        // 未声明的任务维持空输入（红线不变）。
+        if let points = intent.kind.flatMap({ FixedTaskCatalog.definition(for: $0)?.interactionPoints }),
+           !points.isEmpty {
+            let inputPipe = Pipe()
+            process.standardInput = inputPipe
+            inputPipes[intent.id] = inputPipe
+            interactionPoints[intent.id] = points
+            triggeredInteractions[intent.id] = []
         }
         let intentID = intent.id
         process.terminationHandler = { [weak self, intentID] completedProcess in
@@ -249,6 +265,12 @@ final class TaskExecutionCoordinator: ObservableObject {
                 for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
                     self.outputCaptures[intentID]?.append(String(line))
                 }
+                // M4 流式分发：捕获的每段文本即推给活跃订阅者
+                // （TaskOutputStreamService 内部做游标、合帧、脱敏、背压）。
+                TaskOutputStreamService.shared.dispatchOutput(
+                    taskID: intentID, rawText: text)
+                // M4-3 交互点检测：输出匹配声明模式 → 推送交互请求。
+                self.checkInteractionPoints(intentID: intentID, output: text)
             }
         }
         source.setCancelHandler { [weak self] in
@@ -260,6 +282,31 @@ final class TaskExecutionCoordinator: ObservableObject {
         }
         source.resume()
         outputSources[intentID] = source
+    }
+
+    /// M4-3 交互点检测：输出匹配声明模式 → 推交互请求给手机（每点一次）。
+    private func checkInteractionPoints(intentID: UUID, output: String) {
+        guard let points = interactionPoints[intentID],
+              let triggered = triggeredInteractions[intentID] else { return }
+        for (index, point) in points.enumerated() where !triggered.contains(index) {
+            guard output.range(of: point.triggerPattern, options: .regularExpression) != nil else { continue }
+            triggeredInteractions[intentID]?.insert(index)
+            MobilePairingService.diagMac("任务交互点触发：\(point.prompt.prefix(20))…")
+            TaskOutputStreamService.shared.dispatchInteraction(
+                taskID: intentID,
+                prompt: point.prompt,
+                options: point.options)
+            return
+        }
+    }
+
+    /// 手机选中项写回进程 stdin（仅声明交互点的任务有管道）。
+    func respondInteraction(intentID: UUID, selection: String) {
+        guard let pipe = inputPipes[intentID],
+              interactionPoints[intentID] != nil else { return }
+        let data = Data("\(selection)\n".utf8)
+        pipe.fileHandleForWriting.write(data)
+        DiagnosticsStore.shared.record(.mobileInteractionResponded)
     }
 
     /// 任务生命周期落地：状态 + 退出码 + （档位 ≥ restricted 时）脱敏后的
@@ -300,6 +347,9 @@ final class TaskExecutionCoordinator: ObservableObject {
         guard let intent = activeIntents.removeValue(forKey: intentID) else { return }
         activeProcesses.removeValue(forKey: intentID)
         runningIntentIDs.remove(intentID)
+        inputPipes.removeValue(forKey: intentID)
+        interactionPoints.removeValue(forKey: intentID)
+        triggeredInteractions.removeValue(forKey: intentID)
         if intent.executionState == .running {
             TaskExecutionPolicy.markExited(intent, exitCode: exitCode)
             DiagnosticsStore.shared.record(exitCode == 0 ? .taskExecutionSucceeded : .taskExecutionFailed)
