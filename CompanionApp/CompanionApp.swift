@@ -1062,6 +1062,7 @@ final class CompanionPairingClient: ObservableObject {
     /// streamText/state。断线时保留游标供重连续传（isStreaming 保持，
     /// 由详情页的重试按钮或自动重连触发新一轮 openTaskStream）。
     private func receiveStreamFrames(on connection: NWConnection) {
+        Self.diag("流接收循环启动")
         connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] content, _, isComplete, error in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -1095,6 +1096,7 @@ final class CompanionPairingClient: ObservableObject {
 
     /// 单帧流消息分发。
     private func handleStreamFrame(_ data: Data) {
+        Self.diag("流帧到达：\(data.count)B key=\(pendingSessionKey != nil ? "有" : "无")")
         guard let key = pendingSessionKey, !data.isEmpty else { return }
         // 推送块（最常见）先试；状态变化次之。
         if let chunk = try? MobilePairingEnvelope.openStreamChunk(data, using: key) {
