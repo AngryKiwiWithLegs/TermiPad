@@ -80,9 +80,12 @@ final class TaskOutputStreamService: ObservableObject {
         let pending = Self.substring(fromUTF8Offset: start, of: buffer.text)
         if !pending.isEmpty {
             let redacted = OutputRedactor.redact(pending)
+            MobilePairingService.diagMac("流回放：推送 \(redacted.utf8.count)B（起点 \(start)）")
             for chunk in Self.splitIntoChunks(redacted, limit: Self.chunkByteLimit) {
                 push(MobileStreamChunk(streamID: taskID, offset: start, text: chunk))
             }
+        } else {
+            MobilePairingService.diagMac("流回放：存量空（缓冲 \(totalBytes)B 起点 \(start)）")
         }
         subscriptions[connectionID]?.consumedOffset = totalBytes
         return totalBytes
