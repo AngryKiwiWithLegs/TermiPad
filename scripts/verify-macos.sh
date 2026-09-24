@@ -144,11 +144,12 @@ swift_source_guard() {
     echo '检测到 T1 执行器触及网络、终端自动化、PTY、Shell 或进程输入边界。' >&2
     return 1
   fi
-  # 捕获只允许出现在 attachOutputCapture 单点（设计 §5.4），且必须与
-  # 档位裁决 capturesOutput 绑定；直接 grep Pipe 计数防止散落滥用。
-  if [ "$(printf '%s\n' "$task_execution_code" | grep -cE 'Pipe\(\)')" -gt 1 ] \
+  # Pipe 允许两处（M4-3 修订，docs/m4-interactive-session-design.md §2.2）：
+  # 输出捕获（attachOutputCapture，档位裁决）+ 交互点 stdin 管道
+  # （仅声明 interactionPoints 的任务开放）。防止散落滥用：计数上限 2。
+  if [ "$(printf '%s\n' "$task_execution_code" | grep -cE 'Pipe\(\)')" -gt 2 ] \
     || ! printf '%s\n' "$task_execution_code" | grep -qF 'if capturesOutput {'; then
-    echo 'T1 输出捕获必须仅在 attachOutputCapture 单点且由档位裁决开关。' >&2
+    echo 'T1 的 Pipe 只允许输出捕获与交互点 stdin 两处。' >&2
     return 1
   fi
   if ! printf '%s\n' "$task_execution_code" | grep -qF 'process.standardInput = FileHandle.nullDevice'; then
