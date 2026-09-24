@@ -44,37 +44,42 @@ struct ContentView: View {
     @State private var selectedTab: Tab = .tools
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                // 配对状态/引导常驻顶部（占位小，不抢功能空间）。
-                pairingStatusHeader
-                // 功能页内容。
+        // M5：底部 TabView（HIG 首选导航）——每页独立 NavigationStack，
+        // 大标题折叠走系统行为。
+        TabView(selection: $selectedTab) {
+            NavigationStack {
                 Form {
-                    switch selectedTab {
-                    case .tools:
-                        toolsTab
-                    case .console:
-                        consoleTab
-                    case .newTask:
-                        newTaskTab
-                    }
+                    pairingStatusHeader
+                    toolsTab
                 }
-                // 底部页签：三功能常驻可点，不再依赖 phase 出现/消失。
-                Picker("", selection: $selectedTab) {
-                    ForEach(Tab.allCases) { tab in
-                        Label(tab.title, systemImage: tab.symbol).tag(tab)
-                    }
+                .navigationTitle("TermiPad 伴侣")
+            }
+            .tabItem { Label(Tab.tools.title, systemImage: Tab.tools.symbol) }
+            .tag(Tab.tools)
+
+            NavigationStack {
+                Form {
+                    pairingStatusHeader
+                    consoleTab
                 }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .padding(.bottom, 8)
-                .accessibilityIdentifier("companion-tab-picker")
+                .navigationTitle(Tab.console.title)
             }
-            .navigationTitle("TermiPad 伴侣")
-            .sheet(item: $selectedStreamEntry) { entry in
-                TaskStreamDetailView(entry: entry)
-                    .environmentObject(client)
+            .tabItem { Label(Tab.console.title, systemImage: Tab.console.symbol) }
+            .tag(Tab.console)
+
+            NavigationStack {
+                Form {
+                    pairingStatusHeader
+                    newTaskTab
+                }
+                .navigationTitle(Tab.newTask.title)
             }
+            .tabItem { Label(Tab.newTask.title, systemImage: Tab.newTask.symbol) }
+            .tag(Tab.newTask)
+        }
+        .sheet(item: $selectedStreamEntry) { entry in
+            TaskStreamDetailView(entry: entry)
+                .environmentObject(client)
         }
     }
 
