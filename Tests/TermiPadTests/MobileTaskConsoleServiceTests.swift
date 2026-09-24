@@ -120,3 +120,98 @@ final class MobileTaskConsoleServiceTests: XCTestCase {
         XCTAssertTrue(summaries.allSatisfy { !$0.purpose.isEmpty && !$0.commandPreview.isEmpty })
     }
 }
+
+// MARK: - M4 流回放（docs/m4-interactive-session-design.md §2.1）
+
+/// 流服务测试需在非 MainActor 上下文构造——用 @MainActor 测试方法。
+@MainActor
+final class TaskOutputStreamServiceTests: XCTestCase {
+
+    func testSubscribeReplaysBufferedOutputImmediately() {
+        let service = TaskOutputStreamService()
+        let taskID = UUID()
+        // 模拟 T1 先产出输出（订阅前缓冲已有内容）。
+        service.dispatchOutput(taskID: taskID, rawText: "line one\nline two\n")
+
+        var pushed: [MobileStreamChunk] = []
+        let connectionID = UUID()
+        service.registerSink(connectionID) { chunk in pushed.append(chunk) }
+        let cursor = service.subscribe(
+            connectionID: connectionID, taskID: taskID, resumeOffset: nil) { chunk in
+                pushed.append(chunk)
+            }
+
+        // 回放：订阅时立即推存量（此前真机实证缺失即"等待输出"根因）。
+        XCTAssertFalse(pushed.isEmpty, "订阅时必须立即推送缓冲存量")
+        XCTAssertEqual(pushed.reduce(0) { $0 + $1.text.utf8.count }, "line one\nline two\n".utf8.count)
+        XCTAssertEqual(cursor, pushed.last!.offset + pushed.last!.text.utf8.count)
+        // 内容经脱敏管道（普通文本原样）。
+        XCTAssertTrue(pushed.contains { $0.text.contains("line one") })
+    }
+
+    func testSubscribeWithResumeOffsetContinuesFromCursor() {
+        let service = TaskOutputStreamService()
+        let taskID = UUID()
+        service.dispatchOutput(taskID: taskID, rawText: "AAAA\nBBBB\n")
+        var pushed: [MobileStreamChunk] = []
+        let connectionID = UUID()
+        service.registerSink(connectionID) { chunk in pushed.append(chunk) }
+        // 断线重连：声称已消费前 5 字节（"AAAA\n"）——续传只推 B 部分。
+        _ = service.subscribe(
+            connectionID: connectionID, taskID: taskID, resumeOffset: 5) { chunk in
+                pushed.append(chunk)
+            }
+        XCTAssertTrue(pushed.contains { $0.text.contains("BBBB") })
+        XCTAssertFalse(pushed.contains { $0.text.contains("AAAA") }, "已消费部分不得重推")
+    }
+
+    func testDispatchOutputPushesToActiveSubscriber() {
+        let service = TaskOutputStreamService()
+        let taskID = UUID()
+        var pushed: [MobileStreamChunk] = []
+        let connectionID = UUID()
+        service.registerSink(connectionID) { chunk in pushed.append(chunk) }
+        _ = service.subscribe(
+            connectionID: connectionID, taskID: taskID, resumeOffset: nil) { chunk in
+                pushed.append(chunk)
+            }
+        // 订阅后 T1 新输出 → 实时推送。
+        service.dispatchOutput(taskID: taskID, rawText: "live output\n")
+        XCTAssertTrue(pushed.contains { $0.text.contains("live output") },
+                      "订阅后的新输出必须实时推送")
+    }
+
+    func testOutputIsRedactedBeforePush() {
+        let service = TaskOutputStreamService()
+        let taskID = UUID()
+        var pushed: [MobileStreamChunk] = []
+        let connectionID = UUID()
+        service.registerSink(connectionID) { chunk in pushed.append(chunk) }
+        _ = service.subscribe(
+            connectionID: connectionID, taskID: taskID, resumeOffset: nil) { chunk in
+                pushed.append(chunk)
+            }
+        service.dispatchOutput(taskID: taskID,
+                               rawText: "token=supersecretvalue123\n")
+        XCTAssertFalse(pushed.contains { $0.text.contains("supersecretvalue123") },
+                       "推送前必须脱敏")
+        XCTAssertTrue(pushed.contains { $0.text.contains(OutputRedactor.mask) })
+    }
+
+    func testPurgeAllClearsBuffersAndSubscriptions() {
+        let service = TaskOutputStreamService()
+        let taskID = UUID()
+        service.dispatchOutput(taskID: taskID, rawText: "data\n")
+        var pushed: [MobileStreamChunk] = []
+        let connectionID = UUID()
+        service.registerSink(connectionID) { chunk in pushed.append(chunk) }
+        _ = service.subscribe(
+            connectionID: connectionID, taskID: taskID, resumeOffset: nil) { chunk in
+                pushed.append(chunk)
+            }
+        service.purgeAll()
+        pushed.removeAll()
+        service.dispatchOutput(taskID: taskID, rawText: "after purge\n")
+        XCTAssertTrue(pushed.isEmpty, "窗口关闭后缓冲与订阅必须清空")
+    }
+}
