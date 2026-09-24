@@ -61,23 +61,19 @@ struct CompanionLockView: View {
             Rectangle().fill(.regularMaterial).ignoresSafeArea()
             VStack(spacing: 16) {
                 Image(systemName: "lock.shield")
-                    .font(.system(size: 44))
+                    .font(.largeTitle)
                     .foregroundStyle(.secondary)
                 Text("TermiPad 伴侣已锁定")
                     .font(.headline)
-                Button("使用面容 ID 解锁") {
+                Button("解锁") {
                     appLock.requestUnlock()
                 }
                 .buttonStyle(.borderedProminent)
                 .accessibilityIdentifier("companion-applock-unlock")
-                Text("为防止他人使用你的手机控制 Mac，每次打开需要验证。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
             }
         }
-        .onAppear { appLock.requestUnlock() }
+        // 不在 onAppear 自动触发 Face ID——系统认证弹窗与盖层同帧竞争，
+        // 会被盖层挡住（2026-09-24 用户实测）。用户点「解锁」再拉起。
     }
 }
 
