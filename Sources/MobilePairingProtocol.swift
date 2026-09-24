@@ -18,6 +18,13 @@ enum PairedDeviceOperation: String, Codable, CaseIterable, Sendable {
     case getTaskStatus
     case cancelTask
     case heartbeat
+    // M4 交互会话（docs/m4-interactive-session-design.md §2.1）：
+    // 订阅式长连接——openTaskStream 后连接保持，Mac 主动推流；
+    // closeTaskStream 退订。前置条件：每日远程窗口开启。
+    case openTaskStream
+    case closeTaskStream
+    /// M4-3：交互点选择回传（taskIntentID + interactionSelection）。
+    case respondInteraction
 }
 
 /// iPhone → Mac 请求的最小载荷。字段集合是产品红线（最小数据回传）：
@@ -36,6 +43,11 @@ struct MobilePairingRequest: Codable, Sendable, Equatable {
     var taskKind: String? = nil
     var projectScopeID: UUID? = nil
     var taskIntentID: UUID? = nil
+    /// M4：openTaskStream 的续传偏移（断线重连场景）——从该 UTF-8 字节
+    /// 偏移之后继续推送；nil = 全新订阅。旧端忽略（兼容红线）。
+    var streamResumeOffset: Int? = nil
+    /// M4-3：交互点选中的选项（respondInteraction 用）。
+    var interactionSelection: String? = nil
 }
 
 /// Mac → iPhone 工具目录条目：手机端只允许看到这 4 个字段。
@@ -94,6 +106,28 @@ enum MobilePairingEnvelope {
         let plaintext = try MobilePairingCrypto.open(data, using: key)
         return try JSONDecoder().decode(MobileTaskProposalResponse.self, from: plaintext)
     }
+
+    // MARK: M4 交互会话信封解码
+
+    static func openStreamResponse(_ data: Data, using key: SymmetricKey) throws -> MobileStreamResponse {
+        let plaintext = try MobilePairingCrypto.open(data, using: key)
+        return try JSONDecoder().decode(MobileStreamResponse.self, from: plaintext)
+    }
+
+    static func openStreamChunk(_ data: Data, using key: SymmetricKey) throws -> MobileStreamChunk {
+        let plaintext = try MobilePairingCrypto.open(data, using: key)
+        return try JSONDecoder().decode(MobileStreamChunk.self, from: plaintext)
+    }
+
+    static func openStreamStateChange(_ data: Data, using key: SymmetricKey) throws -> MobileStreamStateChange {
+        let plaintext = try MobilePairingCrypto.open(data, using: key)
+        return try JSONDecoder().decode(MobileStreamStateChange.self, from: plaintext)
+    }
+
+    static func openStreamInteraction(_ data: Data, using key: SymmetricKey) throws -> MobileStreamInteraction {
+        let plaintext = try MobilePairingCrypto.open(data, using: key)
+        return try JSONDecoder().decode(MobileStreamInteraction.self, from: plaintext)
+    }
 }
 
 /// Mac → iPhone 配对确认（经会话密钥 AEAD 加密后发送）。
@@ -141,7 +175,7 @@ struct MobileFixedTaskSummary: Codable, Sendable, Equatable {
 
 /// 会话条目：工具启动与固定任务统一形态（§3.3——状态字符串全部来自
 /// T1 TaskExecutionState 原样枚举，工具启动仅 launched/launchFailed）。
-struct MobileSessionEntry: Codable, Sendable, Equatable {
+struct MobileSessionEntry: Codable, Sendable, Equatable, Identifiable {
     enum SessionKind: String, Codable, Sendable {
         case toolLaunch
         case fixedTask
@@ -171,6 +205,48 @@ struct MobileTaskProposalResponse: Codable, Sendable, Equatable {
     let reason: String?
     /// 接受时手机后续 getTaskStatus / cancelTask 的任务引用。
     let taskIntentID: UUID?
+}
+
+// MARK: - M4 交互会话推送（docs/m4-interactive-session-design.md §2.1）
+// Mac → 手机主动推送帧（订阅式长连接内）。全部经既有 AEAD 信封；
+// 输出先经 OutputRedactor 脱敏；工具启动（终端交接）永无流。
+
+/// 流订阅回执：接受（带游标——断线续传起点）或拒绝。
+struct MobileStreamResponse: Codable, Sendable, Equatable {
+    enum Status: String, Codable, Sendable {
+        case accepted
+        case rejected
+    }
+
+    let status: Status
+    let reason: String?
+    /// 续传游标：从此偏移（字节）之后的输出开始推送；新订阅为 0。
+    let resumeOffset: Int?
+}
+
+/// 输出块推送（Mac → 手机，流生命周期内多次）。
+struct MobileStreamChunk: Codable, Sendable, Equatable {
+    let streamID: UUID
+    /// 本块覆盖的字节区间起点（续传游标依据）。
+    let offset: Int
+    /// 脱敏后的输出文本（行级合帧，≤8KB/块）。
+    let text: String
+}
+
+/// 状态变化推送。
+struct MobileStreamStateChange: Codable, Sendable, Equatable {
+    let streamID: UUID
+    let executionState: String
+    let exitCode: Int?
+    let finishedAt: Date?
+}
+
+/// 交互点推送（M4-3）：任务需要决策。选项全部来自任务定义字面量。
+struct MobileStreamInteraction: Codable, Sendable, Equatable {
+    let streamID: UUID
+    let prompt: String
+    /// 固定选项（任务定义声明，非运行时生成）。
+    let options: [String]
 }
 
 /// 手机端持久化凭据（原 CompanionApp 私有类型，M2a 迁入共享协议层——

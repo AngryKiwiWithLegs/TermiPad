@@ -33,6 +33,12 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.termipad.app
         PRODUCT_NAME: TermiPad
+        # M4 固定签名（2026-09-18）：ad-hoc 每次构建签名都变，钥匙串 item
+        # 的 ACL 绑定旧签名 → 每次重建后反复弹授权。改用 Apple Development
+        # 证书（与 iOS Companion 同一证书）→ 签名稳定，一次授权终身有效。
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "Apple Development"
+        DEVELOPMENT_TEAM: 7LTPLQKWWD
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_CFBundleDisplayName: TermiPad
         INFOPLIST_KEY_NSAppleEventsUsageDescription: "TermiPad 需要控制您选择的终端，以打开并执行您确认的命令。"

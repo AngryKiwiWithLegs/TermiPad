@@ -191,18 +191,24 @@ final class MobilePairingService: ObservableObject {
 
     private func attemptStartPairing(identity: MobilePairingIdentity, attempt: Int) {
         // 指数退避（1/2/4 秒）：failed 过的 listener cancel 后内核清理
-        // （TCP 双栈 listen+backlog）比正常关闭慢得多——固定 1 秒间隔
-        // 三连撞（2026-09-10 19:34 实测：3 次全 EADDRINUSE）。
-        let backoffNanos = UInt64(pow(2.0, Double(attempt)) * 1_000_000_000)
+        // （TCP 双栈 listen+backlog）比正常关闭慢得多。attempt>0 时先退避
+        // 再绑定；绑定尝试本身在 attemptStartPairingImmediate——failed 回调
+        // 推进 attempt+1 并再次进入本方法。**结构警示**：此前的实现把退避
+        // 分支写成递归调用自身且不推进 attempt，形成无限退避死循环——
+        // 绑定从未再次执行，配对"悄悄死掉"（2026-09-19 实测三连）。
         if attempt > 0 {
+            let backoffNanos = UInt64(pow(2.0, Double(attempt)) * 1_000_000_000)
             Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: backoffNanos)
                 guard let self, self.listener == nil, self.isPairingEnabledIntent else { return }
-                self.attemptStartPairing(identity: identity, attempt: attempt)
+                self.attemptStartPairingImmediate(identity: identity, attempt: attempt)
             }
             return
         }
-        // 递归推进 attempt+1 后会先退避再尝试（attempt>0 分支）。
+        attemptStartPairingImmediate(identity: identity, attempt: attempt)
+    }
+
+    private func attemptStartPairingImmediate(identity: MobilePairingIdentity, attempt: Int) {
         let fingerprint = MobilePairingCrypto.fingerprint(forPublicKeyData: try! identity.publicKeyData())
         let pairingCode = MobilePairingCrypto.generatePairingCode()
         // 锁 Wi-Fi + 固定端口 + TXT 携带 LAN 地址：手机浏览时直接拿到 IP:port
@@ -700,6 +706,88 @@ final class MobilePairingService: ObservableObject {
                     status: .rejected, reason: "请求缺少任务引用。", taskIntentID: nil)
                 Self.sendSealed(response, on: connection, using: key)
             }
+        case .openTaskStream:
+            Task { @MainActor in
+                // M4：流订阅前置 = 每日远程窗口开启（设计 §2.3）。
+                guard RemoteAllowWindow.shared.isOpen, let taskID = request.taskIntentID else {
+                    Self.sendSealed(
+                        MobileStreamResponse(
+                            status: .rejected,
+                            reason: RemoteAllowWindow.shared.isOpen
+                                ? "请求缺少任务引用。"
+                                : "今日远程窗口未开启，请在 Mac 上开启后重试。",
+                            resumeOffset: nil),
+                        on: connection, using: key)
+                    return
+                }
+                let connectionID = request.requestID
+                // M4-2：手机端声明的续传偏移（断线重连从断点续传）。
+                let resumeOffset = request.streamResumeOffset
+                // **帧顺序关键**：订阅回执必须是手机收到的第一帧——手机在
+                // 处理回执后才启动推送接收循环，先推存量/注册 sink 的话，
+                // 回放 chunk 会被手机当回执解析（2026-09-19 真机实证）。
+                // 顺序：先发回执 → 再注册 sink → 再订阅（订阅内的存量回放
+                // 走已注册的 sink，此时手机已进入推送循环）。
+                Self.sendSealed(
+                    MobileStreamResponse(status: .accepted, reason: nil, resumeOffset: 0),
+                    on: connection, using: key,
+                    keepConnectionOpen: true)
+                TaskOutputStreamService.shared.registerSink(connectionID) { chunk in
+                    guard let sealed = try? MobilePairingEnvelope.seal(chunk, using: key) else {
+                        diagMac("流推送：chunk 加密失败")
+                        return
+                    }
+                    connection.send(
+                        content: MobilePairingFrame.encode(sealed),
+                        completion: .contentProcessed { error in
+                            if let error { diagMac("流推送 send 失败：\(error.localizedDescription)") }
+                        })
+                }
+                _ = TaskOutputStreamService.shared.subscribe(
+                    connectionID: connectionID, taskID: taskID, resumeOffset: resumeOffset) { chunk in
+                    guard let sealed = try? MobilePairingEnvelope.seal(chunk, using: key) else {
+                        diagMac("流回放：chunk 加密失败")
+                        return
+                    }
+                    connection.send(
+                        content: MobilePairingFrame.encode(sealed),
+                        completion: .contentProcessed { error in
+                            if let error { diagMac("流回放 send 失败：\(error.localizedDescription)") }
+                        })
+                }
+                // M4-3 交互请求走独立帧类型（手机端按字段名区分）。
+                TaskOutputStreamService.shared.addInteractionHandler { [weak connection] targetConnectionID, interaction in
+                    guard targetConnectionID == connectionID, let connection else { return }
+                    guard let sealed = try? MobilePairingEnvelope.seal(interaction, using: key) else { return }
+                    connection.send(
+                        content: MobilePairingFrame.encode(sealed),
+                        completion: .contentProcessed { _ in })
+                }
+            }
+        case .respondInteraction:
+            Task { @MainActor in
+                // M4-3：手机选中项写回任务 stdin。
+                guard let taskID = request.taskIntentID,
+                      let selection = request.interactionSelection else {
+                    connection.cancel()
+                    return
+                }
+                TaskExecutionCoordinator.shared.respondInteraction(
+                    intentID: taskID, selection: selection)
+                // 静默断开（一问一答链路无回执必要——流里会看到任务继续）。
+                connection.cancel()
+            }
+        case .closeTaskStream:
+            Task { @MainActor in
+                if let taskID = request.taskIntentID {
+                    TaskOutputStreamService.shared.unsubscribe(connectionID: request.requestID)
+                    _ = taskID
+                }
+                // 一问一答路径：退订回执后自然断开。
+                Self.sendSealed(
+                    MobileStreamResponse(status: .accepted, reason: nil, resumeOffset: nil),
+                    on: connection, using: key)
+            }
         default:
             // 其余操作按设计文档节奏逐个启用；未启用即拒绝并断开。
             connection.cancel()
@@ -712,13 +800,15 @@ final class MobilePairingService: ObservableObject {
     private static func sendSealed(
         _ value: some Encodable,
         on connection: NWConnection,
-        using key: SymmetricKey
+        using key: SymmetricKey,
+        keepConnectionOpen: Bool = false
     ) {
         guard let sealed = try? MobilePairingEnvelope.seal(value, using: key) else {
             connection.cancel()
             return
         }
         connection.send(content: MobilePairingFrame.encode(sealed), completion: .contentProcessed { _ in
+            guard !keepConnectionOpen else { return }
             connection.cancel()
         })
     }
