@@ -43,7 +43,7 @@ final class CompanionAppLock: ObservableObject {
         }
         context.evaluatePolicy(
             .deviceOwnerAuthentication,
-            localizedReason: "解锁 TermiPad 伴侣以查看任务会话"
+            localizedReason: "验证通过后即可查看 Mac 任务状态并发送操作"
         ) { [weak self] success, _ in
             Task { @MainActor in
                 self?.isLocked = !success
