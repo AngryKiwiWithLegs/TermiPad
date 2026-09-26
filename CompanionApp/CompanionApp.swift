@@ -31,6 +31,8 @@ struct TermiPadCompanionApp: App {
 @MainActor
 final class CompanionAppLock: ObservableObject {
     @Published var isLocked = true
+    /// 认证失败提示（锁屏页展示；nil 无提示）。
+    @Published var authNotice: String?
 
     func requestUnlock() {
         let context = LAContext()
