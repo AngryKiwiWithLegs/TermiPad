@@ -44,8 +44,13 @@ final class CompanionAppLock: ObservableObject {
         context.evaluatePolicy(
             .deviceOwnerAuthentication,
             localizedReason: "验证通过后即可查看 Mac 任务状态并发送操作"
-        ) { [weak self] success, _ in
+        ) { [weak self] success, authError in
             Task { @MainActor in
+                if !success, let laError = authError as? LAError,
+                   laError.code == .biometryLockout {
+                    // Face ID 连续失败被系统锁定——只能输密码解锁（系统强制）。
+                    self?.authNotice = "面容 ID 已被锁定，请输入设备密码解锁。"
+                }
                 self?.isLocked = !success
             }
         }
