@@ -1,4 +1,18 @@
 import SwiftUI
+import UIKit
+
+/// M5 触觉反馈封装（HIG：关键操作轻冲击，成功通知）。
+enum Haptics {
+    static func light() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+    static func success() {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+    static func warning() {
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+    }
+}
 
 struct ContentView: View {
     @EnvironmentObject private var client: CompanionPairingClient
@@ -30,37 +44,42 @@ struct ContentView: View {
     @State private var selectedTab: Tab = .tools
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                // 配对状态/引导常驻顶部（占位小，不抢功能空间）。
-                pairingStatusHeader
-                // 功能页内容。
+        // M5：底部 TabView（HIG 首选导航）——每页独立 NavigationStack，
+        // 大标题折叠走系统行为。
+        TabView(selection: $selectedTab) {
+            NavigationStack {
                 Form {
-                    switch selectedTab {
-                    case .tools:
-                        toolsTab
-                    case .console:
-                        consoleTab
-                    case .newTask:
-                        newTaskTab
-                    }
+                    pairingStatusHeader
+                    toolsTab
                 }
-                // 底部页签：三功能常驻可点，不再依赖 phase 出现/消失。
-                Picker("", selection: $selectedTab) {
-                    ForEach(Tab.allCases) { tab in
-                        Label(tab.title, systemImage: tab.symbol).tag(tab)
-                    }
+                .navigationTitle("TermiPad 伴侣")
+            }
+            .tabItem { Label(Tab.tools.title, systemImage: Tab.tools.symbol) }
+            .tag(Tab.tools)
+
+            NavigationStack {
+                Form {
+                    pairingStatusHeader
+                    consoleTab
                 }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .padding(.bottom, 8)
-                .accessibilityIdentifier("companion-tab-picker")
+                .navigationTitle(Tab.console.title)
             }
-            .navigationTitle("TermiPad 伴侣")
-            .sheet(item: $selectedStreamEntry) { entry in
-                TaskStreamDetailView(entry: entry)
-                    .environmentObject(client)
+            .tabItem { Label(Tab.console.title, systemImage: Tab.console.symbol) }
+            .tag(Tab.console)
+
+            NavigationStack {
+                Form {
+                    pairingStatusHeader
+                    newTaskTab
+                }
+                .navigationTitle(Tab.newTask.title)
             }
+            .tabItem { Label(Tab.newTask.title, systemImage: Tab.newTask.symbol) }
+            .tag(Tab.newTask)
+        }
+        .sheet(item: $selectedStreamEntry) { entry in
+            TaskStreamDetailView(entry: entry)
+                .environmentObject(client)
         }
     }
 
@@ -159,6 +178,7 @@ struct ContentView: View {
         } else {
             ForEach(summaries, id: \.id) { summary in
                 Button {
+                    Haptics.light()
                     client.requestLaunch(summary)
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
@@ -166,7 +186,7 @@ struct ContentView: View {
                             Text(summary.displayName).font(.body.bold())
                             Spacer()
                             Image(systemName: "play.circle")
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(.tint)
                         }
                         if !summary.displayDescription.isEmpty {
                             Text(summary.displayDescription)
@@ -295,6 +315,7 @@ struct ContentView: View {
                             Text("exit \(exitCode)")
                                 .font(.caption.monospaced())
                                 .foregroundStyle(exitCode == 0 ? .green : .red)
+                                .accessibilityLabel(exitCode == 0 ? "退出码 0，成功" : "退出码 \(exitCode)，失败")
                         }
                     }
                     if let output = entry.outputSnippet, !output.isEmpty {
@@ -313,6 +334,7 @@ struct ContentView: View {
                         // 工具启动是终端交接——停止权在终端侧，不放按钮）。
                         if entry.executionState == "running" && entry.kind == .fixedTask {
                             Button {
+                                Haptics.warning()
                                 client.cancelTask(taskIntentID: entry.id, title: entry.title)
                             } label: {
                                 Label("停止", systemImage: "stop.circle.fill")
@@ -345,6 +367,7 @@ struct ContentView: View {
             Button {
                 if let scopeID = selectedScopeID, let kind = selectedTaskKind,
                    let task = client.consoleFixedTasks.first(where: { $0.kind == kind }) {
+                    Haptics.light()
                     client.submitTaskProposal(kind: kind, scopeID: scopeID, title: task.purpose)
                 }
             } label: {
@@ -354,7 +377,9 @@ struct ContentView: View {
                         ? "提交任务（先在下方选择）"
                         : "提交「\(client.consoleFixedTasks.first(where: { $0.kind == selectedTaskKind })?.purpose ?? "")」")
                 }
+                .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.borderedProminent)
             .disabled(selectedScopeID == nil || selectedTaskKind == nil)
             .accessibilityIdentifier("companion-newtask-submit")
             // 范围默认选中第一项：selection=nil 的 Picker 渲染成空选择，
@@ -397,6 +422,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("companion-newtask-kind-\(task.kind)")
+                // HIG：可选行尾加 chevron（暗示可点选）——仅未选中时展示。
             }
             Button("提交任务") {
                 if let scopeID = selectedScopeID, let kind = selectedTaskKind,
@@ -666,7 +692,7 @@ struct TaskStreamDetailView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     Text(client.streamText.isEmpty ? "等待输出…" : client.streamText)
-                        .font(.system(.callout, design: .monospaced))
+                        .font(.system(.body, design: .monospaced))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
                         .textSelection(.enabled)
@@ -686,7 +712,7 @@ struct TaskStreamDetailView: View {
     private var unavailableContent: some View {
         VStack(spacing: 16) {
             Image(systemName: "rectangle.slash")
-                .font(.system(size: 44))
+                .font(.largeTitle)
                 .foregroundStyle(.secondary)
             Text("会话流不可用")
                 .font(.headline)

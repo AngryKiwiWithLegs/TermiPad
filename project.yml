@@ -41,6 +41,7 @@ targets:
         DEVELOPMENT_TEAM: 7LTPLQKWWD
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_CFBundleDisplayName: TermiPad
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_NSAppleEventsUsageDescription: "TermiPad 需要控制您选择的终端，以打开并执行您确认的命令。"
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
         DEAD_CODE_STRIPPING: "YES"
@@ -84,6 +85,8 @@ targets:
     deploymentTarget: "16.0"
     sources:
       - path: CompanionApp
+      # 应用图标（M5：iPhone 原生风格资产）
+      - path: CompanionApp/Assets.xcassets
       # 复用 Mac 端纯逻辑层（密码学/协议/帧/Keychain），避免代码漂移
       - path: Sources/MobilePairingCrypto.swift
       - path: Sources/MobilePairingProtocol.swift
@@ -109,6 +112,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.termipad.companion
         PRODUCT_NAME: TermiPadCompanion
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_VERSION: "5.9"
         IPHONEOS_DEPLOYMENT_TARGET: "16.0"
         CODE_SIGN_STYLE: Automatic
