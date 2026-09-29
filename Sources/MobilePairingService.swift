@@ -777,6 +777,74 @@ final class MobilePairingService: ObservableObject {
                 // 静默断开（一问一答链路无回执必要——流里会看到任务继续）。
                 connection.cancel()
             }
+        case .openShellStream:
+            Task { @MainActor in
+                // M6：前置 = 每日远程窗口（与任务流同裁决）。
+                guard RemoteAllowWindow.shared.isOpen else {
+                    Self.sendSealed(
+                        MobileStreamResponse(
+                            status: .rejected,
+                            reason: "今日远程窗口未开启，请在 Mac 上开启后重试。",
+                            resumeOffset: nil),
+                        on: connection, using: key)
+                    return
+                }
+                guard TerminalRemoteService.shared.ensureShell() else {
+                    Self.sendSealed(
+                        MobileStreamResponse(
+                            status: .rejected, reason: "Mac 端 shell 拉起失败。", resumeOffset: nil),
+                        on: connection, using: key)
+                    return
+                }
+                let connectionID = request.requestID
+                Self.sendSealed(
+                    MobileStreamResponse(status: .accepted, reason: nil, resumeOffset: 0),
+                    on: connection, using: key,
+                    keepConnectionOpen: true)
+                // PTY 输出复用任务流管道（固定 shellStreamID）。
+                TaskOutputStreamService.shared.registerSink(connectionID) { chunk in
+                    var shellChunk = chunk
+                    shellChunk.streamID = TerminalRemoteService.shellStreamID
+                    guard let sealed = try? MobilePairingEnvelope.seal(shellChunk, using: key) else { return }
+                    connection.send(
+                        content: MobilePairingFrame.encode(sealed),
+                        completion: .contentProcessed { _ in })
+                }
+                _ = TaskOutputStreamService.shared.subscribe(
+                    connectionID: connectionID,
+                    taskID: TerminalRemoteService.shellStreamID,
+                    resumeOffset: request.streamResumeOffset) { chunk in
+                    guard let sealed = try? MobilePairingEnvelope.seal(chunk, using: key) else { return }
+                    connection.send(
+                        content: MobilePairingFrame.encode(sealed),
+                        completion: .contentProcessed { _ in })
+                }
+            }
+        case .closeShellStream:
+            Task { @MainActor in
+                TerminalRemoteService.shared.terminateShell(reason: "手机端退订")
+                Self.sendSealed(
+                    MobileStreamResponse(status: .accepted, reason: nil, resumeOffset: nil),
+                    on: connection, using: key)
+            }
+        case .shellKey:
+            Task { @MainActor in
+                guard RemoteAllowWindow.shared.isOpen, let keyName = request.interactionSelection else {
+                    connection.cancel()
+                    return
+                }
+                TerminalRemoteService.shared.sendKey(keyName)
+                connection.cancel()
+            }
+        case .shellLine:
+            Task { @MainActor in
+                guard RemoteAllowWindow.shared.isOpen, let line = request.interactionSelection else {
+                    connection.cancel()
+                    return
+                }
+                TerminalRemoteService.shared.sendLine(line)
+                connection.cancel()
+            }
         case .closeTaskStream:
             Task { @MainActor in
                 if let taskID = request.taskIntentID {

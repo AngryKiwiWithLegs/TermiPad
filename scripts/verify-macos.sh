@@ -160,8 +160,8 @@ swift_source_guard() {
     echo 'T1 执行器 minimal 档位必须维持空输出（nullDevice 分支不得删除）。' >&2
     return 1
   fi
-  if grep -RInE 'Process\(' Sources | grep -vE 'Sources/(EnvironmentReport|TaskExecutionService|TailnetTunnelService)\.swift'; then
-    echo '检测到 T1 之外新增的进程执行入口（M2a 仅 TailnetTunnelService 允许跑 tailscale CLI）。' >&2
+  if grep -RInE 'Process\(' Sources | grep -vE 'Sources/(EnvironmentReport|TaskExecutionService|TailnetTunnelService|TerminalRemoteService)\.swift'; then
+    echo '检测到 T1 之外新增的进程执行入口（M2a 仅 TailnetTunnelService / M6 仅 TerminalRemoteService 允许跑外部进程）。' >&2
     return 1
   fi
   # 备份与任务域隔离（track-protocol §4.5）：Sources/BackupService.swift 不得引用
@@ -256,6 +256,22 @@ swift_source_guard() {
   # M2a 红线：永久禁用 Funnel（公网暴露入口）。字面量出现即验证失败。
   if grep -RInE '"funnel| funnel |--funnel' Sources; then
     echo '检测到 funnel 子命令引用——公网暴露红线，永久禁止。' >&2
+    return 1
+  fi
+  # M6 终端遥控（docs/m6-keyboard-remote-design.md §2.1）：PTY/forkpty 仅
+  # TerminalRemoteService；shell 路径固定 /bin/zsh 无拼接；funnel 仍全局禁。
+  local terminal_remote_code
+  terminal_remote_code="$(sed '/^[[:space:]]*\/\//d' Sources/TerminalRemoteService.swift)"
+  if ! printf '%s\n' "$terminal_remote_code" | grep -qF 'forkpty'; then
+    echo 'TerminalRemoteService 必须使用 forkpty 拉起受控 shell。' >&2
+    return 1
+  fi
+  if ! printf '%s\n' "$terminal_remote_code" | grep -qF '/bin/zsh'; then
+    echo 'PTY shell 路径必须固定 /bin/zsh。' >&2
+    return 1
+  fi
+  if printf '%s\n' "$terminal_remote_code" | grep -En 'https?://|NSAppleScript|TerminalLauncher|/bin/sh'; then
+    echo 'TerminalRemoteService 触及终端自动化或 Shell 拼接边界。' >&2
     return 1
   fi
   # iOS 伴侣 app：NWBrowser 只允许出现在 CompanionApp/ 下；Sources/ 不得使用。
