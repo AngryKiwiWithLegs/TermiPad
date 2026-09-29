@@ -43,6 +43,8 @@ final class RemoteAllowWindow: ObservableObject {
         guard openedAt != nil else { return }
         openedAt = nil
         DiagnosticsStore.shared.record(.remoteAllowWindowClosed)
+        // M6：窗口关闭即杀 PTY shell（设计 §3 生命周期绑定）。
+        TerminalRemoteService.shared.invalidateOnWindowClose()
     }
 
     /// 锁屏钩子：锁屏即关窗（防"偷 Mac 者锁不了你的窗口"）。
@@ -51,6 +53,8 @@ final class RemoteAllowWindow: ObservableObject {
         guard openedAt != nil else { return }
         openedAt = nil
         DiagnosticsStore.shared.record(.remoteAllowWindowLocked)
+        // M6：锁屏即杀 PTY（设计 §3）。
+        TerminalRemoteService.shared.invalidateOnWindowClose()
     }
 
     /// 免确认裁决：执行链调用。窗口开 + 当日 = 免本机确认。

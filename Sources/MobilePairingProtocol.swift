@@ -25,6 +25,13 @@ enum PairedDeviceOperation: String, Codable, CaseIterable, Sendable {
     case closeTaskStream
     /// M4-3：交互点选择回传（taskIntentID + interactionSelection）。
     case respondInteraction
+    /// M6 键盘遥控（docs/m6-keyboard-remote-design.md §2.2）。
+    case openShellStream
+    case closeShellStream
+    /// shellKey/shellLine：taskIntentID 复用为 shellStreamID 标识；
+    /// interactionSelection 复用为按键名/整行文本。
+    case shellKey
+    case shellLine
 }
 
 /// iPhone → Mac 请求的最小载荷。字段集合是产品红线（最小数据回传）：
@@ -46,7 +53,8 @@ struct MobilePairingRequest: Codable, Sendable, Equatable {
     /// M4：openTaskStream 的续传偏移（断线重连场景）——从该 UTF-8 字节
     /// 偏移之后继续推送；nil = 全新订阅。旧端忽略（兼容红线）。
     var streamResumeOffset: Int? = nil
-    /// M4-3：交互点选中的选项（respondInteraction 用）。
+    /// M4-3：交互点选中的选项（respondInteraction 用）；
+    /// M6 复用：shellKey 的键名 / shellLine 的整行文本。
     var interactionSelection: String? = nil
 }
 
@@ -226,7 +234,8 @@ struct MobileStreamResponse: Codable, Sendable, Equatable {
 
 /// 输出块推送（Mac → 手机，流生命周期内多次）。
 struct MobileStreamChunk: Codable, Sendable, Equatable {
-    let streamID: UUID
+    /// M6：shell 流复用 chunk 结构——构造后可改 ID 以路由。
+    var streamID: UUID
     /// 本块覆盖的字节区间起点（续传游标依据）。
     let offset: Int
     /// 脱敏后的输出文本（行级合帧，≤8KB/块）。
