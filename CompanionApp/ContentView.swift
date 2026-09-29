@@ -210,6 +210,14 @@ struct ContentView: View {
             Section {
                 Button("刷新任务状态") { client.openTaskConsole() }
                     .accessibilityIdentifier("companion-open-console")
+                // M6 键盘遥控入口（A 方案：看内容+发按键）。
+                NavigationLink {
+                    ShellRemoteDetailView()
+                        .environmentObject(client)
+                } label: {
+                    Label("终端遥控（shell）", systemImage: "terminal")
+                }
+                .accessibilityIdentifier("companion-open-shell")
             }
         }
         if client.consoleEntries.isEmpty {
@@ -725,6 +733,126 @@ struct TaskStreamDetailView: View {
                 client.openStream(taskID: entry.id)
             }
             .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+
+/// M6 终端遥控页（docs/m6-keyboard-remote-design.md §1）：
+/// Mac shell 实时内容（只读滚动）+ 快捷键条 + 整行命令输入。
+/// HIG：系统键盘、语义色、安全区；Daily Window 前置（Mac 裁决）。
+struct ShellRemoteDetailView: View {
+    @EnvironmentObject private var client: CompanionPairingClient
+    @Environment(\.dismiss) private var dismiss
+    @State private var commandInput = ""
+    @State private var isPaused = false
+
+    private let quickKeys: [(label: String, key: String)] = [
+        ("⌃C", "C-c"), ("⌃D", "C-d"), ("⌃L", "C-l"), ("⌃U", "C-u"),
+        ("Tab", "Tab"), ("↑", "Up"), ("↓", "Down"), ("⏎", "Return")
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if client.isShellStreaming || !client.shellText.isEmpty {
+                content
+            } else {
+                unavailable
+            }
+        }
+        .navigationTitle("终端遥控")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("退出") {
+                    client.closeShell()
+                    dismiss()
+                }
+            }
+        }
+        .onAppear { client.openShell() }
+    }
+
+    private var content: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Circle().fill(.green).frame(width: 8, height: 8)
+                Text("Mac shell 实时").font(.footnote).foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal).padding(.vertical, 8)
+            .background(.bar)
+            Divider()
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    Text(client.shellText.isEmpty ? "等待 shell 输出…" : client.shellText)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .textSelection(.enabled)
+                    Color.clear.frame(height: 1).id("shell-bottom")
+                }
+                .onChange(of: client.shellText) { _ in
+                    guard !isPaused else { return }
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        proxy.scrollTo("shell-bottom", anchor: .bottom)
+                    }
+                }
+            }
+
+            Divider()
+            // 快捷键条（横向滚动）。
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(quickKeys, id: \.key) { item in
+                        Button(item.label) {
+                            client.sendShellKey(item.key)
+                        }
+                        .buttonStyle(.bordered)
+                        .font(.callout.monospaced())
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+            }
+            // 命令输入行。
+            HStack {
+                TextField("输入命令…", text: $commandInput)
+                    .textFieldStyle(.roundedBorder)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .onSubmit { send() }
+                Button("发送") { send() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(commandInput.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .padding(.horizontal).padding(.bottom, 8)
+        }
+    }
+
+    private func send() {
+        let text = commandInput.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return }
+        client.sendShellLine(text)
+        commandInput = ""
+    }
+
+    private var unavailable: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "terminal")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text("终端遥控不可用")
+                .font(.headline)
+            Text("今日远程窗口未开启，或 Mac 端 shell 拉起失败。在 Mac 上开启「今日远程窗口」后重试。")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            Button("重试") { client.openShell() }
+                .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
