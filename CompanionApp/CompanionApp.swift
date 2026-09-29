@@ -483,6 +483,20 @@ final class CompanionPairingClient: ObservableObject {
     private var streamReceiveBuffer = Data()
     /// M4-3 待响应交互点（详情页渲染选择卡）。
     @Published private(set) var pendingInteraction: MobileStreamInteraction?
+    // MARK: M6 键盘遥控（docs/m6-keyboard-remote-design.md §1）
+    /// shell 流内容（独立于任务流缓冲）。
+    @Published private(set) var shellText: String = ""
+    /// shell 流连接中。
+    @Published private(set) var isShellStreaming = false
+    private var pendingShellStream = false
+    private var shellConnection: NWConnection?
+    private var shellReceiveBuffer = Data()
+    private var shellConsumedOffset = 0
+    /// 快捷键/整行发送标志（一问一答）。
+    private var pendingShellKey: String?
+    private var pendingShellLine: String?
+    /// closeShellStream 走短连接路径时的任务 ID 标志。
+    private var pendingShellClose = false
     /// 交互响应发送标志。
     private var pendingInteractionResponse: (taskID: UUID, selection: String)?
 
@@ -490,6 +504,69 @@ final class CompanionPairingClient: ObservableObject {
     func cancelTask(taskIntentID: UUID, title: String) {
         stopAll()
         pendingCancelTask = (taskIntentID, title)
+        startBrowsingInternal()
+    }
+
+    // MARK: M6 键盘遥控（任务会话页「终端遥控」入口）
+
+    /// 打开 shell 遥控：连接 → openShellStream → 长连接收流。
+    func openShell() {
+        browser?.cancel()
+        browser = nil
+        stopConnection()
+        shellConnection?.cancel()
+        shellConnection = nil
+        shellReceiveBuffer.removeAll()
+        shellText = ""
+        shellConsumedOffset = 0
+        pendingShellStream = true
+        isShellStreaming = true
+        startBrowsingInternal()
+    }
+
+    /// 关闭遥控（退出 shell）。
+    func closeShell() {
+        guard isShellStreaming else { return }
+        isShellStreaming = false
+        shellText = ""
+        pendingShellStream = false
+        if let conn = shellConnection {
+            // 用既有流连接发 closeShellStream；回执后 Mac 关连接。
+            guard let key = pendingSessionKey else {
+                conn.cancel()
+                shellConnection = nil
+                return
+            }
+            let request = MobilePairingRequest(
+                operation: .closeShellStream, requestID: UUID(), toolID: nil)
+            if let frame = try? MobilePairingFrame.encode(MobilePairingEnvelope.seal(request, using: key)) {
+                conn.send(content: frame, completion: .contentProcessed { _ in })
+            }
+            shellConnection = nil
+        } else {
+            pendingShellClose = true
+            pendingStreamCloseTaskID = TerminalRemoteServiceShellID
+            startBrowsingInternal()
+        }
+    }
+
+    /// Mac 端 shell 流固定 ID（与 TerminalRemoteService.shellStreamID 同值）。
+    private var TerminalRemoteServiceShellID: UUID {
+        UUID(uuidString: "C0FFEE00-0000-4000-8000-5445524D4950")!
+    }
+
+    /// 快捷键（C-c/Return/Tab/…）。
+    func sendShellKey(_ key: String) {
+        Haptics.light()
+        pendingShellKey = key
+        // 短连接一问一答（流连接保持）。
+        startBrowsingInternal()
+    }
+
+    /// 整行命令（自动补回车）。
+    func sendShellLine(_ text: String) {
+        Haptics.light()
+        pendingShellLine = text
         startBrowsingInternal()
     }
 
@@ -829,6 +906,24 @@ final class CompanionPairingClient: ObservableObject {
                     operation: .respondInteraction, requestID: UUID(), toolID: nil,
                     taskIntentID: response.taskID,
                     interactionSelection: response.selection)
+            } else if pendingShellStream {
+                Self.diag("MacResumeHello 校验通过，发 openShellStream offset=\(shellConsumedOffset)")
+                request = MobilePairingRequest(
+                    operation: .openShellStream, requestID: UUID(), toolID: nil,
+                    taskIntentID: TerminalRemoteServiceShellID,
+                    streamResumeOffset: shellConsumedOffset > 0 ? shellConsumedOffset : nil)
+            } else if let key = pendingShellKey {
+                Self.diag("MacResumeHello 校验通过，发 shellKey \(key)")
+                request = MobilePairingRequest(
+                    operation: .shellKey, requestID: UUID(), toolID: nil,
+                    taskIntentID: TerminalRemoteServiceShellID,
+                    interactionSelection: key)
+            } else if let line = pendingShellLine {
+                Self.diag("MacResumeHello 校验通过，发 shellLine")
+                request = MobilePairingRequest(
+                    operation: .shellLine, requestID: UUID(), toolID: nil,
+                    taskIntentID: TerminalRemoteServiceShellID,
+                    interactionSelection: line)
             } else if pendingStreamRequest, let streamTask = streamingTaskID {
                 Self.diag("MacResumeHello 校验通过，发 openTaskStream task=\(streamTask) offset=\(streamConsumedOffset)")
                 request = MobilePairingRequest(
@@ -856,7 +951,8 @@ final class CompanionPairingClient: ObservableObject {
             let frame = MobilePairingFrame.encode(try MobilePairingEnvelope.seal(request, using: key))
             if let launch = pendingLaunchRequest {
                 phase = .requestingLaunch(launch.name)
-            } else if pendingInteractionResponse != nil || pendingStreamRequest || pendingStreamClose {
+            } else if pendingShellStream || pendingShellKey != nil || pendingShellLine != nil
+                        || pendingInteractionResponse != nil || pendingStreamRequest || pendingStreamClose {
                 // 流请求：详情页由 isStreaming/streamText 数据驱动，
                 // phase 保持列表态避免闪动。
                 phase = .listingTools(mac)
@@ -925,6 +1021,36 @@ final class CompanionPairingClient: ObservableObject {
                 isFetchingCatalog = false
                 stopConnection()
             }
+            return
+        }
+        // M6 shell 流回执：接受 → 连接升级为 shell 长连接收流循环；
+        // 拒绝（窗口未开）→ 停止。
+        if pendingShellStream {
+            pendingShellStream = false
+            do {
+                let response = try MobilePairingEnvelope.openStreamResponse(data, using: key)
+                guard response.status == .accepted, let start = response.resumeOffset else {
+                    Self.diag("shell 流被拒：\(response.reason ?? "-")")
+                    isShellStreaming = false
+                    stopConnection()
+                    return
+                }
+                Self.diag("shell 流订阅接受，游标=\(start)")
+                shellConsumedOffset = start
+                shellConnection = connection
+                receiveShellFrames(on: connection)
+            } catch {
+                Self.diag("shell 流回执解析失败")
+                isShellStreaming = false
+                stopConnection()
+            }
+            return
+        }
+        // shellKey/shellLine：Mac 静默断开无回执——直接收尾。
+        if pendingShellKey != nil || pendingShellLine != nil {
+            pendingShellKey = nil
+            pendingShellLine = nil
+            stopConnection()
             return
         }
         // M4-3 交互响应：Mac 静默断开无回执帧——直接收尾。
@@ -1141,6 +1267,48 @@ final class CompanionPairingClient: ObservableObject {
         // 原连接关闭由 Mac 端退订回执触发。
     }
 
+    // MARK: M6 shell 流接收循环
+
+    private func receiveShellFrames(on connection: NWConnection) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] content, _, isComplete, error in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if error != nil || (isComplete && content == nil) {
+                    Self.diag("shell 流断开（offset=\(self.shellConsumedOffset)）——3 秒后自动重连")
+                    self.shellConnection = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                        Task { @MainActor [weak self] in
+                            guard let self, self.isShellStreaming, self.shellConnection == nil else { return }
+                            self.pendingShellStream = true
+                            self.startBrowsingInternal()
+                        }
+                    }
+                    return
+                }
+                if let content { self.shellReceiveBuffer.append(content) }
+                while case .message(let message, let remainder) =
+                        MobilePairingFrame.decodeOne(from: self.shellReceiveBuffer) {
+                    self.shellReceiveBuffer = remainder
+                    self.handleShellFrame(message)
+                }
+                if self.shellConnection === connection {
+                    self.receiveShellFrames(on: connection)
+                }
+            }
+        }
+    }
+
+    private func handleShellFrame(_ data: Data) {
+        Self.diag("shell 帧到达：\(data.count)B")
+        guard let key = pendingSessionKey, !data.isEmpty else { return }
+        if let chunk = try? MobilePairingEnvelope.openStreamChunk(data, using: key) {
+            shellText += chunk.text
+            shellConsumedOffset = chunk.offset + chunk.text.utf8.count
+            return
+        }
+        Self.diag("shell 帧未识别——忽略")
+    }
+
     // MARK: - 诊断
 
     /// 从 Bonjour 实例名还原直连地址：Mac 端通告 "TermiPad-192-168-2-81"，
@@ -1257,6 +1425,12 @@ final class CompanionPairingClient: ObservableObject {
         pendingStreamCloseTaskID = nil
         pendingInteraction = nil
         pendingInteractionResponse = nil
+        pendingShellStream = false
+        pendingShellKey = nil
+        pendingShellLine = nil
+        shellConnection?.cancel()
+        shellConnection = nil
+        shellReceiveBuffer.removeAll()
         streamConnection?.cancel()
         streamConnection = nil
         streamReceiveBuffer.removeAll()
