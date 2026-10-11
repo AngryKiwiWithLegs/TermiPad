@@ -2,14 +2,14 @@ import XCTest
 import CryptoKit
 @testable import TermiPad
 
-/// M1 配对协议层契约测试：数据最小化（编码 key 集合）、AEAD 信封、
-/// 操作白名单、握手状态机。全部纯逻辑，零真实网络。
+/// M1 pairing protocol layer contract tests: data minimization (encoded key set), AEAD envelope,
+/// operation allowlist, handshake state machine. All pure logic, zero real network.
 final class MobilePairingProtocolTests: XCTestCase {
     private static func keyData(_ key: SymmetricKey) -> Data {
         key.withUnsafeBytes { Data($0) }
     }
 
-    /// 构造一对已协商的会话密钥（Mac 侧视角）。
+    /// Build a pair of negotiated session keys (from the Mac's perspective).
     private func makeSessionKey() throws -> SymmetricKey {
         try MobilePairingIdentity.generate().sessionKey(
             peerPublicKeyData: MobilePairingIdentity.generate().publicKeyData(),
@@ -18,7 +18,7 @@ final class MobilePairingProtocolTests: XCTestCase {
             phoneNonce: MobilePairingCrypto.generateNonce())
     }
 
-    // MARK: - 数据最小化契约
+    // MARK: - Data minimization contract
 
     func testRequestEncodesOnlyWhitelistedKeys() throws {
         let request = MobilePairingRequest(
@@ -30,16 +30,16 @@ final class MobilePairingProtocolTests: XCTestCase {
             taskIntentID: nil)
         let json = try JSONEncoder().encode(request)
         let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: json) as? [String: Any])
-        // M2b：任务引用三键（taskKind/projectScopeID/taskIntentID）之外，
-        // 任何新增字段（command/path/param/env）都会让这个集合扩大而失败。
-        // nil 的 Optional 键不进编码产物（JSONEncoder 默认行为）——集合
-        // 即"本请求实际下发的全部键"。
+        // M2b: beyond the three task reference keys (taskKind/projectScopeID/taskIntentID),
+        // any added field (command/path/param/env) would enlarge this set and fail.
+        // nil Optional keys do not enter the encoded output (JSONEncoder's default behavior) — the set
+        // is "every key this request actually sends".
         XCTAssertEqual(Set(object.keys), Set([
             "operation", "requestID",
             "taskKind", "projectScopeID"]))
     }
 
-    /// 旧载荷（M1/M2a 三字段）仍可解码——decodeIfPresent 语义（恢复兼容红线）。
+    /// Old payloads (the three M1/M2a fields) still decode — decodeIfPresent semantics (restore compatibility red line).
     func testRequestDecodesLegacyThreeFieldPayload() throws {
         let legacyJSON = """
         {"operation":"listTools","requestID":"\(UUID().uuidString)","toolID":null}
@@ -51,7 +51,7 @@ final class MobilePairingProtocolTests: XCTestCase {
         XCTAssertNil(decoded.taskIntentID)
     }
 
-    /// taskKind 是白名单枚举引用——不是自由命令通道。锁住合法字符集。
+    /// taskKind is an allowlisted enum reference — not a free-form command channel. Lock down the legal character set.
     func testRequestTaskKindIsWhitelistedReference() throws {
         let request = MobilePairingRequest(
             operation: .requestTaskProposal,
@@ -63,29 +63,29 @@ final class MobilePairingProtocolTests: XCTestCase {
         let json = try JSONEncoder().encode(request)
         let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: json) as? [String: Any])
         let kind = try XCTUnwrap(object["taskKind"] as? String)
-        // FixedTaskCatalog 全部 kind 均为纯小写字母驼峰标识符（无空格/元字符/
-        // shell 语法）——正则锁死，防 taskKind 变成隐藏命令通道。
+        // Every FixedTaskCatalog kind is a plain camelCase identifier of lowercase-initial letters (no spaces / metacharacters /
+        // shell syntax) — locked down by regex so taskKind cannot become a hidden command channel.
         XCTAssertTrue(kind.range(of: "^[a-zA-Z][a-zA-Z0-9]{0,63}$", options: .regularExpression) != nil,
-                      "taskKind 必须是白名单标识符形态，实际：\(kind)")
+                      "taskKind must have the shape of an allowlisted identifier, actual: \(kind)")
     }
 
     func testToolSummaryEncodesOnlyWhitelistedKeys() throws {
         let summary = MobileToolSummary(
             id: UUID(),
-            displayName: "跑测试",
-            displayDescription: "运行 swift test",
+            displayName: "Run Tests",
+            displayDescription: "Run swift test",
             iconSymbolName: "hammer")
         let json = try JSONEncoder().encode([summary])
         let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: json) as? [[String: Any]])
         let summaryObject = try XCTUnwrap(object.first)
-        // 任何新增字段（命令/路径/参数）都会让这个集合扩大而失败。
+        // Any added field (command/path/argument) would enlarge this set and fail.
         XCTAssertEqual(Set(summaryObject.keys), Set(["id", "displayName", "displayDescription", "iconSymbolName"]))
     }
 
-    // MARK: - 操作白名单
+    // MARK: - Operation allowlist
 
     func testOperationWhitelistMatchesDesignDoc() {
-        // §3.4 的 8 个基础 case + M4 两个流操作固定——新增操作必须先改设计文档与本测试。
+        // The 8 base cases of §3.4 + the two M4 stream operations are fixed — a new operation must first change the design doc and this test.
         XCTAssertEqual(
             Set(PairedDeviceOperation.allCases.map(\.rawValue)),
             Set(["listTools", "requestLaunch", "listScopes", "listFixedTasks",
@@ -93,7 +93,7 @@ final class MobilePairingProtocolTests: XCTestCase {
                  "openTaskStream", "closeTaskStream", "respondInteraction"]))
     }
 
-    // MARK: - AEAD 信封
+    // MARK: - AEAD envelope
 
     func testEnvelopeRoundTripBothDirections() throws {
         let key = try makeSessionKey()
@@ -102,7 +102,7 @@ final class MobilePairingProtocolTests: XCTestCase {
         XCTAssertEqual(try MobilePairingEnvelope.openRequest(sealed, using: key), request)
 
         let summaries = [
-            MobileToolSummary(id: UUID(), displayName: "构建", displayDescription: "", iconSymbolName: nil)
+            MobileToolSummary(id: UUID(), displayName: "Build", displayDescription: "", iconSymbolName: nil)
         ]
         let sealedSummaries = try MobilePairingEnvelope.seal(summaries, using: key)
         XCTAssertEqual(try MobilePairingEnvelope.openToolSummaries(sealedSummaries, using: key), summaries)
@@ -119,10 +119,10 @@ final class MobilePairingProtocolTests: XCTestCase {
         XCTAssertThrowsError(try MobilePairingEnvelope.openRequest(sealed, using: try makeSessionKey()))
     }
 
-    // MARK: - Bonjour 契约
+    // MARK: - Bonjour contract
 
     func testBonjourServiceTypeIsPinned() {
-        // 服务类型固定，不允许运行时配置——改这里必须连同守卫一起改。
+        // The service type is fixed and not configurable at runtime — changing it here must change the guard as well.
         XCTAssertEqual(MobilePairingCrypto.bonjourServiceType, "_termipad-m1._tcp")
         XCTAssertEqual(MobilePairingCrypto.bonjourServiceName, "TermiPad")
     }
@@ -134,7 +134,7 @@ final class MobilePairingProtocolTests: XCTestCase {
         XCTAssertEqual(txt["fp"]?.count, 16)
     }
 
-    // MARK: - 握手状态机
+    // MARK: - Handshake state machine
 
     func testHandshakeRoundTripDerivesSameKeyOnBothSides() throws {
         let mac = MobilePairingIdentity.generate()
@@ -144,7 +144,7 @@ final class MobilePairingProtocolTests: XCTestCase {
         let pairingCode = MobilePairingCrypto.generatePairingCode()
 
         let macHello = try MobilePairingHandshake.makeMacHello(identity: mac, macNonce: macNonce)
-        XCTAssertEqual(macHello.fingerprint.count, 79, "16 组 4 hex + 15 个分隔符")
+        XCTAssertEqual(macHello.fingerprint.count, 79, "16 groups of 4 hex + 15 separators")
 
         let phoneHello = MobilePairingHandshake.PhoneHello(
             protocolVersion: MobilePairingHandshake.currentProtocolVersion,
@@ -154,7 +154,7 @@ final class MobilePairingProtocolTests: XCTestCase {
             deviceName: "iPhone 16 Pro")
         let accepted = try MobilePairingHandshake.acceptPhoneHello(phoneHello, identity: mac, macNonce: macNonce)
 
-        // 手机侧用同一公式独立推导，密钥必须一致。
+        // The phone derives it independently with the same formula; the keys must match.
         let phoneSideKey = try phone.sessionKey(
             peerPublicKeyData: try mac.publicKeyData(),
             pairingCode: pairingCode,
@@ -197,7 +197,7 @@ final class MobilePairingProtocolTests: XCTestCase {
         }
     }
 
-    // MARK: - 会话复用（§3.3.1）
+    // MARK: - Session resume (§3.3.1)
 
     func testResumeKeyDerivesSameKeyOnBothSides() throws {
         let mac = MobilePairingIdentity.generate()
@@ -214,7 +214,7 @@ final class MobilePairingProtocolTests: XCTestCase {
     }
 
     func testResumeKeyDiffersFromPairingKey() throws {
-        // info 域不同：同一密钥材料永不跨协议复用。
+        // Different info domains: the same key material is never reused across protocols.
         let mac = MobilePairingIdentity.generate()
         let phone = MobilePairingIdentity.generate()
         let macNonce = MobilePairingCrypto.generateNonce()
@@ -245,21 +245,21 @@ final class MobilePairingProtocolTests: XCTestCase {
 
         guard case .pairing(let decodedPairing) = MobilePairingHandshake.decodeIncomingHello(
             from: try JSONEncoder().encode(pairing)) else {
-            return XCTFail("pairing hello 应被分发到 .pairing")
+            return XCTFail("the pairing hello should be dispatched to .pairing")
         }
         XCTAssertEqual(decodedPairing, pairing)
         guard case .resume(let decodedResume) = MobilePairingHandshake.decodeIncomingHello(
             from: try JSONEncoder().encode(resume)) else {
-            return XCTFail("resume hello 应被分发到 .resume")
+            return XCTFail("the resume hello should be dispatched to .resume")
         }
         XCTAssertEqual(decodedResume, resume)
         XCTAssertNil(MobilePairingHandshake.decodeIncomingHello(from: Data("{}".utf8)))
     }
 
     func testAcceptResumeValidation() throws {
-        // 验证 deriveResumeSessionKey 的纯计算部分。撤销/换公钥的拒绝是 Mac 端
-        // MobilePairingService.handleResumeHello 在调用此方法前做的——本测试只负责
-        // "纯计算"分支：成功 + 版本不符拒绝。
+        // Verify the pure computation part of deriveResumeSessionKey. Rejecting revoked devices / changed public keys is what the Mac's
+        // MobilePairingService.handleResumeHello does before calling this method — this test only covers
+        // the "pure computation" branch: success + rejection on version mismatch.
         let mac = MobilePairingIdentity.generate()
         let phone = MobilePairingIdentity.generate()
         let phonePub = try phone.publicKeyData()
@@ -269,12 +269,12 @@ final class MobilePairingProtocolTests: XCTestCase {
             phonePublicKey: phonePub,
             phoneNonce: MobilePairingCrypto.generateNonce())
 
-        // 正常路径：返回 32 字节会话密钥。
+        // Normal path: returns a 32-byte session key.
         let keyData = try MobilePairingHandshake.deriveResumeSessionKey(
             hello, identity: mac, macNonce: MobilePairingCrypto.generateNonce())
         XCTAssertEqual(keyData.count, 32)
 
-        // 版本不符 → 拒绝。
+        // Version mismatch → rejected.
         XCTAssertThrowsError(try MobilePairingHandshake.deriveResumeSessionKey(
             MobilePairingHandshake.PhoneResumeHello(
                 protocolVersion: "termipad-m1-resume-v9",
@@ -284,9 +284,9 @@ final class MobilePairingProtocolTests: XCTestCase {
             identity: mac, macNonce: MobilePairingCrypto.generateNonce()))
     }
 
-    // MARK: - M2b 任务会话回传契约（docs/m2b-remote-task-console-design.md §3.2）
+    // MARK: - M2b task session return contract (docs/m2b-remote-task-console-design.md §3.2)
 
-    /// 信封回环：五个新回传结构经 AEAD 加密后手机侧可原样解回。
+    /// Envelope round-trip: after AEAD encryption the five new return structures decode back unchanged on the phone side.
     func testTaskConsoleEnvelopeRoundTrip() throws {
         let key = try makeSessionKey()
 
@@ -296,7 +296,7 @@ final class MobilePairingProtocolTests: XCTestCase {
 
         let tasks = [MobileFixedTaskSummary(
             kind: "swiftPackageTests",
-            purpose: "运行项目的 Swift Package 单元测试。",
+            purpose: "Run the project's Swift Package unit tests.",
             commandPreview: "swift test")]
         XCTAssertEqual(try MobilePairingEnvelope.openFixedTaskSummaries(
             try MobilePairingEnvelope.seal(tasks, using: key), using: key), tasks)
@@ -307,7 +307,7 @@ final class MobilePairingProtocolTests: XCTestCase {
                 executionState: TaskExecutionState.running.rawValue,
                 exitCode: nil, startedAt: Date(), finishedAt: nil, outputSnippet: nil),
             MobileSessionEntry(
-                id: UUID(), title: "构建", kind: .toolLaunch,
+                id: UUID(), title: "Build", kind: .toolLaunch,
                 executionState: "launched",
                 exitCode: nil, startedAt: Date(), finishedAt: nil)
         ]
@@ -320,18 +320,18 @@ final class MobilePairingProtocolTests: XCTestCase {
             try MobilePairingEnvelope.seal(accepted, using: key), using: key), accepted)
 
         let rejected = MobileTaskProposalResponse(
-            status: .rejected, reason: "锁屏期间拒绝远程任务", taskIntentID: nil)
+            status: .rejected, reason: "Remote tasks are rejected while locked", taskIntentID: nil)
         XCTAssertEqual(try MobilePairingEnvelope.openTaskProposalResponse(
             try MobilePairingEnvelope.seal(rejected, using: key), using: key), rejected)
     }
 
-    /// 会话条目编码 key 集合锁：outputSnippet 之外不得新增内容性字段。
+    /// Lock on the encoded key set of session entries: no content-bearing field other than outputSnippet may be added.
     func testSessionEntryEncodesOnlyWhitelistedKeys() throws {
         let entry = MobileSessionEntry(
             id: UUID(), title: "swift test", kind: .fixedTask,
             executionState: TaskExecutionState.succeeded.rawValue,
             exitCode: 0, startedAt: Date(), finishedAt: Date(),
-            outputSnippet: "全部通过")
+            outputSnippet: "All passed")
         let json = try JSONEncoder().encode(entry)
         let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: json) as? [String: Any])
         XCTAssertEqual(Set(object.keys), Set([
@@ -339,11 +339,11 @@ final class MobilePairingProtocolTests: XCTestCase {
             "startedAt", "finishedAt", "outputSnippet"]))
     }
 
-    /// 工具启动条目无 outputSnippet 键——终端交接路径永无输出回传（编译层
-    /// Optional 默认 nil 不进编码产物，与 tailnetEndpoint 同款纪律）。
+    /// Tool launch entries have no outputSnippet key — the terminal handoff path never returns output (at compile level
+    /// an Optional defaulting to nil does not enter the encoded output, the same discipline as tailnetEndpoint).
     func testToolLaunchEntryOmitsOutputSnippet() throws {
         let entry = MobileSessionEntry(
-            id: UUID(), title: "构建", kind: .toolLaunch,
+            id: UUID(), title: "Build", kind: .toolLaunch,
             executionState: "launched",
             exitCode: nil, startedAt: Date(), finishedAt: nil)
         let json = try JSONEncoder().encode(entry)
@@ -351,13 +351,13 @@ final class MobilePairingProtocolTests: XCTestCase {
         XCTAssertNil(object["outputSnippet"])
     }
 
-    /// 旧回传结构的编码产物不含任务引用三键——M1/M2a 手机收到的帧不受影响。
+    /// The encoded output of the old return structures does not contain the three task reference keys — frames received by M1/M2a phones are unaffected.
     func testLegacyRequestKeySetUnchanged() throws {
         let request = MobilePairingRequest(
             operation: .listTools, requestID: UUID(), toolID: UUID())
         let json = try JSONEncoder().encode(request)
         let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: json) as? [String: Any])
-        // toolID 非 nil 时恰 3 键；任务引用三键均 nil 不进编码产物。
+        // Exactly 3 keys when toolID is non-nil; the three task reference keys are all nil and do not enter the encoded output.
         XCTAssertEqual(Set(object.keys), Set(["operation", "requestID", "toolID"]))
     }
 }

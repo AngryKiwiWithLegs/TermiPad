@@ -5,7 +5,7 @@ enum TaskPolicyDecision: Equatable {
     case rejected(TaskRejectionReason)
 }
 
-/// T0 的纯本地策略。该类型不执行命令、不创建进程、不访问网络，也不处理终端输入输出。
+/// T0's purely local policy. This type runs no commands, creates no processes, accesses no network, and handles no terminal input or output.
 enum TaskIntentPolicy {
     static let proposalLifetime: TimeInterval = 5 * 60
     static let localReviewWindowLifetime: TimeInterval = 15 * 60

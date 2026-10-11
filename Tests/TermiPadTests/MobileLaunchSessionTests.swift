@@ -1,8 +1,8 @@
 import XCTest
 @testable import TermiPad
 
-/// MobileLaunchSession 会话白名单测试（§3.3.2 增补 2026-09-08，M1.1）。
-/// 纯逻辑：注入时钟，不等待真实时间、不打 Keychain/网络。
+/// MobileLaunchSession session allowlist tests (§3.3.2, added 2026-09-08, M1.1).
+/// Pure logic: the clock is injected, no waiting for real time, no Keychain/network.
 @MainActor
 final class MobileLaunchSessionTests: XCTestCase {
     private var clock: MutableClock!
@@ -40,7 +40,7 @@ final class MobileLaunchSessionTests: XCTestCase {
         session.recordConfirmation(toolID: toolID)
         XCTAssertTrue(session.canSkipConfirmation(
             policy: .lowRiskSessionOnly, toolID: toolID, commandTemplate: "/usr/bin/git status"))
-        // 元字符第二道防线：带注入面的模板不视为低风险。
+        // Metacharacter second line of defense: a template with an injection surface is not treated as low risk.
         XCTAssertFalse(session.canSkipConfirmation(
             policy: .lowRiskSessionOnly, toolID: toolID, commandTemplate: "/bin/sh -c; rm -rf x"))
         XCTAssertFalse(session.canSkipConfirmation(
@@ -75,7 +75,7 @@ final class MobileLaunchSessionTests: XCTestCase {
     func testReconfirmationRefreshesWindow() {
         session.recordConfirmation(toolID: toolID)
         clock.advance(by: MobileLaunchSession.sessionWindow - 10)
-        // 窗口快到期时再次确认 → 从新时间戳起算。
+        // Confirm again when the window is about to expire → counted from the new timestamp.
         session.recordConfirmation(toolID: toolID)
         clock.advance(by: MobileLaunchSession.sessionWindow - 10)
         XCTAssertTrue(session.canSkipConfirmation(
@@ -90,7 +90,7 @@ final class MobileLaunchSessionTests: XCTestCase {
     }
 }
 
-/// 可手动推进的测试时钟——避免真实 sleep，也锁死"过期即失效"的时间语义。
+/// A test clock that can be advanced manually — avoids real sleeps and also locks down the "expired means invalid" time semantics.
 final class MutableClock {
     private var current = Date()
     var now: () -> Date { { self.current } }

@@ -1,12 +1,12 @@
 import XCTest
 @testable import TermiPad
 
-/// DiagnosticsService 契约测试（track-protocol 阶段 8 测试补强 2/4）。
+/// DiagnosticsService contract tests (track-protocol stage 8 test hardening 2/4).
 ///
-/// 锁住 ring buffer 行为（200 上限 FIFO 删最旧）+ Codable round-trip +
-/// privacy notice 永远是固定字符串（不写用户工具名/路径/命令/API key）。
+/// Locks down the ring buffer behavior (200 cap, FIFO drops the oldest) + the Codable round-trip +
+/// the privacy notice always being a fixed string (no user tool names / paths / commands / API keys).
 final class DiagnosticsServiceContractTests: XCTestCase {
-    // MARK: - ring buffer (200 上限)
+    // MARK: - ring buffer (200 cap)
 
     func testRingBufferCapsAt200Events() {
         let suiteName = "TermiPadTests.diagnostics.\(UUID().uuidString)"
@@ -14,18 +14,18 @@ final class DiagnosticsServiceContractTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         var time = Date(timeIntervalSince1970: 0)
         let store = DiagnosticsStore(defaults: defaults, storageKey: "events", now: { time })
-        // 注入 250 events
+        // Inject 250 events
         for _ in 0..<250 {
             store.record(.scanCompleted, itemCount: 1)
-            time = time.addingTimeInterval(1)  // 每个 event 一秒
+            time = time.addingTimeInterval(1)  // one second per event
         }
-        // 上限 200 — 最近 200 留下
+        // Cap of 200 — the most recent 200 remain
         XCTAssertEqual(store.events.count, 200)
-        // 留下的是最近 200 个（时间最新）
+        // What remains is the most recent 200 (newest by time)
         let lastEventTime = store.events.last!.occurredAt
         let firstEventTime = store.events.first!.occurredAt
-        // 第一个 event 应该是 250 - 200 = 第 51 个（index 50 in 0-based）
-        // 时间上 t=50,最后一个 t=249
+        // The first event should be 250 - 200 = the 51st (index 50, 0-based)
+        // In time, t=50, and the last one t=249
         XCTAssertEqual(lastEventTime, Date(timeIntervalSince1970: 249))
         XCTAssertEqual(firstEventTime, Date(timeIntervalSince1970: 50))
     }
@@ -36,13 +36,13 @@ final class DiagnosticsServiceContractTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let store = DiagnosticsStore(defaults: defaults, storageKey: "events",
                                     now: { Date(timeIntervalSince1970: 0) })
-        // 5 个不同 kind
+        // 5 different kinds
         let kinds: [DiagnosticEventKind] = [.scanCompleted, .launchSucceeded,
                                               .commandCopied, .automationFallback, .launchFailed]
         for kind in kinds {
             store.record(kind)
         }
-        // 全部 5 个 events 都在
+        // All 5 events are present
         XCTAssertEqual(store.events.map(\.kind), kinds)
     }
 
@@ -55,7 +55,7 @@ final class DiagnosticsServiceContractTests: XCTestCase {
         let store = DiagnosticsStore(defaults: defaults, storageKey: "events",
                                     now: { Date(timeIntervalSince1970: 1234567890) })
         store.record(.scanCompleted, terminalTarget: .iTerm, itemCount: 5)
-        // 重建 (新 store 实例从同一 UserDefaults 读)
+        // Rebuild (a new store instance reads from the same UserDefaults)
         let restored = DiagnosticsStore(defaults: defaults, storageKey: "events",
                                        now: { Date() })
         XCTAssertEqual(restored.events.count, 1)
@@ -68,13 +68,13 @@ final class DiagnosticsServiceContractTests: XCTestCase {
         let suiteName = "TermiPadTests.diagnostics.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        // 故意乱序插入
+        // Insert deliberately out of order
         let t1 = Date(timeIntervalSince1970: 100)
         let t2 = Date(timeIntervalSince1970: 50)
         let t3 = Date(timeIntervalSince1970: 200)
         let store = DiagnosticsStore(defaults: defaults, storageKey: "events",
                                     now: { Date(timeIntervalSince1970: 0) })
-        // 手动绕过 record() 的 now() — 直接写 events
+        // Manually bypass record()'s now() — write the events directly
         let ev1 = DiagnosticEvent(occurredAt: t1, kind: .scanCompleted, terminalTarget: nil, itemCount: nil)
         let ev2 = DiagnosticEvent(occurredAt: t2, kind: .launchSucceeded, terminalTarget: nil, itemCount: nil)
         let ev3 = DiagnosticEvent(occurredAt: t3, kind: .launchFailed, terminalTarget: nil, itemCount: nil)
@@ -82,31 +82,31 @@ final class DiagnosticsServiceContractTests: XCTestCase {
         defaults.set(data, forKey: "events")
         let restored = DiagnosticsStore(defaults: defaults, storageKey: "events",
                                        now: { Date() })
-        // 读出后 sorted ascending: 50, 100, 200
+        // After reading, sorted ascending: 50, 100, 200
         XCTAssertEqual(restored.events.map(\.occurredAt), [t2, t1, t3])
     }
 
-    // MARK: - privacy notice (固定文本 — 不写任何用户敏感信息)
+    // MARK: - privacy notice (fixed text — contains no sensitive user information)
 
     func testPrivacyNoticeIsFixedAndContainsNoSensitiveCategories() {
-        // 这是 project 的产品承诺 — 任何 commit 改这个字符串立即被这个测试抓住
+        // This is the project's product promise — any commit changing this string is caught by this test immediately
         let suiteName = "TermiPadTests.diagnostics.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let store = DiagnosticsStore(defaults: defaults, storageKey: "events")
         let report = store.makePrivacyReport()
         XCTAssertEqual(report.privacyNotice, "Contains fixed event categories, timestamps, terminal target names, and aggregate item counts only. No tool names, executable paths, commands, variable values, API keys, or repository content are included.")
-        // 关键检查: 隐私说明必须显式声明 No tool names / No commands / No API keys
-        // — 这些是项目"诊断包不含这些"的承诺,缺失即视为泄漏。
+        // Key check: the privacy notice must explicitly state No tool names / No commands / No API keys
+        // — these are the project's "the diagnostic package does not contain these" promises; a missing one counts as a leak.
         XCTAssertTrue(report.privacyNotice.contains("No tool names"))
         XCTAssertTrue(report.privacyNotice.contains("No commands") || report.privacyNotice.contains("commands,"))
         XCTAssertTrue(report.privacyNotice.contains("No API keys") || report.privacyNotice.contains("API keys,"))
-        // "No repository content" 是文本里的实际短语,锁住它证明 product 真的承诺不发送
-        // 用户仓库信息 (与 detectForbiddenRepoContent 守卫锁定的一致)
-        // 隐私说明 list 列了 4 个要排除的项 — 通过验证 list 完整来
-        // 证明"绝不发送 user data"承诺。No tool names 显式 "No" 开头。
-        // 其余 3 项 (commands / variable values / API keys / repository content) 在
-        // "or X" 列表里。
+        // "No repository content" is the actual phrase in the text; locking it down proves the product really promises not to send
+        // the user's repository information (consistent with what the detectForbiddenRepoContent guard locks down)
+        // The privacy notice lists 4 items to exclude — verifying that the list is complete
+        // proves the "never sends user data" promise. No tool names starts with an explicit "No".
+        // The other 3 items (commands / variable values / API keys / repository content) are in
+        // the "or X" list.
         XCTAssertTrue(report.privacyNotice.contains("No tool names"))
         XCTAssertTrue(report.privacyNotice.contains("executable paths"))
         XCTAssertTrue(report.privacyNotice.contains("commands,") || report.privacyNotice.contains("commands ") || report.privacyNotice.contains("commands."))
@@ -116,23 +116,23 @@ final class DiagnosticsServiceContractTests: XCTestCase {
     }
 
     func testPrivacyReportAppVersionFallbackIsDevelopment() {
-        // bundle 读不到时 (test env 没 Info.plist) 退到 "development"
-        // 这锁住 future commit 不能默认泄露 bundle string 的风险
+        // When the bundle cannot be read (the test env has no Info.plist) it falls back to "development"
+        // This locks down the risk of a future commit leaking the bundle string by default
         let suiteName = "TermiPadTests.diagnostics.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let store = DiagnosticsStore(defaults: defaults, storageKey: "events")
         let report = store.makePrivacyReport()
-        // test bundle 的 Info.plist 没 CFBundleShortVersionString — 退到 "development"
-        // (仅在 CFBundleShortVersionString 和 CFBundleVersion 都 nil 时;通常后者有)
+        // The test bundle's Info.plist has no CFBundleShortVersionString — it falls back to "development"
+        // (only when both CFBundleShortVersionString and CFBundleVersion are nil; the latter is usually present)
         XCTAssertTrue(report.appVersion == "development" || report.appVersion.contains("("),
-                      "appVersion 应退到 'development' 或包含版本: \(report.appVersion)")
+                      "appVersion should fall back to 'development' or contain a version: \(report.appVersion)")
     }
 
-    // MARK: - DiagnosticEventKind 完整性
+    // MARK: - DiagnosticEventKind completeness
 
     func testAllEventKindsAreCodable() throws {
-        // 任何 commit 加新 case 必须能 round-trip;这个测试强制显式 Codable 实现
+        // Any commit adding a new case must round-trip; this test forces an explicit Codable implementation
         let allKinds = DiagnosticEventKind.allCases
         let data = try JSONEncoder().encode(allKinds)
         let decoded = try JSONDecoder().decode([DiagnosticEventKind].self, from: data)

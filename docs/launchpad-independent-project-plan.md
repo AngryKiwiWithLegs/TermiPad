@@ -1,151 +1,151 @@
-# Launchpad：基于 TermiPad 架构的独立 macOS 应用启动器项目方案
+# Launchpad: plan for a standalone macOS app launcher project based on the TermiPad architecture
 
-**状态：** 产品孵化与架构决策稿。本文不会改动 TermiPad，也不会创建 Launchpad 仓库、拷贝用户数据、扫描应用或启动任何 App。
+**Status:** Product incubation and architecture decision draft. This document does not change TermiPad, and does not create the Launchpad repository, copy user data, scan apps, or launch any app.
 
-**澄清：** Launchpad 是一个**新的、独立的原生 macOS 项目**。它借鉴并选择性复用 TermiPad 已验证的工作区、图标、本地持久化和自动化验证方法；它不修改 macOS 系统功能，也不作为 TermiPad 的新页面或功能开关。
-
----
-
-## 1. 建议结论
-
-> **建议这样做。** 将 Launchpad 建立为 TermiPad 的 sibling project（兄弟项目），而不是在 TermiPad 中继续叠加“图形应用启动器”业务。两个项目可共享原生工作区体验与验证方法，但必须拥有独立产品名称、Bundle ID、本地数据容器、诊断包、测试目标和发布节奏。
-
-TermiPad 的核心是用户确认的交互式 CLI 工具及其受控启动、任务审阅和本机 MCP 边界。一个应用启动器的核心则是图形应用目录、图标、个人分组、搜索、收藏与用户点击启动。如果两者混在同一个数据模型和导航中，TermiPad 的“固定命令 + 终端交接”风险说明会污染轻量应用启动体验；反过来，Launchpad 的大规模图标目录会稀释 TermiPad 的任务审阅和安全状态。因此，**共享架构，分离产品**是最稳健的设计。
-
-| 决策 | 建议 | 原因 |
-|---|---|---|
-| 项目关系 | 新建独立私有仓库，而非继续改 TermiPad。 | 数据、测试、发行、用户心智和安全面可独立演进。 |
-| 初始技术栈 | macOS 14+、Swift 5.9、SwiftUI、SwiftData、AppKit、XcodeGen、XCTest/XCUITest。 | 直接承接已在真实 Apple Silicon Mac 验证的构建和测试方法。 |
-| 项目名称 | 产品暂称 **Launchpad**；代码仓库建议先使用不与系统名混淆的工作名，例如 `LaunchDeck`。 | “Launchpad”与 Apple 历史功能名称高度接近，面向公开发布前应做名称与商标清查；这是产品风险提示，不是法律意见。 |
-| 初始范围 | 本地应用目录、用户点击启动、图标网格、搜索、收藏、最近使用、手动分组、浅/深/系统外观、中英文。 | 先覆盖旧 Launchpad 最核心的个人启动体验。 |
-| 明确不做 | 不扫描全盘、不浏览文件、不执行 Shell、不含 CLI 命令、不接 MCP/手机/Telegram/网络、不自动启动。 | 保持一个轻量、可解释、可撤销的本地启动器。 |
+**Clarification:** Launchpad is a **new, standalone native macOS project**. It draws on and selectively reuses TermiPad's verified workspace, icons, local persistence, and automated verification methods; it does not modify macOS system features and is not a new page or feature switch in TermiPad.
 
 ---
 
-## 2. Launchpad MVP：应做什么，不应做什么
+## 1. Recommended conclusion
 
-### 2.1 L1 最小产品体验
+> **Do it this way.** Set Launchpad up as a sibling project of TermiPad rather than layering "graphical app launcher" business onto TermiPad. The two projects can share the native workspace experience and verification methods, but must have separate product names, bundle IDs, local data containers, diagnostic packages, test targets, and release cadences.
 
-Launchpad 首次运行应呈现一个符合 macOS 原生习惯的工作区：左侧是“全部应用、收藏、最近使用、分组”，顶部是搜索、显示方式和整理入口，主内容区为响应式图标网格。它可以视觉上让人联想到传统 Launchpad 的可浏览性，但不模拟 iPad 机身、Dock、状态栏或全局手势。
+TermiPad's core is user-confirmed interactive CLI tools with their controlled launching, task review, and local MCP boundary. An app launcher's core is the graphical app catalog, icons, personal groups, search, favorites, and launch on user click. If the two are mixed in the same data model and navigation, TermiPad's "fixed command + terminal handoff" risk notes pollute the lightweight app launch experience; conversely, Launchpad's large icon catalog dilutes TermiPad's task review and security state. So **shared architecture, separate products** is the most robust design.
 
-应用目录的来源应当清晰且可控。第一个版本建议从两个标准本地目录开始：`/Applications` 与用户自己的 Applications 目录；用户在设置中可以关闭任一目录，也可以手动通过系统文件选择器添加一个 `.app`。刷新必须由用户明确点击，不应后台持续扫描。对每一个可显示项目，只读取显示名、Bundle ID、本地图标、应用 URL 和本地存在状态，不读取应用文件内容、用户文档、窗口内容、钥匙串、命令行参数或使用记录。
-
-用户单击图标时，Launchpad 通过 `NSWorkspace` 的正式应用启动 API 打开该 App，而不是用 Shell、AppleScript 或模拟键盘输入。`NSWorkspace` 是 AppKit 提供的工作区接口，支持按应用 URL 启动应用并观察工作区状态。[1] 每次启动必须由用户直接点击，不提供批量启动、规则触发、后台队列、快捷自动化或远程调用入口。
-
-| L1 能力 | 行为契约 | 用户体验 |
+| Decision | Recommendation | Reason |
 |---|---|---|
-| 标准目录收录 | 仅在用户点击“刷新应用目录”时读取受控目录内的 `.app` 条目。 | 类似传统 Launchpad 的“所有应用”入口，但不做隐蔽全盘扫描。 |
-| 手动添加 | 只能由用户通过 `NSOpenPanel` 选择单个 `.app`。 | 支持放在非标准位置的个人 App。 |
-| 本地图标 | 使用 App Bundle 或 `NSWorkspace` 返回的本地图标，允许用户本地自定义图标。 | 图标与真实应用对应，不依赖在线头像或 AI 推断。 |
-| 收藏、最近、分组 | 只保存用户本机的显示排序和最小启动时间。 | 补回旧 Launchpad 的日常可用性。 |
-| 搜索和键盘导航 | 在当前目录中本地筛选、支持 Tab/方向键/Return。 | 不需要记住 App 的完整名称或路径。 |
-| 启动状态 | 只显示“已启动/应用不存在/需要重新收录”等最小结果。 | 保持反馈清晰，不窥视应用内部。 |
+| Project relationship | Create a new standalone private repository instead of continuing to change TermiPad. | Data, tests, releases, the user's mental model, and the security surface can evolve independently. |
+| Initial tech stack | macOS 14+, Swift 5.9, SwiftUI, SwiftData, AppKit, XcodeGen, XCTest/XCUITest. | Directly inherits the build and test methods already verified on a real Apple Silicon Mac. |
+| Project name | The product is provisionally called **Launchpad**; for the code repository, start with a working name that is not confused with the system name, such as `LaunchDeck`. | "Launchpad" is very close to the name of Apple's historical feature; a name and trademark check should be done before a public release. This is a product risk note, not legal advice. |
+| Initial scope | Local app catalog, launch on user click, icon grid, search, favorites, recents, manual grouping, Light/Dark/System appearance, Chinese/English. | Cover the most essential personal launch experience of the old Launchpad first. |
+| Explicit non-goals | No whole-disk scan, no file browsing, no shell execution, no CLI commands, no MCP/phone/Telegram/network, no auto-launch. | Keeps a lightweight, explainable, revocable local launcher. |
 
-### 2.2 永久边界
+---
 
-| 不做事项 | 不做原因 |
+## 2. Launchpad MVP: what to do and what not to do
+
+### 2.1 L1 minimal product experience
+
+On first run Launchpad should present a workspace that follows native macOS conventions: "All Apps, Favorites, Recent, Groups" on the left, search, display mode, and organizing entry at the top, and a responsive icon grid as the main content. It may visually recall the browsability of the traditional Launchpad, but it does not imitate an iPad body, the Dock, a status bar, or global gestures.
+
+The sources of the app catalog should be clear and controllable. For the first version, start with two standard local directories: `/Applications` and the user's own Applications directory; the user can turn either off in Settings and can add a `.app` manually through the system file chooser. Refreshing must be an explicit user click, with no continuous background scanning. For each displayable item, read only the display name, bundle ID, local icon, app URL, and local existence state — never app file contents, user documents, window content, the keychain, command-line arguments, or usage records.
+
+When the user clicks an icon, Launchpad opens the app through `NSWorkspace`'s official app launch API rather than a shell, AppleScript, or simulated keyboard input. `NSWorkspace` is the workspace interface provided by AppKit; it supports launching an app by URL and observing workspace state.[1] Every launch must be a direct user click; there is no batch launching, rule triggering, background queue, shortcut automation, or remote invocation entry.
+
+| L1 capability | Behavior contract | User experience |
+|---|---|---|
+| Standard directory collection | Reads the `.app` entries in the controlled directories only when the user clicks "Refresh App Catalog". | Like the "all apps" entry of the traditional Launchpad, but without a hidden whole-disk scan. |
+| Manual add | Only the user can pick a single `.app` through `NSOpenPanel`. | Supports personal apps kept in non-standard locations. |
+| Local icons | Uses the local icon returned by the app bundle or `NSWorkspace`, and allows a local custom icon from the user. | Icons match the real apps and do not depend on online avatars or AI inference. |
+| Favorites, recents, groups | Stores only the display order and minimal launch time on the user's Mac. | Brings back the everyday usability of the old Launchpad. |
+| Search and keyboard navigation | Filters locally within the current catalog; supports Tab / arrow keys / Return. | No need to remember an app's full name or path. |
+| Launch status | Shows only minimal results such as "launched / app does not exist / needs to be collected again". | Keeps feedback clear without peeking inside apps. |
+
+### 2.2 Permanent boundaries
+
+| Non-goal | Why not |
 |---|---|
-| 修改 macOS Launchpad、Spotlight、Dock、系统数据库、全局热键或触控板手势。 | 新项目是独立 App，不替代系统组件，也不依赖未公开的系统内部实现。 |
-| 递归扫描 Home、桌面、文稿、外接盘、网络卷或云盘。 | 这会把启动器扩展为文件浏览器，显著放大隐私面。 |
-| 展示或启动系统命令、守护进程、包管理器、脚本、安装器或 Terminal。 | Launchpad 的对象是图形 `.app`，CLI 业务留在 TermiPad。 |
-| 以 AI、远程元数据或网页自动补全应用信息/图标。 | 目录与图标必须来自用户 Mac 本地 Bundle 或用户的明确选择。 |
-| 通过 MCP、手机、网页、Telegram、HTTP、WebSocket、通知或定时任务启动应用。 | 所有启动保持用户在本机窗口中的显式点击。 |
-| 读取应用内容、进程输出、窗口标题、文档、浏览器历史或通信数据。 | Launchpad 只管理“可启动的 App 卡片”，不观察用户在 App 中做什么。 |
+| Modifying the macOS Launchpad, Spotlight, the Dock, the system database, global hotkeys, or trackpad gestures. | The new project is a standalone app; it does not replace system components and does not depend on non-public system internals. |
+| Recursively scanning Home, the Desktop, Documents, external disks, network volumes, or cloud drives. | This would extend the launcher into a file browser and markedly widen the privacy surface. |
+| Showing or launching system commands, daemons, package managers, scripts, installers, or Terminal. | Launchpad's objects are graphical `.app`s; CLI business stays in TermiPad. |
+| Auto-completing app information/icons with AI, remote metadata, or web pages. | The catalog and icons must come from the local bundles on the user's Mac or the user's explicit choice. |
+| Launching apps through MCP, phone, web, Telegram, HTTP, WebSocket, notifications, or scheduled tasks. | Every launch stays an explicit click by the user in a window on this Mac. |
+| Reading app content, process output, window titles, documents, browser history, or communication data. | Launchpad only manages "launchable app cards" and does not observe what the user does inside apps. |
 
 ---
 
-## 3. 从 TermiPad 复用什么，必须丢弃什么
+## 3. What to reuse from TermiPad and what must be discarded
 
-### 3.1 高价值可复用层
+### 3.1 High-value reusable layers
 
-TermiPad 不是应该“整库 fork 后改名字”的模板；它是一套已经经过真实 macOS 验证的原生工程骨架。Launchpad 应以**复制经筛选的基础层**开始，并在新的数据模型上重建应用启动业务。
+TermiPad is not a template to "fork wholesale and rename"; it is a native engineering skeleton that has been verified on real macOS. Launchpad should start by **copying a vetted foundation layer** and rebuild the app launching business on a new data model.
 
-| 资产组 | 建议处置 | 原因与迁移方式 |
+| Asset group | Recommended handling | Reason and migration approach |
 |---|---|---|
-| `project.yml` | **复制并重命名。** | 保留 macOS 14+、Swift、XcodeGen、测试目标和本地 ad hoc 测试签名；替换所有 target、产品名和 Bundle ID。 |
-| `AppPresentation.swift` | **复制并泛化。** | 可直接承接中英文、浅色/深色/系统外观和集中短文案；删除 TermiPad 专属键名与安全提示。 |
-| `SoftMacTheme.swift`、`TermiPadWorkspaceStyle.swift`、`WindowPlacementCoordinator.swift` | **复制并更名。** | 复用原生工作区留白、面板层级、窗口尺寸和适配方式；不复制“iPad 设备外框”类视觉。 |
-| `LaunchpadView.swift` 的导航壳、工具栏、搜索、网格、空状态、悬停和 sheet 模式 | **拆分后复用。** | 应提炼出通用 `WorkspaceShell`、`IconGrid`、`EmptyState`、`AppearanceControl`；不带入 CLI 工具扫描/编辑/启动代码。 |
-| `ToolIconView.swift`、`ToolIconStore.swift` | **复用机制，不复用目录。** | 本地受控 PNG、手动覆盖、稳定回退和渲染层值得保留；应用卡片默认要用真实 Bundle 图标，不沿用 CLI 工具的语义 symbol 表。 |
-| `TermiPadUITests.swift` 的 `launchApp`、窗口恢复、附件导出辅助方法 | **复制并改 Bundle ID/identifier。** | 这是“少让用户手点”的关键资产：真实启动、等待、点击、断言、截图和 UI 层级诊断。 |
-| `verify-macos.sh` | **复制为 Launchpad 版本并重新编写守卫。** | 保留一条命令的闭环；移除 T0/T1/T2/MCP 专属守卫，增加“无 Shell/无网络/无远程启动”等 Launchpad 守卫。 |
+| `project.yml` | **Copy and rename.** | Keep macOS 14+, Swift, XcodeGen, the test targets, and local ad hoc test signing; replace all targets, the product name, and the bundle ID. |
+| `AppPresentation.swift` | **Copy and generalize.** | Directly carries over Chinese/English, Light/Dark/System appearance, and centralized short copy; delete TermiPad-specific keys and security notices. |
+| `SoftMacTheme.swift`, `TermiPadWorkspaceStyle.swift`, `WindowPlacementCoordinator.swift` | **Copy and rename.** | Reuse the native workspace spacing, panel layering, window sizes, and adaptation approach; do not copy "iPad device frame" style visuals. |
+| The navigation shell, toolbar, search, grid, empty state, hover, and sheet patterns of `LaunchpadView.swift` | **Split up, then reuse.** | Extract generic `WorkspaceShell`, `IconGrid`, `EmptyState`, and `AppearanceControl`; do not bring in the CLI tool scanning/editing/launch code. |
+| `ToolIconView.swift`, `ToolIconStore.swift` | **Reuse the mechanism, not the catalog.** | The controlled local PNG, manual override, stable fallback, and rendering layer are worth keeping; app cards should default to the real bundle icon and not use the CLI tools' semantic symbol table. |
+| The `launchApp`, window restoration, and attachment export helper methods of `TermiPadUITests.swift` | **Copy and change the bundle ID / identifiers.** | This is the key asset for "sparing the user manual clicks": real launch, waiting, clicking, asserting, screenshots, and UI hierarchy diagnostics. |
+| `verify-macos.sh` | **Copy as a Launchpad version and rewrite the guards.** | Keep the one-command loop; remove the T0/T1/T2/MCP-specific guards and add Launchpad guards such as "no shell / no network / no remote launching". |
 
-### 3.2 必须留在 TermiPad 的逻辑
+### 3.2 Logic that must stay in TermiPad
 
-以下文件或职责不应原样进入新项目，因为它们绑定 CLI、终端、AI/网络补充、受限任务或 MCP 设计。
+The following files or responsibilities should not enter the new project as is, because they are bound to the CLI, the terminal, AI/network enrichment, restricted tasks, or the MCP design.
 
-| TermiPad 层 | Launchpad 处理方式 | 说明 |
+| TermiPad layer | How Launchpad handles it | Notes |
 |---|---|---|
-| `TerminalTool.swift`、`CandidateTool`、`ToolScanner.swift` | 新建 `LaunchAppEntry`，不继承。 | 现有模型包含 executable path、命令模板、变量、工具来源和 CLI 分类。 |
-| `TerminalLauncher.swift`、`CommandTemplate.swift`、`ToolLaunchContext.swift` | 完全不复制。 | Launchpad 只打开 `.app` Bundle，不构造命令，不调用 Terminal/iTerm/Warp。 |
-| `TaskIntent*`、`TaskExecutionService.swift`、`TaskMCP*`、`MCPStdIORuntime.swift` | 完全不复制。 | 这些是 TermiPad 特有的任务与本机 MCP 安全链。 |
-| `AIService.swift`、`GitHubService.swift`、`Discovery*`、`UpdateCheckService.swift` | 初始版本不复制。 | Launchpad MVP 不需要网络、API Key、远程发现或远程更新源。 |
-| `ControlledInstallPlan.swift`、`InstallEnvironmentView.swift` | 完全不复制。 | 图形应用启动器不承担安装、包管理或环境审查职责。 |
-| TermiPad 的备份 JSON 格式与恢复模型 | 不直接兼容；可另设 Launchpad 专属本地导出。 | 不应把 CLI 命令、工具变量或任何 TermiPad 数据迁入新项目。 |
+| `TerminalTool.swift`, `CandidateTool`, `ToolScanner.swift` | Create a new `LaunchAppEntry`; do not inherit. | The existing models contain the executable path, command template, variables, tool source, and CLI categories. |
+| `TerminalLauncher.swift`, `CommandTemplate.swift`, `ToolLaunchContext.swift` | Not copied at all. | Launchpad only opens `.app` bundles; it builds no commands and does not call Terminal/iTerm/Warp. |
+| `TaskIntent*`, `TaskExecutionService.swift`, `TaskMCP*`, `MCPStdIORuntime.swift` | Not copied at all. | These are TermiPad's own task and local MCP security chain. |
+| `AIService.swift`, `GitHubService.swift`, `Discovery*`, `UpdateCheckService.swift` | Not copied in the initial version. | The Launchpad MVP needs no network, API key, remote discovery, or remote update feed. |
+| `ControlledInstallPlan.swift`, `InstallEnvironmentView.swift` | Not copied at all. | A graphical app launcher takes on no installation, package management, or environment review duties. |
+| TermiPad's backup JSON format and restore model | Not directly compatible; a Launchpad-specific local export can be designed separately. | CLI commands, tool variables, or any TermiPad data should not be migrated into the new project. |
 
-### 3.3 Launchpad 新建的数据模型
+### 3.3 Data models newly created for Launchpad
 
-新项目应在自己的 SwiftData 容器中定义 `LaunchAppEntry`、`LaunchGroup` 与 `LaunchSource`。最小记录只保存展示和启动所需字段；诊断导出不包含原始路径。
+The new project should define `LaunchAppEntry`, `LaunchGroup`, and `LaunchSource` in its own SwiftData container. The minimal record stores only the fields needed for display and launching; the diagnostic export contains no raw paths.
 
-| 模型字段 | 用途 | 限制 |
+| Model field | Purpose | Restriction |
 |---|---|---|
-| `id` | 本地不透明标识。 | 不上传。 |
-| `displayName`、`bundleIdentifier` | 标题、去重与搜索。 | 允许用户本地别名；不用于网络查询。 |
-| `appURL` 或安全范围 bookmark | 定位用户已收录的 `.app`。 | 原始 URL 不写入诊断或远程接口。 |
-| `source` | `systemApplications`、`userApplications`、`userSelected`。 | 仅解释来源，不代表安全认证。 |
-| `isFavorite`、`isHidden`、`groupID`、`sortIndex` | 本地个人整理。 | 不共享、不自动同步。 |
-| `lastLaunchedAt` | 最近使用排序。 | 不记录使用时长、窗口内容或行为轨迹。 |
-| `iconFilename`（仅自定义图标时） | 本地受控图标覆盖。 | 默认使用真实 Bundle 图标，不下载网络素材。 |
+| `id` | Local opaque identifier. | Not uploaded. |
+| `displayName`, `bundleIdentifier` | Title, deduplication, and search. | A local alias from the user is allowed; not used for network lookups. |
+| `appURL` or a security-scoped bookmark | Locates a `.app` the user collected. | The raw URL is not written to diagnostics or remote interfaces. |
+| `source` | `systemApplications`, `userApplications`, `userSelected`. | Only explains the source; it is not a security certification. |
+| `isFavorite`, `isHidden`, `groupID`, `sortIndex` | Personal local organization. | Not shared and not synced automatically. |
+| `lastLaunchedAt` | Ordering by recent use. | No usage duration, window content, or behavior trail is recorded. |
+| `iconFilename` (only for custom icons) | Controlled local icon override. | Defaults to the real bundle icon; no network assets are downloaded. |
 
 ---
 
-## 4. 新仓库、命名和验证策略
+## 4. New repository, naming, and verification strategy
 
-### 4.1 仓库创建方式
+### 4.1 How to create the repository
 
-建议创建一个新的**私有** GitHub 仓库，而不是 fork TermiPad。fork 会把全部提交历史和 TermiPad 的 MCP/任务/CLI 代码带到新项目，既增加审计成本，也让产品边界模糊。新仓库应从一个干净的 XcodeGen 工程建立，然后选择性复制已审查的基础文件。README 首屏应声明“独立本地图形应用启动器；不含 CLI 终端、MCP、远程控制或网络服务”。
+The recommendation is to create a new **private** GitHub repository rather than forking TermiPad. A fork would bring the full commit history and TermiPad's MCP/task/CLI code into the new project, raising audit cost and blurring the product boundary. The new repository should be set up from a clean XcodeGen project, then selectively receive reviewed foundation files. The top of the README should state "standalone local graphical app launcher; contains no CLI terminal, MCP, remote control, or network service".
 
-产品显示名可以在内部原型阶段暂称“Launchpad”，但计划公开分发、域名、商店上架或商标使用前，应检查其与 Apple 历史产品名称及同类软件名称的混淆风险。这是一般产品风险提醒，不构成法律意见；届时应由熟悉目标地区的知识产权专业人士审查。
+The product display name may provisionally be "Launchpad" during the internal prototype stage, but before any planned public distribution, domain, store listing, or trademark use, check the risk of confusion with the name of Apple's historical product and with similar software. This is a general product risk reminder and not legal advice; at that point an intellectual property professional familiar with the target regions should review it.
 
-| 项目身份项 | TermiPad | 新项目建议 |
+| Project identity item | TermiPad | Suggestion for the new project |
 |---|---|---|
-| 仓库 | `AngryKiwiWithLegs/TermiPad` | 新建私有 `AngryKiwiWithLegs/LaunchDeck`（工作名，可在确认后调整）。 |
-| 工程名 | `TermiPad` | `LaunchDeck` 或经最终命名确认后的独立名称。 |
-| Bundle ID | `com.termipad.app` | 全新 ID，例如 `com.angrykiwi.launchdeck`；最终值应由仓库/发行主体统一决定。 |
-| 本地数据 | TermiPad SwiftData 容器。 | 新容器、独立 Application Support 目录，不读取或迁移 TermiPad 数据。 |
-| 图标目录 | TermiPad 受控工具图标目录。 | 独立图标目录，只缓存用户选定的应用卡片覆盖图。 |
-| 诊断包 | TermiPad 固定隐私类别。 | 新的 Launchpad 事件类别，禁止输出原始应用路径和用户数据。 |
+| Repository | `AngryKiwiWithLegs/TermiPad` | A new private `AngryKiwiWithLegs/LaunchDeck` (working name, adjustable after confirmation). |
+| Project name | `TermiPad` | `LaunchDeck`, or a separate name once the final naming is confirmed. |
+| Bundle ID | `com.termipad.app` | A brand-new ID, for example `com.angrykiwi.launchdeck`; the final value should be decided consistently by the repository/release owner. |
+| Local data | TermiPad's SwiftData container. | A new container and a separate Application Support directory; TermiPad data is neither read nor migrated. |
+| Icon directory | TermiPad's controlled tool icon directory. | A separate icon directory that caches only override images for the app cards the user selected. |
+| Diagnostic package | TermiPad's fixed privacy categories. | New Launchpad event categories; raw app paths and user data must not be output. |
 
-### 4.2 一次集中验证的迁移方式
+### 4.2 How the single consolidated verification is carried over
 
-Launchpad 从第一天起应拥有 `scripts/verify-macos.sh`，不是等 UI 做完后才补。它应检查 Xcode/XcodeGen、脚本语法、Swift 静态边界、单元测试、工程生成、macOS 构建和 UI 冒烟，并把日志、`summary.md` 与 `.xcresult` 附件保存在一个时间戳目录。
+Launchpad should have `scripts/verify-macos.sh` from day one, not added after the UI is done. It should check Xcode/XcodeGen, script syntax, Swift static boundaries, unit tests, project generation, the macOS build, and UI smoke tests, and save the logs, `summary.md`, and `.xcresult` attachments in one timestamped directory.
 
-| Launchpad 验证组 | 需要覆盖的断言 |
+| Launchpad verification group | Assertions to cover |
 |---|---|
-| 静态边界 | Launchpad 不引用 `Process`、`NSTask`、`NSAppleScript`、`URLSession`、MCP stdio、WebSocket、HTTP listener 或 Shell 字符串。 |
-| 单元测试 | Bundle 去重、用户分组、收藏/隐藏、排序、标准目录过滤、手动选择的书签恢复、丢失 App 提示。 |
-| UI 冒烟 | 首次引导、全部应用、搜索、收藏、空状态、分组、设置、中英文、浅/深/系统外观，以及启动确认 UI。 |
-| 启动隔离 | 使用独立内存容器或测试目录，绝不读取用户真实应用目录或改写用户实际收藏。 |
-| 失败附件 | 自动导出截图、Accessibility/UI 层级和 `.xcresult`；用户只需发送末尾摘要。 |
+| Static boundaries | Launchpad does not reference `Process`, `NSTask`, `NSAppleScript`, `URLSession`, MCP stdio, WebSocket, an HTTP listener, or shell strings. |
+| Unit tests | Bundle deduplication, user groups, favorites/hiding, sorting, standard directory filtering, bookmark recovery for manual selections, missing-app hints. |
+| UI smoke | First-run onboarding, all apps, search, favorites, empty state, groups, settings, Chinese/English, Light/Dark/System appearance, and the launch confirmation UI. |
+| Launch isolation | Use a separate in-memory container or test directory; never read the user's real app catalog or rewrite the user's actual favorites. |
+| Failure attachments | Automatically export screenshots, the Accessibility/UI hierarchy, and the `.xcresult`; the user only needs to send the summary at the end. |
 
 ---
 
-## 5. 推荐推进顺序与需要确认的事项
+## 5. Recommended order and items to confirm
 
-目前建议只进入 **Launchpad L0：独立项目设计冻结**，而不是立即创建仓库。L0 的目标是以少量产品决定换取后续实现和验证稳定性。
+For now the recommendation is to enter only **Launchpad L0: standalone project design freeze**, not to create the repository immediately. L0's goal is to trade a few product decisions for stable implementation and verification later.
 
-| 需要你确认的问题 | 建议默认值 | 对后续的影响 |
+| Question you need to confirm | Suggested default | Effect on what follows |
 |---|---|---|
-| 是否使用新独立项目？ | 是，TermiPad 的 sibling project。 | 决定创建新私有仓库和新 Bundle ID。 |
-| 产品/仓库工作名 | 仓库先用 `LaunchDeck`，界面文案可暂用“Launchpad”。 | 避免在工程、Bundle ID 和公开品牌之间过早锁死名称。 |
-| 应用收录方式 | 默认标准目录的手动刷新 + 用户手动添加。 | 兼顾传统 Launchpad 覆盖度与本地隐私。 |
-| 是否允许自动发现？ | 不后台自动；只允许用户在本机点击刷新。 | 决定是否需要标准目录访问与刷新说明。 |
-| 是否与 TermiPad 工具同屏？ | 不同屏；两个 App 分别运行。 | 保持两个产品数据和安全模型清晰。 |
-| 下一开发动作 | 完成 L0 设计后，再创建私有仓库并实施 L1 MVP。 | 不会触发 iPhone、MCP、网络、Shell 或现有 TermiPad 改动。 |
+| Use a new standalone project? | Yes, a sibling project of TermiPad. | Decides creating a new private repository and a new bundle ID. |
+| Product/repository working name | Use `LaunchDeck` for the repository first; UI copy may provisionally use "Launchpad". | Avoids locking the name too early across the project, bundle ID, and public brand. |
+| How apps are collected | Default: manual refresh of the standard directories + manual add by the user. | Balances the coverage of the traditional Launchpad with local privacy. |
+| Allow automatic discovery? | Not automatically in the background; only a refresh the user clicks on this Mac. | Decides whether standard directory access and a refresh explanation are needed. |
+| Share a screen with TermiPad tools? | No; the two apps run separately. | Keeps the two products' data and security models clear. |
+| Next development action | After completing the L0 design, create the private repository and implement the L1 MVP. | Does not trigger iPhone, MCP, network, shell, or changes to the existing TermiPad. |
 
 ---
 
-## 参考资料
+## References
 
 [1]: https://developer.apple.com/documentation/appkit/nsworkspace "Apple Developer: NSWorkspace"
 [2]: https://developer.apple.com/design/human-interface-guidelines/toolbars "Apple Human Interface Guidelines: Toolbars"

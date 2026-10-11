@@ -1,9 +1,9 @@
 import XCTest
 @testable import TermiPad
 
-/// M2b-2 输出脱敏契约（docs/m2b-remote-task-console-design.md §5.5）：
-/// 六个正则族每族至少一例必须命中替换；普通文本必须原样保留。
-/// 这是"输出档位上线的前置守卫"（设计 §7.4）。
+/// M2b-2 output redaction contract (docs/m2b-remote-task-console-design.md §5.5):
+/// each of the six regex families must have at least one case that is matched and replaced; plain text must be kept unchanged.
+/// This is the "prerequisite guard for shipping output visibility levels" (design §7.4).
 final class OutputRedactorTests: XCTestCase {
 
     func testRedactsTokenStyleAssignments() {
@@ -17,8 +17,8 @@ final class OutputRedactorTests: XCTestCase {
         for input in cases {
             let output = OutputRedactor.redact(input)
             XCTAssertFalse(output.contains("ghp_") || output.contains("sk-live"),
-                           "未脱敏：\(input) → \(output)")
-            XCTAssertTrue(output.contains(OutputRedactor.mask), "应有掩码：\(input) → \(output)")
+                           "Not redacted: \(input) → \(output)")
+            XCTAssertTrue(output.contains(OutputRedactor.mask), "Should contain the mask: \(input) → \(output)")
         }
     }
 
@@ -53,7 +53,7 @@ final class OutputRedactorTests: XCTestCase {
     }
 
     func testKeepsOrdinaryBuildOutput() {
-        // 普通构建/测试输出必须原样通过——脱敏不能破坏可用性。
+        // Ordinary build/test output must pass through unchanged — redaction must not break usability.
         let ordinary = """
         Test Suite 'All tests' passed at 2026-09-09.
         Executed 19 tests, with 0 failures (0 unexpected)
@@ -64,7 +64,7 @@ final class OutputRedactorTests: XCTestCase {
     }
 
     func testKeepsShortHexAndVersionNumbers() {
-        // 短 hex（< 20 位）不是 AWS Key；版本号/时间戳不受影响。
+        // Short hex (< 20 characters) is not an AWS key; version numbers / timestamps are unaffected.
         let ordinary = "commit 0cdbc90 passed at 20:17:37, version 1.102.2"
         XCTAssertEqual(OutputRedactor.redact(ordinary), ordinary)
     }

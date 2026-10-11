@@ -1,249 +1,249 @@
-# TermiPad 二期价值审视待办
+# TermiPad phase-two value review to-dos
 
-- [x] 评估将 TermiPad 的原生 macOS 架构、设计系统、图标机制和自动化验证复用于独立 Launchpad 项目的可行性，并区分可复制代码与不可继承的业务/安全逻辑。
-- [x] 定义 Launchpad 独立项目的最小 App 启动器 MVP、数据边界、默认关闭的可选能力和明确不做事项；不改 macOS 系统，不把新功能塞入 TermiPad。
-- [x] 制定新私有仓库、派生方式、历史署名、测试基线和逐批验证方案；待用户确认产品范围后再创建项目或迁移代码。
+- [x] Assess the feasibility of reusing TermiPad's native macOS architecture, design system, icon mechanism, and automated verification for a standalone Launchpad project, separating code that can be copied from business/security logic that must not be inherited.
+- [x] Define the standalone Launchpad project's minimal app-launcher MVP, data boundaries, off-by-default optional capabilities, and explicit non-goals; no changes to macOS itself and no new features stuffed into TermiPad.
+- [x] Plan the new private repository, the derivation approach, attribution of history, the test baseline, and batch-by-batch verification; create the project or migrate code only after the user confirms the product scope.
 
-## Launchpad 独立项目工程量与交付评估
+## Launchpad standalone project: effort and delivery assessment
 
-- [x] 量化 TermiPad 基础工作区、图标体系、持久化、自动化测试与验证脚本的复用比例，以及 Launchpad 应用目录模型和用户启动逻辑的新增工作量。
-- [x] 以概念验证、可用 MVP、可靠性收口和外部分发准备四层评估工程量、真实 Mac 验证次数、主要技术风险和不确定性。
-- [x] 比较由已掌握 TermiPad 架构的资深交付者与新人接手时的复用效率、测试能力、UI 一致性和安全/维护风险；不启动新项目。
+- [x] Quantify the reuse ratio of TermiPad's base workspace, icon system, persistence, automated tests, and verification scripts, and the new work needed for Launchpad's application catalog model and user launch logic.
+- [x] Assess the effort, the number of real-Mac verification rounds, the main technical risks, and the uncertainties across four layers: proof of concept, usable MVP, reliability hardening, and external distribution preparation.
+- [x] Compare reuse efficiency, testing ability, UI consistency, and security/maintenance risk between a senior deliverer who already knows the TermiPad architecture and a newcomer taking over; do not start the new project.
 
-## 已批准：Launchpad 独立项目启动与 handoff
+## Approved: Launchpad standalone project kickoff and handoff
 
-- [ ] 归档 TermiPad 最新验证基线、可迁移基础设施、禁止复制模块、开发环境与真实 Mac 验证方法，形成独立 handoff 包。
-- [ ] 冻结 Launchpad L0 产品契约：仅本地图形 `.app`、用户点击启动、独立数据存储、无 CLI/MCP/网络/远程控制；不修改 TermiPad。
-- [ ] 创建新的私有 Launchpad 仓库与干净 XcodeGen 原生 macOS 工程，只复制经批准的展示、图标与测试基础。
-- [ ] 在 Launchpad 仓库内写入架构、设计、数据、测试、安全边界、新人接手与分阶段路线材料；不复制用户工具、命令、变量、密钥或 TermiPad 数据。
-- [ ] 完成静态审计、提交推送，并请求一次 Launchpad 专属的集中 macOS 基线验证后再进入 L1 功能开发。
+- [ ] Archive TermiPad's latest verification baseline, portable infrastructure, modules that must not be copied, the development environment, and the real-Mac verification method into a standalone handoff package.
+- [ ] Freeze the Launchpad L0 product contract: local graphical `.app`s only, launch on user click, separate data storage, no CLI/MCP/network/remote control; TermiPad is not modified.
+- [ ] Create a new private Launchpad repository and a clean XcodeGen native macOS project, copying only the approved presentation, icon, and test foundations.
+- [ ] Write the architecture, design, data, testing, security boundary, newcomer onboarding, and phased roadmap material into the Launchpad repository; do not copy user tools, commands, variables, secrets, or TermiPad data.
+- [ ] Complete the static audit, commit and push, and request one Launchpad-specific consolidated macOS baseline verification before entering L1 feature development.
 
-- [x] 审计现有 TermiPad 启动器、原生 UI、设计文档与 UI 自动化测试资产，形成可复用而不泄露用户配置的专题清单。
-- [x] 调研现行 macOS Launchpad/应用启动器的系统能力，判断 TermiPad 可实现的独立增强启动器与不可替代系统组件的边界。
-- [x] 编写“TermiPad 启动器扩展、原生 UI 体系与自动化 UI 验证”专题方案；先交付决策与可移植资产说明，不自动改变产品安全范围或进入 iPhone 开发。
+- [x] Audit the existing TermiPad launcher, native UI, design docs, and UI automation test assets into a topic checklist that is reusable without leaking user configuration.
+- [x] Research the system capabilities of the current macOS Launchpad / app launchers, and determine the boundary between a standalone enhanced launcher TermiPad could implement and system components that cannot be replaced.
+- [x] Write the topic plan "TermiPad launcher extension, native UI system, and automated UI verification"; deliver the decisions and the description of portable assets first, without automatically changing the product's security scope or starting iPhone development.
 
-- [ ] 盘点已验证的核心启动器能力与候选二期能力，避免把已完成的 P2 安全扩展与手机协同混为同一开发阶段。
-- [ ] 按用户价值、预期频率、安全复杂度、维护成本和外部账户/托管依赖评估：图标库完善、手机本地伴侣、Telegram Bot、Telegram Mini App、PWA 图标面板与真正受限启动入口。
-- [ ] 确定二期分层：应立即投入、保留为设计储备、在有真实使用证据前不投入。
-- [ ] 明确任何手机或 Telegram 能力都不改变“Mac 不开放公网端口、无任意命令、无敏感输出”的产品红线。
-- [ ] 向用户交付二期路线建议，并在用户明确选定方向前不启动真实 Bot/Mac 集成。
+- [ ] Take stock of the verified core launcher capabilities and the candidate phase-two capabilities, so the completed P2 security extensions and phone collaboration are not mixed into one development phase.
+- [ ] Evaluate by user value, expected frequency, security complexity, maintenance cost, and external account/hosting dependencies: icon library improvements, a local phone companion, a Telegram Bot, a Telegram Mini App, a PWA icon panel, and a truly restricted launch entry.
+- [ ] Decide the phase-two tiers: invest now, keep as a design reserve, or do not invest until there is real usage evidence.
+- [ ] Make explicit that no phone or Telegram capability changes the product red lines "the Mac opens no public ports, no arbitrary commands, no sensitive output".
+- [ ] Deliver the phase-two roadmap recommendation to the user, and do not start any real Bot/Mac integration before the user explicitly picks a direction.
 
-## 已批准：二期本地图标系统
+## Approved: phase-two local icon system
 
-- [x] 审计 `TerminalTool`、`ToolIconView`、工具编辑界面、迁移/备份模型和现有图标测试。
-- [x] 设计并实现持久化的本地图标身份，保留自定义 PNG 优先规则，不传输图标或添加网络资源。
-- [x] 扩展内置语义 SF Symbol 目录，并为未知工具实现稳定、确定性且可处理冲突的本地回退分配。
-- [x] 在工具编辑流程中提供用户主动的内置图标选择与恢复自动分配操作。
-- [x] 完成最终静态审计、提交推送，并在用户真实 Mac 上通过一次现有 macOS 集中验证脚本。
+- [x] Audit `TerminalTool`, `ToolIconView`, the tool edit UI, the migration/backup model, and the existing icon tests.
+- [x] Design and implement a persisted local icon identity, keeping the custom-PNG-first rule, without transferring icons or adding network resources.
+- [x] Extend the built-in semantic SF Symbol catalog, and implement stable, deterministic, conflict-aware local fallback assignment for unknown tools.
+- [x] Offer user-initiated built-in icon selection and restore-automatic-assignment actions in the tool edit flow.
+- [x] Complete the final static audit, commit and push, and pass the existing consolidated macOS verification script once on the user's real Mac.
 
-## 手机版正式能力重新评估
+## Re-evaluation of the phone app as a formal capability
 
-- [ ] 将手机版产品承诺明确为：人在外面时，用户能通过手机查看并点击自己已授权的固定工具入口，由 Mac 在本地安全交接；不以“是否已广泛验证”为前置否决条件。
-- [ ] 从同网原生伴侣、PWA 与 Telegram Mini App 三条路径评估该场景的技术可行性、长期成本、发布依赖和安全条件。
-- [ ] 明确该能力能够实现的受限启动、状态确认与撤销范围，以及不能接受任意命令、参数、路径、输出或公网 Mac 入口的边界。
-- [ ] 形成可作为正式后续能力的分阶段路线，并在用户授权前不接入真实 token、网页服务或远程执行。
+- [ ] State the phone product promise explicitly: when away from the Mac, the user can view and tap their own authorized fixed tool entries on the phone, and the Mac hands off safely and locally; "has it been widely validated" is not a precondition for rejection.
+- [ ] Assess the technical feasibility, long-term cost, release dependencies, and security conditions of this scenario along three paths: a same-network native companion, a PWA, and a Telegram Mini App.
+- [ ] Make explicit the scope of restricted launching, status confirmation, and revocation this capability can deliver, and the boundary that it cannot accept arbitrary commands, arguments, paths, output, or a public entry point into the Mac.
+- [ ] Produce a phased roadmap that can serve as a formal follow-up capability, and do not connect real tokens, web services, or remote execution before the user authorizes it.
 
-## 受限 MCP 服务端评估
+## Restricted MCP server assessment
 
-- [ ] 将 TermiPad 的 MCP 定位为本机受限工具服务端：允许智能体列出已批准工具、读取最小化描述并请求固定工具启动；不提供任意 Shell、路径、变量、终端输出或文件浏览工具。
-- [ ] 核对当前会话是否存在可用 MCP/连接器配置，并研究 MCP 服务端的本地 stdio 与远程传输安全要求。
-- [ ] 设计 MCP 工具契约、每工具授权、用户确认、短期执行窗口、审计事件和拒绝/撤销规则。
-- [ ] 明确 MCP 智能体路径与手机版路径共享 TermiPad 本地策略层，但不相互扩大权限；在用户明确批准前不实现或暴露服务端。
+- [ ] Position TermiPad's MCP as a local restricted tool server: agents may list approved tools, read minimized descriptions, and request fixed tool launches; no arbitrary shell, path, variable, terminal output, or file browsing tools are provided.
+- [ ] Check whether the current session has usable MCP/connector configuration, and research the security requirements of local stdio and remote transports for MCP servers.
+- [ ] Design the MCP tool contract, per-tool authorization, user confirmation, short execution windows, audit events, and rejection/revocation rules.
+- [ ] Make explicit that the MCP agent path and the phone path share TermiPad's local policy layer without widening each other's permissions; do not implement or expose the server before the user explicitly approves.
 
-## 直接终端 MCP 与 TermiPad 网关比较
+## Direct terminal MCP vs. the TermiPad gateway
 
-- [ ] 比较任意终端执行型 MCP 与 TermiPad 受限工具型 MCP 的调用能力、审批、审计、撤销、输出处理与移动端暴露面。
-- [ ] 查证 MCP 官方安全资料与具有终端执行能力的现有实践，识别提示注入、命令构造、秘密泄露、权限继承和不可逆操作风险。
-- [ ] 明确 TermiPad 作为网关能提供的独特能力，以及它带来的额外复杂度是否值得保留。
-- [ ] 给出产品架构结论：纯直接 MCP、纯受限网关或两层并存，以及每条路径的适用对象。
+- [ ] Compare an arbitrary-terminal-execution MCP with TermiPad's restricted-tool MCP in terms of invocation power, approval, auditing, revocation, output handling, and mobile exposure surface.
+- [ ] Verify against official MCP security material and existing practice with terminal execution capabilities, identifying prompt injection, command construction, secret leakage, permission inheritance, and irreversible operation risks.
+- [ ] Make explicit the unique capabilities TermiPad offers as a gateway, and whether the extra complexity it brings is worth keeping.
+- [ ] Give the product architecture conclusion: pure direct MCP, pure restricted gateway, or both layers side by side, and who each path is for.
 
-## 隔离临时终端与手机即时测试评估
+## Isolated temporary terminal and instant testing from the phone
 
-- [ ] 定义用户所说“干净终端”的最小产品承诺：一次性、受项目目录约束、可停止、可过期且只将最小结果返回手机。
-- [ ] 调研 macOS 上新 shell、受限工作区、sandbox-exec 替代方案、权限继承和进程生命周期的可行性与局限。
-- [ ] 比较“新 shell”“项目受限工作区”“完整远程交互终端”对手机即时测试痛点的覆盖、风险和开发成本。
-- [ ] 决定是否应将隔离临时终端作为 TermiPad 的独立产品线；在用户明确批准前不添加 PTY、远程输入、终端输出回传或网络监听。
+- [ ] Define the minimal product promise of what the user calls a "clean terminal": one-off, constrained to the project directory, stoppable, expiring, and returning only minimal results to the phone.
+- [ ] Research the feasibility and limits on macOS of a new shell, a restricted workspace, alternatives to sandbox-exec, permission inheritance, and process lifecycle.
+- [ ] Compare how "a new shell", "a project-restricted workspace", and "a full remote interactive terminal" cover the pain point of instant testing from the phone, with their risks and development costs.
+- [ ] Decide whether the isolated temporary terminal should be a separate TermiPad product line; do not add a PTY, remote input, terminal output return, or network listening before the user explicitly approves.
 
-## 手机即时测试与智能体协作正式比选
+## Formal comparison: instant testing from the phone and agent collaboration
 
-- [ ] 汇总固定图标启动、Telegram/PWA 手机入口、直接终端 MCP、受限 TermiPad MCP、普通新 shell、项目受限临时任务会话与完整远程 PTY 的候选架构。
-- [ ] 统一按“人在外面无法复制临时测试命令”的场景覆盖度、安全隔离、开发成本、常驻运维、外部账户依赖和产品一致性评分。
-- [ ] 明确推荐架构、应先实施的本机基础能力、后续异地桥接能力，以及不应纳入产品的永久远程 Shell 范围。
-- [ ] 形成后续开发意见；在用户批准具体阶段前不实现网络桥接、PTY 或真实智能体终端连接。
+- [ ] Collect the candidate architectures: fixed icon launching, a Telegram/PWA phone entry, direct terminal MCP, restricted TermiPad MCP, a plain new shell, a project-restricted temporary task session, and a full remote PTY.
+- [ ] Score them uniformly on coverage of the scenario "away from the Mac and unable to copy a temporary test command", security isolation, development cost, always-on operations, external account dependencies, and product consistency.
+- [ ] State the recommended architecture, the local foundation to build first, the later remote bridging capability, and the permanent remote shell scope that should stay out of the product.
+- [ ] Produce the follow-up development opinion; do not implement network bridging, a PTY, or a real agent terminal connection before the user approves a specific phase.
 
-## 手机入口形态决策
+## Phone entry form decision
 
-- [ ] 分离“手机界面入口”与“Mac 受限任务执行核心”：无论选 App、PWA 或 Telegram，均不得绕过 TaskIntent 策略层。
-- [ ] 比较原生 iPhone App、主屏 PWA、Telegram Mini App 与纯 Bot 在外出临时任务、图标体验、身份、通知、发布依赖和长期运维上的差异。
-- [ ] 选定一个主入口和可选辅助入口，并明确不把纯 Bot 文字界面当作图标工作台。
+- [ ] Separate the "phone UI entry" from the "Mac restricted task execution core": whether the choice is an app, a PWA, or Telegram, none may bypass the TaskIntent policy layer.
+- [ ] Compare a native iPhone app, a home-screen PWA, a Telegram Mini App, and a pure Bot on ad hoc tasks away from the Mac, icon experience, identity, notifications, release dependencies, and long-term operations.
+- [ ] Pick one primary entry and an optional secondary entry, and state that a pure Bot text interface is not treated as the icon workbench.
 
-## 移动端长期定位（已确认）
+## Long-term mobile positioning (confirmed)
 
-- [ ] 将原生 iPhone App 设为 TermiPad 的最终移动管理入口，负责设备配对、工具目录、任务审批、远程允许窗口、状态与撤销。
-- [ ] 将 PWA 降为快速验证、免安装访问和可复用界面层，不作为长期权限管理的唯一承载体。
-- [ ] 将 Telegram Mini App 降为可选聊天内快捷入口，将 Bot 限为固定通知与深链，不承载自由命令或主安全策略。
-- [ ] 在开发移动端 UI 前先完成 Mac 本地 TaskIntent 与临时任务会话核心，避免手机端先行形成无执行安全边界的界面；该能力现为下一开发批次。
+- [ ] Make the native iPhone app TermiPad's final mobile management entry, responsible for device pairing, the tool catalog, task approval, the remote allow window, status, and revocation.
+- [ ] Demote the PWA to quick validation, install-free access, and a reusable UI layer; it is not the sole carrier of long-term permission management.
+- [ ] Demote the Telegram Mini App to an optional in-chat shortcut entry, and limit the Bot to fixed notifications and deep links; it carries no free-form commands and no primary security policy.
+- [ ] Finish the Mac's local TaskIntent and temporary task session core before developing the mobile UI, so the phone does not get an interface without an execution security boundary first; this capability is now the next development batch.
 
-## 整体产品路线图
+## Overall product roadmap
 
-- [x] 盘点当前已验证的 TermiPad Mendocino 基线、已通过集中验证的本地图标批次，以及 Apple 账户等外部发布闸门。
-- [x] 将启动器、受限临时任务、受限 MCP、原生 iPhone 管理端、PWA 验证层和 Telegram 可选入口统一为一套产品架构。
-- [x] 为每个后续阶段定义目标、范围、依赖、安全红线、验收标准和明确不做的能力。
-- [x] 输出并提交完整路线图，指定当前最合理的下一开发批次；在用户批准前不改变执行边界或启动联网实现。
+- [x] Take stock of the currently verified TermiPad Mendocino baseline, the local icon batch that passed consolidated verification, and external release gates such as the Apple account.
+- [x] Unify the launcher, restricted temporary tasks, restricted MCP, the native iPhone management app, the PWA validation layer, and the optional Telegram entry into one product architecture.
+- [x] Define the goal, scope, dependencies, security red lines, acceptance criteria, and explicit non-goals for every later phase.
+- [x] Publish and commit the full roadmap and name the most reasonable next development batch; do not change the execution boundary or start networked implementation before the user approves.
 
-## T0 开发前注意事项与材料
+## T0 pre-development notes and materials
 
-- [x] 对照既有项目总结、私有 beta 审计、图标批次状态和整体路线图，确认本轮不能回归的验证与安全约束。
-- [x] 列出受限 TaskIntent、MCP 和原生移动端开发前必须由用户或开发环境提供的项目范围、策略、测试与外部账户材料。
-- [x] 区分立即需要、开发中应持续保存、以及进入移动/发行阶段才需要的材料与证据。
+- [x] Against the existing project summary, the private beta audit, the icon batch status, and the overall roadmap, confirm the verification and security constraints that must not regress in this round.
+- [x] List the project scope, policy, test, and external account materials that the user or the development environment must provide before developing restricted TaskIntent, MCP, and the native mobile app.
+- [x] Separate materials and evidence needed immediately, those to keep saving during development, and those needed only at the mobile/release stage.
 
-## 已批准：T0 本地受限任务策略核心
+## Approved: T0 local restricted task policy core
 
-- [x] 审计现有终端交接、SwiftData 模型、备份恢复、诊断记录、设置入口与测试结构，确定 T0 最小接入点。
-- [x] 冻结 `TaskIntent`、项目范围、任务类别、风险、时限、nonce、拒绝原因、最小结果与撤销的本地数据契约。
-- [x] 实现纯本地任务策略：明确项目范围、一次性授权、过期/重放/撤销拒绝、取消与最小状态机；不启动子进程以外的远程连接。
-- [x] 增加最小本机任务工作台与测试覆盖，并在验证脚本中静态禁止网络、PTY、远程输入/输出和任意 Shell 接口。
-- [x] 完成静态审计、提交推送，并在用户真实 Mac 上通过一次集中 macOS 验证。
+- [x] Audit the existing terminal handoff, SwiftData models, backup/restore, diagnostic records, settings entry points, and test structure to determine T0's minimal integration points.
+- [x] Freeze the local data contract for `TaskIntent`, project scope, task category, risk, time limit, nonce, rejection reasons, minimal result, and revocation.
+- [x] Implement the purely local task policy: explicit project scope, one-off authorization, rejection on expiry/replay/revocation, cancellation, and a minimal state machine; no remote connections beyond starting child processes.
+- [x] Add a minimal local task workbench and test coverage, and statically forbid network, PTY, remote input/output, and arbitrary shell interfaces in the verification script.
+- [x] Complete the static audit, commit and push, and pass one consolidated macOS verification on the user's real Mac.
 
-## T0 编译修复
+## T0 compile fix
 
-- [x] 修正 `TaskPolicyWorkbenchView` 中项目范围状态图标的条件前景样式，使所有分支返回一致的 SwiftUI `Color` 类型。
-- [x] 完成静态审计、提交推送，并在用户真实 Mac 上通过一次集中 macOS 回归验证；不改动任务模型、策略、固定目录或安全防护。
+- [x] Fix the conditional foreground style of the project scope status icon in `TaskPolicyWorkbenchView` so every branch returns the same SwiftUI `Color` type.
+- [x] Complete the static audit, commit and push, and pass one consolidated macOS regression verification on the user's real Mac; no changes to the task model, policy, fixed catalog, or security guards.
 
-## 下一阶段：T1 本机临时任务工作台
+## Next phase: T1 local temporary task workbench
 
-- [ ] 设计受限任务执行器：仅运行已批准的 `TaskIntent`、受项目范围约束、可停止、自动超时，并只产生最小化本地结果。
-- [ ] 明确执行器启动前的用户确认、环境剥离、结果保留和失败恢复规则；仍不接入网络、MCP、移动端或远程 PTY。
+- [ ] Design the restricted task executor: runs only approved `TaskIntent`s, constrained to the project scope, stoppable, with automatic timeout, and producing only minimized local results.
+- [ ] Define the rules for user confirmation before the executor starts, environment stripping, result retention, and failure recovery; still no network, MCP, mobile, or remote PTY.
 
-## 已批准：T1 本机临时任务执行器
+## Approved: T1 local temporary task executor
 
-- [x] 审计 T0 数据模型、固定任务目录与现有进程使用位置，确定只允许已批准任务进入执行器的最小接入点。
-- [x] 冻结执行器、进程生命周期、超时、取消、最小结果与隐私处理契约；明确不支持自由命令、参数、环境变量、PTY 或网络。
-- [x] 实现受项目范围约束的本机执行、停止与自动超时，并让任务工作台显示最小状态和结果。
-- [x] 增加正常完成、非零退出、超时、取消、重复开始、未批准/撤销拒绝和输出最小化测试，并在验证脚本加入 T1 静态防护。
-- [x] 完成静态审计、提交推送，并在用户真实 Mac 上通过一次集中 macOS 验证。
+- [x] Audit the T0 data model, the fixed task catalog, and existing process usage to determine the minimal integration point that lets only approved tasks into the executor.
+- [x] Freeze the contract for the executor, process lifecycle, timeout, cancellation, minimal result, and privacy handling; free-form commands, arguments, environment variables, PTY, and network are explicitly unsupported.
+- [x] Implement local execution constrained to the project scope, stopping, and automatic timeout, and have the task workbench show the minimal status and result.
+- [x] Add tests for normal completion, non-zero exit, timeout, cancellation, repeated start, rejection of unapproved/revoked tasks, and output minimization, and add T1 static guards to the verification script.
+- [x] Complete the static audit, commit and push, and pass one consolidated macOS verification on the user's real Mac.
 
-## T1 Swift 6 并发修复
+## T1 Swift 6 concurrency fix
 
-- [x] 将 `Process` 终止与超时回调改为只向主线程执行协调器传递 Sendable 的任务 ID、进程身份和退出信息，不跨域捕获 SwiftData `TaskIntent` 或非 Sendable `Process`。
-- [x] 完成静态审计、提交推送，并在用户真实 Mac 上通过一次集中 macOS 回归验证；不改变固定任务目录、项目范围、空输入输出或网络边界。
+- [x] Change the `Process` termination and timeout callbacks to pass only the Sendable task ID, process identity, and exit information to the main-thread execution coordinator, without capturing the SwiftData `TaskIntent` or the non-Sendable `Process` across domains.
+- [x] Complete the static audit, commit and push, and pass one consolidated macOS regression verification on the user's real Mac; no changes to the fixed task catalog, project scope, empty input/output, or network boundary.
 
-## T1 退出码类型修复
+## T1 exit code type fix
 
-- [x] 在 `Process.terminationStatus` 的回调边界显式转换 `Int32` 为任务最小结果模型使用的 `Int`。
-- [x] 完成静态审计、提交推送，并在用户真实 Mac 上通过一次集中 macOS 回归验证；不改动并发回流、固定目录或执行范围。
+- [x] Explicitly convert `Int32` to the `Int` used by the task's minimal result model at the `Process.terminationStatus` callback boundary.
+- [x] Complete the static audit, commit and push, and pass one consolidated macOS regression verification on the user's real Mac; no changes to the concurrency hand-back, fixed catalog, or execution scope.
 
-## 下一阶段：T2 本机受限 MCP 协作
+## Next phase: T2 local restricted MCP collaboration
 
-- [ ] 冻结本机 `stdio` MCP 服务端的最小工具契约，只暴露固定工具查询、受限任务提案/状态/取消，不暴露任意 Shell、文件浏览或完整输出。
-- [ ] 设计 MCP 客户端身份、每次请求与 TaskIntent 的映射、撤销和诊断策略；不开放 HTTP 端口或外部连接。
+- [ ] Freeze the minimal tool contract of the local `stdio` MCP server, exposing only fixed tool queries and restricted task proposal/status/cancel, with no arbitrary shell, file browsing, or full output.
+- [ ] Design the MCP client identity, the mapping of each request to a TaskIntent, revocation, and the diagnostics policy; no HTTP port or external connection is opened.
 
-## 已批准：T2 本机受限 MCP 协作
+## Approved: T2 local restricted MCP collaboration
 
-- [x] 审计 T0/T1 数据模型、固定任务目录、现有进程入口与当前会话 MCP 配置，确认服务端只能通过本机 stdio 使用。
-- [x] 冻结 MCP 初始化、工具 schema、客户端身份、请求映射、拒绝类别和最小响应契约；不暴露命令、路径、变量、文件内容或完整输出。
-- [x] 实现受限 stdio MCP 服务端和 Mac 主应用的本地桥接，只支持查询固定工具、提出任务、读取最小状态与取消任务。
-- [x] 增加协议/工具 schema/拒绝/撤销测试和静态防护，并提供最小本机 MCP 管理状态；禁止 HTTP、WebSocket、网络监听和任意 Shell。
-- [x] 完成静态审计、提交推送，并在本批次结束后通过一次集中 macOS 验证（2026-08-26，归档 `20260826-212137`）。
+- [x] Audit the T0/T1 data models, the fixed task catalog, existing process entry points, and the current session's MCP configuration, confirming the server can only be used through local stdio.
+- [x] Freeze the MCP initialization, tool schemas, client identity, request mapping, rejection categories, and minimal response contract; no commands, paths, variables, file contents, or full output are exposed.
+- [x] Implement the restricted stdio MCP server and the local bridge to the Mac main app, supporting only querying fixed tools, proposing tasks, reading minimal status, and cancelling tasks.
+- [x] Add protocol / tool schema / rejection / revocation tests and static guards, and provide a minimal local MCP management status; HTTP, WebSocket, network listening, and arbitrary shell are forbidden.
+- [x] Complete the static audit, commit and push, and pass one consolidated macOS verification after this batch (2026-08-26, archive `20260826-212137`).
 
-## T2 Core Foundation 类型修复
+## T2 Core Foundation type fix
 
-- [x] 将 `CFMessagePortSendRequest` 的 `replyMode` 从 `CFRunLoopMode?` 显式转换为 API 所需的 `CFString?`。
-- [x] 完成静态审计、提交推送，并通过一次集中 macOS 回归验证（2026-08-26，归档 `20260826-212137`）；未改动 JSON-RPC、CFMessagePort 桥接、任务策略或网络边界。
+- [x] Explicitly convert the `replyMode` of `CFMessagePortSendRequest` from `CFRunLoopMode?` to the `CFString?` the API requires.
+- [x] Complete the static audit, commit and push, and pass one consolidated macOS regression verification (2026-08-26, archive `20260826-212137`); no changes to JSON-RPC, the CFMessagePort bridge, the task policy, or the network boundary.
 
-## T2 现代 CFRunLoop API 修复
+## T2 modern CFRunLoop API fix
 
-- [x] 移除已废弃的 `kCFRunLoopDefaultMode`，改用 `CFRunLoopMode.defaultMode.rawValue` 生成 CFMessagePort 所需的默认 replyMode。
-- [x] 完成静态审计、提交推送，并通过一次集中 macOS 回归验证（2026-08-26，归档 `20260826-212137`）；未改动 JSON-RPC、CFMessagePort 桥接、任务策略或网络边界。
+- [x] Remove the deprecated `kCFRunLoopDefaultMode` and use `CFRunLoopMode.defaultMode.rawValue` to produce the default replyMode CFMessagePort needs.
+- [x] Complete the static audit, commit and push, and pass one consolidated macOS regression verification (2026-08-26, archive `20260826-212137`); no changes to JSON-RPC, the CFMessagePort bridge, the task policy, or the network boundary.
 
-## T2 CFData 桥接修复
+## T2 CFData bridging fix
 
-- [x] 将本机 CFMessagePort 回调请求从 `CFData` 显式桥接为 Foundation `Data`，并核对回复数据的反向转换保持兼容。
-- [x] 完成静态审计、提交推送，并通过一次集中 macOS 回归验证（2026-08-26，归档 `20260826-212137`）；未改动 JSON-RPC、CFMessagePort 桥接语义、任务策略或网络边界。
+- [x] Explicitly bridge the local CFMessagePort callback request from `CFData` to Foundation `Data`, and check that the reverse conversion of the reply data stays compatible.
+- [x] Complete the static audit, commit and push, and pass one consolidated macOS regression verification (2026-08-26, archive `20260826-212137`); no changes to JSON-RPC, the CFMessagePort bridge semantics, the task policy, or the network boundary.
 
-## T2 SwiftData 主线程隔离修复
+## T2 SwiftData main-thread isolation fix
 
-- [x] 将持有 `ModelContainer.mainContext` 的本机 MCP 桥接类型和安装路径显式隔离到主执行上下文。
-- [x] 完成静态审计、提交推送，并通过一次集中 macOS 回归验证（2026-08-26，归档 `20260826-212137`）；未改动 JSON-RPC、CFMessagePort、任务策略、固定目录或网络边界。
+- [x] Explicitly isolate the local MCP bridge type that holds `ModelContainer.mainContext`, and its install path, to the main execution context.
+- [x] Complete the static audit, commit and push, and pass one consolidated macOS regression verification (2026-08-26, archive `20260826-212137`); no changes to JSON-RPC, CFMessagePort, the task policy, the fixed catalog, or the network boundary.
 
-## T2 MCP 测试返回修复
+## T2 MCP test return fix
 
-- [x] 补齐测试辅助桥接中返回 `LocalMCPBridgeResponse` 的显式 `return`，保持既有模拟响应与协议断言语义不变。
-- [x] 完成静态审计、提交推送，并通过一次集中 macOS 回归验证（2026-08-26，归档 `20260826-212137`）；未改动 MCP 运行时、CFMessagePort、任务策略或网络边界。
+- [x] Add the missing explicit `return` of `LocalMCPBridgeResponse` in the test helper bridge, keeping the existing mock response and protocol assertion semantics unchanged.
+- [x] Complete the static audit, commit and push, and pass one consolidated macOS regression verification (2026-08-26, archive `20260826-212137`); no changes to the MCP runtime, CFMessagePort, the task policy, or the network boundary.
 
-## T2 本机 MCP 使用指南
+## T2 local MCP user guide
 
-- [x] 核对已验证的本机 `stdio` 启动路径、应用内启用步骤、五个工具契约、最小结果和拒绝类别。
-- [x] 编写面向本机 MCP 客户端的配置、操作、关闭/撤销与故障排查指南；不配置 Manus 连接器、不接入手机、PWA、Telegram 或网络桥接。
-- [x] 静态核对指南不夸大实现范围，提交推送文档；此阶段不要求额外 macOS 集中验证。
+- [x] Check the verified local `stdio` launch path, the in-app enabling steps, the five tool contracts, the minimal results, and the rejection categories.
+- [x] Write a guide for local MCP clients covering configuration, operation, disabling/revocation, and troubleshooting; no Manus connector is configured, and no phone, PWA, Telegram, or network bridge is connected.
+- [x] Statically check that the guide does not overstate the implementation scope, then commit and push the document; no extra consolidated macOS verification is required at this stage.
 
-## T2 OpenCode 本机 MCP 兼容性核验
+## T2 OpenCode local MCP compatibility check
 
-- [x] 核验 OpenCode 官方文档中本机 `stdio` MCP 的配置文件、字段形状、启动方式及工具权限行为。
-- [x] 将 OpenCode 配置模型与 TermiPad 的固定 `command + args`、无 URL/密钥/环境变量和本机审阅边界逐项比对。
-- [x] 已补充无密钥最小配置与只读演练步骤；不创建 Manus 连接器、不执行任务、不接入手机或网络服务。
+- [x] Verify the configuration file, field shapes, launch method, and tool permission behavior of local `stdio` MCP in the official OpenCode documentation.
+- [x] Compare OpenCode's configuration model item by item against TermiPad's fixed `command + args`, no URL/secret/environment variable, and local review boundary.
+- [x] Added a secret-free minimal configuration and read-only walkthrough steps; no Manus connector is created, no task is run, and no phone or network service is connected.
 
-## T2 OpenCode 一次性只读接入演练
+## T2 OpenCode one-off read-only integration walkthrough
 
-- [x] 确认用户本机 OpenCode 1.14.33、TermiPad 可执行文件绝对路径、正常运行的主应用，以及由用户明确开启的本机 MCP 状态。
-- [x] 在用户本机准备可撤销的最小 OpenCode `type: "local"` 配置，显式拒绝 OpenCode 的 Shell、编辑、网络和子代理工具；不写入 URL、密钥或环境变量。
-- [x] 仅在用户于 TermiPad 本机开启 MCP 后检查 OpenCode 服务状态：`termipad-local` 已在 OpenCode 1.14.33 显示 `connected`。
-- [x] 在临时配置中显式禁用同会话的 `quick9-wormhole`，并仅由 `termipad-local` 成功列出项目范围与固定任务；范围为空，未创建、批准、执行或取消任务。
-- [x] 演练结束后由用户关闭 TermiPad MCP 开关，并在临时 OpenCode 配置中将 `termipad-local` 设为 `disabled`；未创建、批准、执行或取消任务。
+- [x] Confirm OpenCode 1.14.33 on the user's Mac, the absolute path of the TermiPad executable, a normally running main app, and the local MCP state explicitly turned on by the user.
+- [x] Prepare a revocable minimal OpenCode `type: "local"` configuration on the user's Mac that explicitly denies OpenCode's shell, edit, network, and sub-agent tools; no URL, secret, or environment variable is written.
+- [x] Check the OpenCode service status only after the user turns MCP on in TermiPad on the Mac: `termipad-local` shows `connected` in OpenCode 1.14.33.
+- [x] Explicitly disable `quick9-wormhole` of the same session in the temporary configuration, and list project scopes and fixed tasks successfully through `termipad-local` only; the scope list is empty, and no task was created, approved, run, or cancelled.
+- [x] After the walkthrough the user turns off TermiPad's MCP switch, and `termipad-local` is set to `disabled` in the temporary OpenCode configuration; no task was created, approved, run, or cancelled.
 
-## OpenCode NVIDIA DeepSeek 默认模型切换
+## OpenCode NVIDIA DeepSeek default model switch
 
-- [x] 在用户本机只读发现 DeepSeek 可用模型标识；已确认没有 `nvidia` provider，且旧 `nvidia-nim-proxy.js` 当前未运行；用户确认选择当前可用的 NVIDIA NIM `nim/deepseek-ai/deepseek-v4-flash-0731`；未读取或显示 provider 配置、API Key、token 或环境变量。
-- [x] 确认准确模型标识后，已先备份再仅更新临时只读演练配置的默认模型为 `nim/deepseek-ai/deepseek-v4-flash-0731`；不改动 TermiPad MCP、其他 MCP 服务或权限拒绝规则。
-- [x] 确认 NVIDIA NIM DeepSeek V4 Flash 已在隔离会话生效，并完成仅限 TermiPad 的 `list_task_scopes` 与 `list_fixed_tasks` 只读查询；演练结束后服务恢复关闭。
+- [x] Discover the available DeepSeek model identifiers read-only on the user's Mac; confirmed there is no `nvidia` provider and the old `nvidia-nim-proxy.js` is not running; the user confirmed choosing the currently available NVIDIA NIM `nim/deepseek-ai/deepseek-v4-flash-0731`; no provider configuration, API key, token, or environment variable was read or displayed.
+- [x] After confirming the exact model identifier, back up first and then update only the default model of the temporary read-only walkthrough configuration to `nim/deepseek-ai/deepseek-v4-flash-0731`; TermiPad MCP, other MCP services, and the permission deny rules are untouched.
+- [x] Confirm NVIDIA NIM DeepSeek V4 Flash is active in the isolated session, and complete the TermiPad-only read-only queries `list_task_scopes` and `list_fixed_tasks`; the service is turned off again after the walkthrough.
 
-## 本地任务工作台保存反馈审计
+## Local task workbench save feedback audit
 
-- [x] 核对项目范围、审阅窗口、任务提案和本机 MCP 开关的实际保存/生效路径，确认均为即时本地保存；缺少保存按钮是自动保存设计，但缺少可见反馈。
-- [x] 保留自动保存，增加符合原生 macOS 习惯的“已自动保存”与本机 MCP 当前启用/关闭状态反馈；未改动任务或 MCP 安全边界。
-- [x] 增加最小 UI 回归断言，完成静态审计、提交推送并请求一次集中 macOS 验证后，再恢复 OpenCode 只读演练。（验证已通过，见后续若干 [x] 条目）
+- [x] Check the actual save/apply paths of project scopes, review windows, task proposals, and the local MCP switch, confirming all are saved locally at once; the missing save button is the auto-save design, but visible feedback was missing.
+- [x] Keep auto-save, and add "saved automatically" feedback in keeping with native macOS conventions plus the current enabled/disabled state of local MCP; no changes to the task or MCP security boundaries.
+- [x] Add a minimal UI regression assertion, complete the static audit, commit and push, and request one consolidated macOS verification before resuming the OpenCode read-only walkthrough. (Verification passed; see the several later [x] items.)
 
-## 自动保存反馈 UI 可访问性修复
+## Auto-save feedback UI accessibility fix
 
-- [x] 修复 macOS XCTest 未暴露 `Label` identifier 导致 `task-policy-auto-save-status` 断言失败的问题，将状态控件改为稳定的可访问文本元素。
-- [x] 将工作台的单参数 `onChange` 改为 macOS 14+ 兼容签名，消除弃用警告；不改变开关保存语义。
-- [x] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。（集中 macOS 验证已通过，见 commit `0cdbc90` 与 `.verification/20260827-085159`）
+- [x] Fix the failing `task-policy-auto-save-status` assertion caused by macOS XCTest not exposing the `Label` identifier, by changing the status control to a stable accessible text element.
+- [x] Change the workbench's single-parameter `onChange` to the macOS 14+ compatible signature, removing the deprecation warning; the switch's save semantics are unchanged.
+- [x] Complete the static audit, commit and push, and request one consolidated macOS verification; resume the OpenCode read-only walkthrough only after it passes. (The consolidated macOS verification passed; see commit `0cdbc90` and `.verification/20260827-085159`.)
 
-## 自动保存状态第二次 UI 层级排查
+## Auto-save status: second UI hierarchy investigation
 
-- [x] 提取 2026-08-27 `20260827-104635` 失败附件中任务工作台的精确 accessibility tree，确认带 identifier 的状态文本未被 SwiftUI 暴露为可查询元素。
-- [x] 将自动保存反馈归并到已验证可访问的任务策略边界元素标签，并调整最小 UI 断言；未移除用户可见反馈，未改动持久化、MCP、任务策略或执行器。
-- [x] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
+- [x] Extract the exact accessibility tree of the task workbench from the failure attachment of 2026-08-27 `20260827-104635`, confirming that the status text with the identifier is not exposed by SwiftUI as a queryable element.
+- [x] Fold the auto-save feedback into the label of the task policy boundary element that is verified to be accessible, and adjust the minimal UI assertion; the user-visible feedback is not removed, and persistence, MCP, the task policy, and the executor are untouched.
+- [x] Complete the static audit, commit and push, and request one consolidated macOS verification; resume the OpenCode read-only walkthrough only after it passes.
 
-## 自动保存状态 accessibilityLabel 编译修复
+## Auto-save status accessibilityLabel compile fix
 
-- [x] 修复 Xcode 26.6 中 `accessibilityLabel` 需要 SwiftUI `Text` 而非 `String` 的编译类型不匹配，保持策略边界的单一 accessibility element 设计。
-- [x] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
+- [x] Fix the compile-time type mismatch in Xcode 26.6 where `accessibilityLabel` needs a SwiftUI `Text` rather than a `String`, keeping the single-accessibility-element design of the policy boundary.
+- [x] Complete the static audit, commit and push, and request one consolidated macOS verification; resume the OpenCode read-only walkthrough only after it passes.
 
-## 自动保存状态 Text 动态标签编译修复
+## Auto-save status Text dynamic label compile fix
 
-- [x] 修复 Xcode 26.6 中 `Text` 不能以当前动态插值匹配初始化器的问题，使用 `Text(verbatim:)` 构造策略边界的动态 accessibilityLabel。
-- [x] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
+- [x] Fix the issue in Xcode 26.6 where `Text` cannot match an initializer with the current dynamic interpolation, by building the policy boundary's dynamic accessibilityLabel with `Text(verbatim:)`.
+- [x] Complete the static audit, commit and push, and request one consolidated macOS verification; resume the OpenCode read-only walkthrough only after it passes.
 
-## 自动保存状态嵌套插值编译修复
+## Auto-save status nested interpolation compile fix
 
-- [x] 修复策略边界动态 accessibilityLabel 内嵌字符串转义导致的 Xcode 26.6 解析失败，提取为独立 `Text` 属性。
-- [x] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
+- [x] Fix the Xcode 26.6 parse failure caused by escaped strings nested inside the policy boundary's dynamic accessibilityLabel, by extracting it into a separate `Text` property.
+- [x] Complete the static audit, commit and push, and request one consolidated macOS verification; resume the OpenCode read-only walkthrough only after it passes.
 
-## 自动保存状态 UI 断言稳定性修复
+## Auto-save status UI assertion stability fix
 
-- [x] 移除依赖 macOS SwiftUI 组合 `accessibilityLabel` 动态文本的脆弱断言，保留用户可见自动保存状态文本。
-- [x] 将 UI 冒烟覆盖收敛到稳定可见的任务工作台边界、MCP 开关和固定本地安全说明；不改动自动保存、MCP、任务策略或执行器。
-- [x] 完成静态审计、提交推送并请求一次集中 macOS 验证；通过后才恢复 OpenCode 只读演练。
+- [x] Remove the fragile assertion that depended on the dynamic text of macOS SwiftUI's combined `accessibilityLabel`, keeping the user-visible auto-save status text.
+- [x] Narrow the UI smoke coverage to the stably visible task workbench boundary, the MCP switch, and the fixed local security note; auto-save, MCP, the task policy, and the executor are untouched.
+- [x] Complete the static audit, commit and push, and request one consolidated macOS verification; resume the OpenCode read-only walkthrough only after it passes.
 
-## T2 OpenCode MCP 协议版本兼容修复
+## T2 OpenCode MCP protocol version compatibility fix
 
-- [x] 核验 OpenCode 1.14.33 发出的 MCP `initialize.protocolVersion` 为 `2025-11-25`，确认其与 TermiPad 当前固定 `2025-03-26` 的不匹配原因。
-- [x] 实现仅接受已核验 `2025-03-26` 与 `2025-11-25` 的精确版本协商及 OpenCode 初始化单元测试；未改动五个工具、严格 schema、CFMessagePort、SwiftData 隔离、请求限速或本机审阅/执行边界。
-- [x] 已完成静态审计并推送 `5c7d202`，并在 2026-08-27 `20260827-085159` 集中 macOS 验证通过；仅待一次 OpenCode 只读连接重试，不创建、批准、执行或取消任务。
+- [x] Verify that the MCP `initialize.protocolVersion` sent by OpenCode 1.14.33 is `2025-11-25`, confirming why it does not match TermiPad's currently fixed `2025-03-26`.
+- [x] Implement exact version negotiation that accepts only the verified `2025-03-26` and `2025-11-25`, plus an OpenCode initialization unit test; no changes to the five tools, the strict schemas, CFMessagePort, SwiftData isolation, request rate limiting, or the local review/execution boundary.
+- [x] The static audit is complete and `5c7d202` is pushed, and the consolidated macOS verification passed on 2026-08-27 `20260827-085159`; only one OpenCode read-only connection retry remains, with no task created, approved, run, or cancelled.
 
-## UI 冒烟统一启动失败排查
+## UI smoke: shared launch failure investigation
 
-- [x] 收集 2026-08-27 `20260827-082441` 的最小失败断言，确认六个 UI 场景均因 App 已有可访问界面但未被判定为 `.runningForeground` 而停在共同启动位置。
-- [x] 仅修复 UI 测试启动、窗口恢复或测试隔离的共同根因：先确保可访问主窗口，再将“前台或可访问主窗口”作为启动证据；不改动 OpenCode 协议协商、MCP 工具、CFMessagePort、任务策略、执行器或网络边界。
-- [x] 完成静态审计、提交推送并在 2026-08-27 `20260827-085159` 集中 macOS 回归验证通过；随后才重试 OpenCode 只读接入。
+- [x] Collect the minimal failing assertion from 2026-08-27 `20260827-082441`, confirming that all six UI scenarios stop at the shared launch step because the app already has an accessible UI but is not judged to be `.runningForeground`.
+- [x] Fix only the shared root cause in UI test launch, window restoration, or test isolation: ensure an accessible main window first, then accept "foreground or an accessible main window" as launch evidence; no changes to the OpenCode protocol negotiation, MCP tools, CFMessagePort, the task policy, the executor, or the network boundary.
+- [x] Complete the static audit, commit and push, and pass the consolidated macOS regression verification on 2026-08-27 `20260827-085159`; only then retry the OpenCode read-only integration.

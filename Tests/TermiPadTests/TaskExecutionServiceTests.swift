@@ -2,16 +2,16 @@ import XCTest
 import SwiftData
 @testable import TermiPad
 
-/// 真实进程行为测试（t0-checklist §4.3：进程树和取消证据）。
+/// Real process behavior tests (t0-checklist §4.3: process tree and cancellation evidence).
 ///
-/// 唯一允许 `Process(` 的生产文件是 `Sources/TaskExecutionService.swift`（verify-macos.sh
-/// 第 18 条静态守卫）。本测试**不**直接构造 `Process`，只通过
-/// `TaskExecutionCoordinator` 公共接口启动系统 `/bin/sh` 进程。
+/// The only production file allowed to use `Process(` is `Sources/TaskExecutionService.swift` (static guard 18 in
+/// verify-macos.sh). This test does **not** construct `Process` directly; it only starts
+/// the system `/bin/sh` process through the public `TaskExecutionCoordinator` interface.
 ///
-/// 等待模式：`TaskExecutionCoordinator.start(_:scope:onCompletion:)` 的
-/// `onCompletion` 闭包在 `finish(intentID:exitCode:)` 之后被调用。这是测试中
-/// "process 已结束且 SwiftData 已写入" 的最可靠信号。配合 `Task { @MainActor ... }`
-/// 跳到主 actor 的 terminationHandler，避免轮询 main-actor 状态。
+/// Wait pattern: the `onCompletion` closure of `TaskExecutionCoordinator.start(_:scope:onCompletion:)`
+/// is called after `finish(intentID:exitCode:)`. In tests this is the most reliable signal that
+/// "the process has ended and SwiftData has been written". Combined with the terminationHandler hopping to the main actor
+/// via `Task { @MainActor ... }`, it avoids polling main-actor state.
 @MainActor
 final class TaskExecutionServiceTests: XCTestCase {
     private var container: ModelContainer!
@@ -26,7 +26,7 @@ final class TaskExecutionServiceTests: XCTestCase {
             .appendingPathComponent("TermiPadTaskExec-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: scratchDirectory, withIntermediateDirectories: true)
 
-        // 模拟一个最小可执行项目结构：Package.swift / project.yml / scripts/verify-macos.sh
+        // Simulate a minimal executable project structure: Package.swift / project.yml / scripts/verify-macos.sh
         try Data("// fixture".utf8).write(to: scratchDirectory.appendingPathComponent("Package.swift"))
         try Data("name: fixture".utf8).write(to: scratchDirectory.appendingPathComponent("project.yml"))
         scriptsDirectory = scratchDirectory.appendingPathComponent("scripts", isDirectory: true)
@@ -41,7 +41,7 @@ final class TaskExecutionServiceTests: XCTestCase {
         try? FileManager.default.removeItem(at: scratchDirectory)
     }
 
-    // MARK: - 进程树和取消证据
+    // MARK: - Process tree and cancellation evidence
 
     func testExitCodeZeroMarksSucceeded() throws {
         try makeVerifyScript("""
@@ -89,21 +89,21 @@ final class TaskExecutionServiceTests: XCTestCase {
 
         TaskExecutionCoordinator.shared.start(intent: intent, scope: scope) {}
 
-        // 等 process 真的进入 running 集合（不是依赖 onCompletion）
+        // Wait for the process to actually enter the running set (do not rely on onCompletion)
         let startDeadline = Date().addingTimeInterval(5)
         while !TaskExecutionCoordinator.shared.runningIntentIDs.contains(intent.id), Date() < startDeadline {
             Thread.sleep(forTimeInterval: 0.05)
         }
         XCTAssertTrue(TaskExecutionCoordinator.shared.runningIntentIDs.contains(intent.id),
-                      "process 应在 5 秒内进入 runningIntentIDs。")
+                      "the process should enter runningIntentIDs within 5 seconds.")
 
-        // 显式 stop() — 同步路径：Sources/TaskExecutionService.swift:168-173
-        // markStopped() 立即设 executionState = .stopped + finishedAt
+        // Explicit stop() — synchronous path: Sources/TaskExecutionService.swift:168-173
+        // markStopped() immediately sets executionState = .stopped + finishedAt
         TaskExecutionCoordinator.shared.stop(intent: intent)
         XCTAssertEqual(intent.executionState, .stopped)
         XCTAssertNotNil(intent.executionFinishedAt)
-        // 不再等 process 真的退出：activeProcesses 是 private，无法测 OS 行为
-        // （但 stop 内部已调 process.terminate() 触发 SIGTERM，OS 负责回收）
+        // Do not wait for the process to really exit: activeProcesses is private, so OS behavior cannot be tested
+        // (but stop already calls process.terminate() internally to send SIGTERM, and the OS reclaims it)
     }
 
     func testAlreadyStartedIntentIsRejected() throws {
@@ -117,40 +117,40 @@ final class TaskExecutionServiceTests: XCTestCase {
         XCTAssertTrue({
             if case .ready = firstDecision { return true }
             return false
-        }(), "第一次 start 应准备执行请求。")
+        }(), "The first start should prepare an execution request.")
 
-        // 等 process 进入 running 集合
+        // Wait for the process to enter the running set
         let startDeadline = Date().addingTimeInterval(5)
         while !TaskExecutionCoordinator.shared.runningIntentIDs.contains(intent.id), Date() < startDeadline {
             Thread.sleep(forTimeInterval: 0.05)
         }
 
-        // 第二次 start 同一个 intent 应被 .taskAlreadyStarted 拒绝
+        // A second start of the same intent should be rejected with .taskAlreadyStarted
         let secondDecision = TaskExecutionCoordinator.shared.start(intent: intent, scope: scope) {}
         XCTAssertEqual(secondDecision, .rejected(.taskAlreadyStarted))
         XCTAssertEqual(intent.executionState, .startRejected)
         XCTAssertEqual(intent.executionRejectionReason, .taskAlreadyStarted)
 
-        // 清理：stop 第一次启动的 process
+        // Cleanup: stop the process from the first start
         TaskExecutionCoordinator.shared.stop(intent: intent)
     }
 
     func testUnapprovedIntentIsRejected() throws {
-        // 不通过 makeApprovedIntent；直接 init 保留默认 .pendingReview
+        // Not via makeApprovedIntent; init directly to keep the default .pendingReview
         let intent = TaskIntent(
             projectScopeID: scope.id,
             kind: .swiftPackageTests,
             risk: .low,
             expiresAt: Date().addingTimeInterval(600)
         )
-        XCTAssertEqual(intent.state, .pendingReview, "新建 intent 默认 pendingReview。")
+        XCTAssertEqual(intent.state, .pendingReview, "A new intent defaults to pendingReview.")
         let decision = TaskExecutionCoordinator.shared.start(intent: intent, scope: scope) {}
         XCTAssertEqual(decision, .rejected(.intentNotApproved))
         XCTAssertEqual(intent.executionState, .startRejected)
         XCTAssertEqual(intent.executionRejectionReason, .intentNotApproved)
     }
 
-    // MARK: - 辅助
+    // MARK: - Helpers
 
     private func makeApprovedIntent(kind: TaskKind) throws -> TaskIntent {
         let intent = TaskIntentPolicy.makeIntent(scope: scope, kind: kind)
@@ -161,8 +161,8 @@ final class TaskExecutionServiceTests: XCTestCase {
     }
 
     private func makeVerifyScript(_ content: String) throws {
-        // 用 .macOSVerification 任务的固定文件名：scripts/verify-macos.sh
-        // （见 Sources/TaskIntent.swift:243-251 FixedTaskCatalog 的 requiredRelativePaths）
+        // Use the fixed file name of the .macOSVerification task: scripts/verify-macos.sh
+        // (see requiredRelativePaths of FixedTaskCatalog in Sources/TaskIntent.swift:243-251)
         let path = scriptsDirectory.appendingPathComponent("verify-macos.sh")
         try content.write(to: path, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: path.path)

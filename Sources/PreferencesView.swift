@@ -11,7 +11,7 @@ struct PreferencesView: View {
     @Query(sort: \CandidateTool.discoveredAt, order: .reverse) private var candidates: [CandidateTool]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
-    @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.simplifiedChinese.rawValue
+    @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.defaultLanguage.rawValue
     @AppStorage("TermiPad.appearance") private var appearanceRawValue = AppAppearance.system.rawValue
     @AppStorage("TermiPad.terminalTarget") private var terminalTargetRawValue = TerminalTarget.systemTerminal.rawValue
     @AppStorage("TermiPad.autoEnrich") private var autoEnrich = false
@@ -45,7 +45,7 @@ struct PreferencesView: View {
     }
 
     private var language: AppLanguage {
-        AppLanguage(rawValue: languageRawValue) ?? .simplifiedChinese
+        AppLanguage(rawValue: languageRawValue) ?? .defaultLanguage
     }
 
     private var appearance: Binding<AppAppearance> {
@@ -220,7 +220,7 @@ struct PreferencesView: View {
                     .foregroundStyle(.secondary)
             }
 
-            // M2a 异地隧道（docs/m2-secure-remote-session-design.md §5）
+            // M2a remote tunnel (docs/m2-secure-remote-session-design.md §5)
             Section(AppCopy.text("mobileTunnel", language: language)) {
                 HStack {
                     Toggle(AppCopy.text("mobileTunnel", language: language), isOn: Binding(
@@ -250,12 +250,12 @@ struct PreferencesView: View {
                 Text(AppCopy.text("mobileTunnelHint", language: language))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                // M3 每日远程窗口（docs/m3-remote-allow-window-design.md §3.4）：
-                // 触摸 ID 开窗 → 当日手机操作免本机确认；锁屏/跨日/撤销即失效。
+                // M3 daily remote window (docs/m3-remote-allow-window-design.md §3.4):
+                // open the window with Touch ID → phone actions need no local confirmation that day; locking, crossing midnight, or revoking invalidates it.
                 RemoteAllowWindowSection()
 
-                // M2b 输出档位（docs/m2b-remote-task-console-design.md §5.4）：
-                // Mac 是权威——手机端不持有档位状态，回传内容自然体现档位效果。
+                // M2b output visibility (docs/m2b-remote-task-console-design.md §5.4):
+                // the Mac is the authority — the phone holds no visibility state; the returned content naturally reflects the level's effect.
                 Picker(AppCopy.text("remoteOutputVisibility", language: language), selection: Binding(
                     get: {
                         MobileTaskConsoleService.OutputVisibility(
@@ -419,9 +419,9 @@ struct PreferencesView: View {
         .onAppear {
             pairingService.configure(modelContext: modelContext)
         }
-        // 手机启动/任务确认弹窗已提升到 app 根视图（TermiPadApp 的
-        // MobileLaunchConfirmationRootView）——用户不在设置页时也要能弹，
-        // 此处保留挂载会与根视图重复弹窗。
+        // The phone launch / task confirmation prompt has been lifted to the app's root view (TermiPadApp's
+        // MobileLaunchConfirmationRootView) — it must be able to appear even when the user is not on the Settings page,
+        // and keeping it mounted here would show a duplicate prompt alongside the root view.
     }
 
     private func saveAPIKey() {
@@ -471,8 +471,8 @@ struct PreferencesView: View {
         }
     }
 
-    /// 把 CheckResult 转成用户可见的 alert 文本。同 CheckResult
-    /// 的 displaySummary 但走 i18n 模板（zh/en 各有不同文案）。
+    /// Turn a CheckResult into alert text the user sees. Same as CheckResult's
+    /// displaySummary, but via the i18n templates (zh/en each have different copy).
     private func updateCheckMessage(for result: UpdateCheckService.CheckResult) -> String {
         switch result {
         case .neverChecked:
@@ -488,9 +488,9 @@ struct PreferencesView: View {
         }
     }
 
-    /// 把 CheckResult 转成 alert 内容：升级时显示 "在 GitHub 上打开" 按钮，
-    /// 其它情况只显示状态文字。Source-of-truth 在 UpdateCheckService——这个函数
-    /// 只负责把 enum 翻译成 AppCopy 模板，不做网络调用。
+    /// Turn a CheckResult into alert content: on an upgrade show the "Open on GitHub" button,
+    /// otherwise show only the status text. The source of truth is UpdateCheckService — this function
+    /// only translates the enum into AppCopy templates and makes no network calls.
 
     private func prepareDiagnosticsExport() {
         do {
@@ -582,32 +582,32 @@ struct PreferencesView: View {
 }
 
 
-/// M3 今日远程窗口 Section（独立视图——需要自己的 LAContext 状态）。
+/// M3 Today's Remote Window section (a separate view — it needs its own LAContext state).
 struct RemoteAllowWindowSection: View {
     @ObservedObject private var allowWindow = RemoteAllowWindow.shared
-    @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.simplifiedChinese.rawValue
+    @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.defaultLanguage.rawValue
     @State private var authErrorMessage: String?
 
     private var language: AppLanguage {
-        AppLanguage(rawValue: languageRawValue) ?? .simplifiedChinese
+        AppLanguage(rawValue: languageRawValue) ?? .defaultLanguage
     }
 
     var body: some View {
-        Section("今日远程窗口（M3）") {
+        Section("Today's Remote Window (M3)") {
             HStack {
                 if allowWindow.isOpen {
-                    Label("已开启——今日内手机操作免确认", systemImage: "checkmark.shield")
+                    Label("On — phone actions need no confirmation for the rest of today", systemImage: "checkmark.shield")
                         .foregroundStyle(.green)
                     Spacer()
-                    Text("剩余 \(formatRemaining(allowWindow.secondsRemaining))")
+                    Text("\(formatRemaining(allowWindow.secondsRemaining)) remaining")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Button("关闭", role: .destructive) {
+                    Button("Close", role: .destructive) {
                         allowWindow.close()
                         LockStateMonitor.shared.setActive(false)
                     }
                 } else {
-                    Button("开启今日远程窗口") { openWindowWithAuth() }
+                    Button("Open Today's Remote Window") { openWindowWithAuth() }
                         .accessibilityIdentifier("settings-remote-allow-open")
                 }
             }
@@ -616,7 +616,7 @@ struct RemoteAllowWindowSection: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
-            Text("开启后今天内手机启动/任务免本机确认。Mac 锁屏、重启或撤销配对都会立即关闭窗口；跨天需重新解锁。")
+            Text("Once opened, phone launches and tasks need no local confirmation for the rest of today. Locking the Mac, restarting, or revoking pairing closes the window immediately; a new day requires unlocking again.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -627,13 +627,13 @@ struct RemoteAllowWindowSection: View {
         let context = LocalAuthentication.LAContext()
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
-            authErrorMessage = "本机未配置触摸 ID/密码，无法开启远程窗口。"
+            authErrorMessage = "Touch ID / a password is not set up on this Mac, so the remote window cannot be opened."
             return
         }
-        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "开启今日远程窗口") { success, _ in
+        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Open Today's Remote Window") { success, _ in
             Task { @MainActor in
                 guard success else {
-                    authErrorMessage = "认证未通过，窗口未开启。"
+                    authErrorMessage = "Authentication failed. The window was not opened."
                     return
                 }
                 RemoteAllowWindow.shared.open(authenticated: true)
@@ -645,6 +645,6 @@ struct RemoteAllowWindowSection: View {
     private func formatRemaining(_ seconds: TimeInterval) -> String {
         let hours = Int(seconds) / 3600
         let minutes = (Int(seconds) % 3600) / 60
-        return hours > 0 ? "\(hours)小时\(minutes)分" : "\(minutes)分"
+        return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
     }
 }

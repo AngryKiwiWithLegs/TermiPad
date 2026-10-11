@@ -1,101 +1,101 @@
-# TermiPad 接手后计划（post-takeover plan）
+# TermiPad post-takeover plan
 
-**来源：** 对齐 `docs/t0-development-preparation-checklist.md` §6 "后续阶段才需要的外部条件" 全表 5 行 + `docs/product-roadmap.md` §5 阶段 4-7。
+**Source:** Aligned with all 5 rows of the table in `docs/t0-development-preparation-checklist.md` §6 "external conditions needed only in later phases" + `docs/product-roadmap.md` §5 stages 4-7.
 
-**状态：** 阶段 2 接手 commit 2.2（2026-08-29，zcode）。**纯对照文档**——把原方案 §6 的 5 行 × 当前状态 × 接手进展画成一张表。
+**Status:** Stage 2 takeover commit 2.2 (2026-08-29, zcode). **A pure cross-reference document** — it draws the 5 rows of §6 of the original plan × current status × takeover progress as one table.
 
-**作用范围：** 让任何接手者 / 用户能一眼看到"原方案剩下什么、谁在阻塞、我做到哪了"。
+**Scope:** Let anyone taking over, or the user, see at a glance "what is left of the original plan, who is blocking, and how far I have got".
 
-## 1. 接手点
+## 1. Takeover point
 
-- **上一个 AI（Manus AI）停下的 commit**：`8e73e76` "Document Launchpad handoff"（2026-08-28）
-- **接手者**（zcode）的**第一个 commit**：`1189a30` "Mark TaskMCPBridge.serviceName as nonisolated"（2026-08-29，Swift 6 警告修 + todo 事实补全）
-- **接手后阶段 1 完成**（6 commit，feature/track-protocol-materials 分支）：原方案 §4 "必须维护的材料与证据" 6 行材料全部补强
-- **接手后阶段 2 进行中**（2 commit，feature/m0-m1-design 分支）：M0/M1 移动端入口设计文档
-- **当前文档**：本文
+- **The commit where the previous AI (Manus AI) stopped**: `8e73e76` "Document Launchpad handoff" (2026-08-28)
+- **The first commit** of the one taking over (zcode): `1189a30` "Mark TaskMCPBridge.serviceName as nonisolated" (2026-08-29, Swift 6 warning fix + todo facts filled in)
+- **Post-takeover stage 1 complete** (6 commits, branch feature/track-protocol-materials): all 6 rows of materials in §4 of the original plan, "materials and evidence that must be maintained", are hardened
+- **Post-takeover stage 2 in progress** (2 commits, branch feature/m0-m1-design): the M0/M1 mobile entry design document
+- **Current document**: this one
 
-## 2. 原方案 §6 全表交叉（"5 个待启动阶段"现状）
+## 2. Cross-reference of the whole §6 table of the original plan (status of the "5 phases waiting to start")
 
-按 `docs/t0-development-preparation-checklist.md` §6 表格 5 行 × 当前状态 × 谁在阻塞：
+The 5 rows of the table in `docs/t0-development-preparation-checklist.md` §6 × current status × who is blocking:
 
-| 原方案 §6 行 | 对应 `product-roadmap.md` 阶段 | 我能做的（无外部条件） | 阻塞在你（外部条件） | 下一个分支名 |
+| Row of §6 in the original plan | Matching `product-roadmap.md` stage | What I can do (no external conditions) | Blocked on you (external conditions) | Next branch name |
 |---|---|---|---|---|
-| 1. 原生 iPhone 同网配对 | 阶段 4: M0/M1 | ✅ **M0 已实现并合入 master**。**M1 Mac 侧 + iPhone 伴侣已实现**（`feature/m1-local-network-pairing`，8 commit）| ⚠️ **G4 实测进行中（3/7 通过，2026-09-06）**：Bonjour 发现 ✅ 指纹比对 ✅ 配对落库 ✅；会话加密/启动请求/撤销实测待请求通道实现；7 天重签待观察。长期安装/TestFlight 仍 ❌ 付费会员 | 下一批：会话复用协议 + listTools 通道 |
-| 2. 原生 iPhone 长期安装/分发 | 阶段 7 | ❌（M1 完成后才有意义） | ❌ Apple Developer Program 账户 + App Store / TestFlight 资质 | 待 M1 完成后单独立项 |
-| 3. 异地会话 / PWA | 阶段 5: M2 | ❌（M1 完成后才有意义） | ❌ **G5 闸门**：HTTPS origin + 设备身份 + 会话服务 + 撤销模型 | 待 M1 完成后：`feature/m2-remote-secure-session` |
-| 4. Telegram Mini App | 阶段 4/5 备线（与 1 互斥） | ❌ | ❌ 私人 Bot + Bot token 的 Keychain 存储 + 固定 HTTPS origin + 服务端 `initData` 验证 | 待 M0 实现完成后，与 iPhone 主线对比，由用户拍板入口路线 |
-| 5. macOS 外部分发（Developer ID / Hardened Runtime / 公证 / Gatekeeper 冷启动）| 阶段 7 | ✅ 脚本骨架与文档已就位（`scripts/release-build.sh` + `docs/release-build.md`）| ❌ 付费 Apple Developer 证书 + 真实旧 store 升级验证——实际签名/公证未执行 | 骨架已完成；执行等付费证书 |
+| 1. Native iPhone same-network pairing | Stage 4: M0/M1 | ✅ **M0 is implemented and merged into master**. **M1 Mac side + iPhone companion are implemented** (`feature/m1-local-network-pairing`, 8 commits) | ⚠️ **G4 testing in progress (3/7 passed, 2026-09-06)**: Bonjour discovery ✅ fingerprint comparison ✅ pairing persisted ✅; testing of session encryption / launch requests / revocation awaits the request channel implementation; 7-day re-signing to be observed. Long-term install / TestFlight are still ❌ paid membership | Next batch: session resume protocol + listTools channel |
+| 2. Native iPhone long-term install / distribution | Stage 7 | ❌ (meaningful only after M1 is complete) | ❌ Apple Developer Program account + App Store / TestFlight eligibility | A separate project after M1 is complete |
+| 3. Remote session / PWA | Stage 5: M2 | ❌ (meaningful only after M1 is complete) | ❌ **Gate G5**: HTTPS origin + device identity + session service + revocation model | After M1 is complete: `feature/m2-remote-secure-session` |
+| 4. Telegram Mini App | Backup line for stages 4/5 (mutually exclusive with 1) | ❌ | ❌ A private Bot + Keychain storage of the Bot token + a fixed HTTPS origin + server-side `initData` validation | After the M0 implementation is complete, compare with the iPhone main line and let the user decide the entry route |
+| 5. macOS external distribution (Developer ID / Hardened Runtime / notarization / Gatekeeper cold start) | Stage 7 | ✅ The script skeleton and documentation are in place (`scripts/release-build.sh` + `docs/release-build.md`) | ❌ A paid Apple Developer certificate + real old-store upgrade verification — actual signing/notarization has not been run | Skeleton done; execution waits for the paid certificate |
 
-**结论（2026-09-06 更新）**：M0 已实现并合入 master；M1 开发验证已解锁（免费 personal team 签名），实现分支 `feature/m1-local-network-pairing` 进行中。剩余阻塞收敛为：真实 iPhone + 局域网（G4 双设备实测）、付费 Apple Developer（长期分发/TestFlight/iCloud/G6）。
+**Conclusion (updated 2026-09-06)**: M0 is implemented and merged into master; M1 development verification is unlocked (free personal team signing), and the implementation branch `feature/m1-local-network-pairing` is in progress. The remaining blockers have narrowed to: a real iPhone + LAN (G4 two-device testing) and a paid Apple Developer membership (long-term distribution / TestFlight / iCloud / G6).
 
-## 3. 阶段 1 完成的工作（commit `414a417` in `feature/track-protocol-materials`）
+## 3. Work completed in stage 1 (commit `414a417` in `feature/track-protocol-materials`)
 
-按原方案 §4 6 行材料，每行的 zcode 补强：
+zcode's hardening for each of the 6 rows of materials in §4 of the original plan:
 
-| 原方案 §4 行 | 文档 / 守卫 / 测试 commit | 改了什么 |
+| Row of §4 in the original plan | Document / guard / test commit | What changed |
 |---|---|---|
-| 1. TaskIntent 数据字典 | `46fb263` `docs/task-intent-data-dictionary.md` | 158 行文档：5 实体 × 6 枚举 × 每字段"跨入口 / 备份 / 诊断" 三轴 |
-| 2. 策略拒绝矩阵 | `47f2721` 改 `TaskIntentPolicyTests.swift` | 78 → 88 单测：保留 5 集成测试 + 新增 10 个独立命名测试（9 拒绝路径 + 1 scope ID mismatch）|
-| 3. 进程树和取消证据 | `f166db3` 新增 `TaskExecutionServiceTests.swift` | 88 → 93 单测：5 个真实进程集成测试（exit 0 / exit 7 / stop / already started / unapproved）|
-| 4. 最小结果规范 | `05ca7e4` `docs/task-result-minimal-spec.md` + 2 个新 `DiagnosticEventKind` + 1 行 bridge 双层审计 | 115 行文档：4 状态枚举 × 字段白名单 × 红线表 × 19 诊断事件映射 |
-| 5. 迁移与备份决定 | `6b931c4` 新增 `BackupServiceTaskExclusionTests.swift` + `scripts/verify-macos.sh` 新增 `backup_code` 守卫 | 93 → 96 单测 + 23 → 24 静态守卫 |
-| 6. 无害测试任务集 | `414a417` 改 `Sources/TaskIntent.swift` | FixedTaskCatalog 3 → 5（加 `swiftBuild` + `swiftPackageCheck`） |
-| 7. 验证产物 | 维持现状 | 每次 commit 跑 `./scripts/verify-macos.sh`，归档到 `.verification/<时间戳>/` |
+| 1. TaskIntent data dictionary | `46fb263` `docs/task-intent-data-dictionary.md` | A 158-line document: 5 entities × 6 enums × the three axes "cross-entry / backup / diagnostics" per field |
+| 2. Policy rejection matrix | `47f2721` changes `TaskIntentPolicyTests.swift` | 78 → 88 unit tests: keeps 5 integration tests + adds 10 independently named tests (9 rejection paths + 1 scope ID mismatch) |
+| 3. Process tree and cancellation evidence | `f166db3` adds `TaskExecutionServiceTests.swift` | 88 → 93 unit tests: 5 real-process integration tests (exit 0 / exit 7 / stop / already started / unapproved) |
+| 4. Minimal result spec | `05ca7e4` `docs/task-result-minimal-spec.md` + 2 new `DiagnosticEventKind`s + 1 line of two-layer bridge audit | A 115-line document: 4 state enums × field allowlist × red-line table × mapping of 19 diagnostic events |
+| 5. Migration and backup decision | `6b931c4` adds `BackupServiceTaskExclusionTests.swift` + a new `backup_code` guard in `scripts/verify-macos.sh` | 93 → 96 unit tests + 23 → 24 static guards |
+| 6. Harmless test task set | `414a417` changes `Sources/TaskIntent.swift` | FixedTaskCatalog 3 → 5 (adds `swiftBuild` + `swiftPackageCheck`) |
+| 7. Verification artifacts | Unchanged | Every commit runs `./scripts/verify-macos.sh`, archived to `.verification/<timestamp>/` |
 
-## 4. 阶段 2 进展（`feature/m0-m1-design` 分支）
+## 4. Stage 2 progress (branch `feature/m0-m1-design`)
 
-| commit | 内容 | 状态 |
+| commit | Content | Status |
 |---|---|---|
-| `f3d5196` `docs/m0-m1-mobile-entry-design.md` | M0 数据模型 + 6 字段语义 + UI section 设计 + 备份隐私契约；M1 Network/Bonjour/TLS 选型 + 配对 7 步流程 + G4 闸门说明 | ✅ push 完成 |
+| `f3d5196` `docs/m0-m1-mobile-entry-design.md` | M0 data model + semantics of the 6 fields + UI section design + backup privacy contract; M1 Network/Bonjour/TLS choice + the 7-step pairing flow + notes on gate G4 | ✅ pushed |
 
-`post-takeover-plan.md`（**本文**）对照 §6 全表（commit 2.2）
+`post-takeover-plan.md` (**this document**) cross-references the whole §6 table (commit 2.2)
 
-## 5. 接手进展总结图
-
-```
-8e73e76 (Manus AI 停下)
-    │
-    ├── 1189a30 (Swift 6 警告 + todo 事实补全) ←—— zcode 第一笔
-    │
-    ├── feature/track-protocol-materials (阶段 1, 6 commit)
-    │     ├── 46fb263 §4.1 数据字典
-    │     ├── 47f2721 §4.2 策略拒绝矩阵
-    │     ├── f166db3 §4.3 进程树证据
-    │     ├── 05ca7e4 §4.4 最小结果规范
-    │     ├── 6b931c4 §4.5 迁移与备份决定
-    │     └── 414a417 §4.6 无害测试任务集
-    │
-    └── feature/m0-m1-design (阶段 2, 2 commit)
-          ├── f3d5196 M0/M1 设计文档
-          └── (本文) 2.2 post-takeover plan ←—— 你正在读
-```
-
-## 6. 下一步决策树
-
-按从"我现在能做的"到"阻塞在你的" 5 个原方案阶段：
+## 5. Summary diagram of takeover progress
 
 ```
-                                ┌── (a) 我能做的：阶段 3 release-build 脚本骨架 (1 commit) ──┐
+8e73e76 (where Manus AI stopped)
+    │
+    ├── 1189a30 (Swift 6 warning + todo facts filled in) ←—— zcode's first commit
+    │
+    ├── feature/track-protocol-materials (stage 1, 6 commits)
+    │     ├── 46fb263 §4.1 data dictionary
+    │     ├── 47f2721 §4.2 policy rejection matrix
+    │     ├── f166db3 §4.3 process tree evidence
+    │     ├── 05ca7e4 §4.4 minimal result spec
+    │     ├── 6b931c4 §4.5 migration and backup decision
+    │     └── 414a417 §4.6 harmless test task set
+    │
+    └── feature/m0-m1-design (stage 2, 2 commits)
+          ├── f3d5196 M0/M1 design document
+          └── (this document) 2.2 post-takeover plan ←—— you are reading this
+```
+
+## 6. Decision tree for next steps
+
+The 5 phases of the original plan, from "what I can do now" to "blocked on you":
+
+```
+                                ┌── (a) What I can do: stage 3 release-build script skeleton (1 commit) ──┐
                                 │                                                                │
-                                │   ┌── (b) M0 实现 (3-5 commit, 无外部阻塞) ──┐                │
+                                │   ┌── (b) M0 implementation (3-5 commits, no external blocker) ──┐     │
                                 │   │                                          │                │
-原方案 §6 5 行 ──               │   │                                          │                │
-   1. iPhone 同网配对 ───────►   ─┤   │                                          │                │
-   2. iPhone 长期分发 ──────►   阻塞 Apple Developer                           │                │
-   3. 异地会话 / PWA ────────►   阻塞 G5 (HTTPS origin + 设备身份)          │                │
-   4. Telegram Mini App ────►   阻塞 Bot + HTTPS + Apple Developer             │                │
-   5. macOS 外部分发 ────────►   ─┘   ───────────────────────────────────┘                │
+5 rows of §6 in the original plan ──  │   │                                          │                │
+   1. iPhone same-network pairing ───────►   ─┤   │                                          │                │
+   2. iPhone long-term distribution ──────►   blocked on Apple Developer                      │                │
+   3. Remote session / PWA ────────►   blocked on G5 (HTTPS origin + device identity)          │                │
+   4. Telegram Mini App ────►   blocked on Bot + HTTPS + Apple Developer             │                │
+   5. macOS external distribution ────────►   ─┘   ───────────────────────────────────┘                │
                                                                                           │
                                                                           ⬇︎                ⬇︎
                                                                 feature/m0-mobile-entry-prototype
                                                                                           feature/release-build-skeleton
 ```
 
-**5 个原方案阶段中，阶段 1 已完成 1/5（无外部阻塞的 §4 维护材料）**。**阶段 2 启动设计（commit 2.1/2.2）**。**M0 实质实现（commit 3.x）是我能立即推进的下一笔**——无 G4 阻塞。
+**Of the 5 phases of the original plan, stage 1 has completed 1/5 (the §4 maintained materials with no external blocker)**. **Stage 2 has started the design (commits 2.1/2.2)**. **The actual M0 implementation (commit 3.x) is the next thing I can push forward immediately** — not blocked by G4.
 
-## 7. 维护规则
+## 7. Maintenance rules
 
-- **任何 M0/M1/M2/M3 启动 commit**：必须**先**更新 §2 / §6 表格**后**写代码。表格是闸门状态真相。
-- **任何新发现 G4/G5 闸门状态变化**：在 commit message 里**显式**说"G4 状态：✅ / ❌ / ⚠️"。
-- **任何 post-takeover-plan 字段过期**：下一笔接手 commit 必须更新本文 + 在 commit message 引用。
-- **本文不应删除任何历史分支引用**——保留完整接手路径作为审计证据。
+- **Any commit starting M0/M1/M2/M3**: must update the tables in §2 / §6 **first** and write code **afterwards**. The tables are the source of truth for gate status.
+- **Any newly found change in the status of gates G4/G5**: say **explicitly** in the commit message "G4 status: ✅ / ❌ / ⚠️".
+- **Any outdated field in post-takeover-plan**: the next takeover commit must update this document + reference it in the commit message.
+- **This document should not delete any historical branch reference** — the full takeover path is kept as audit evidence.

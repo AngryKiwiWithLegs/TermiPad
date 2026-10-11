@@ -1,9 +1,9 @@
 import Foundation
 import SwiftData
 
-/// TermiPad 的 SwiftData 容器工厂。
+/// TermiPad's SwiftData container factory.
 ///
-/// 生产环境使用系统默认位置；测试可传入固定 store URL，以验证旧数据在重新打开容器后仍可读取。
+/// Production uses the system default location; tests can pass a fixed store URL to verify that old data is still readable after reopening the container.
 enum TermiPadDataStore {
     static let schema = Schema([
         TerminalTool.self,
@@ -49,12 +49,12 @@ enum TermiPadDataStore {
         } else if isStoredInMemoryOnly {
             configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         } else {
-            // 专用 store URL：绝不使用 SwiftData 的默认位置（~/Library/Application Support/
-            // default.store）。同一台 Mac 上的其他 SwiftData 应用（如 sibling 项目 Launchpad）
-            // 也使用该默认文件名，双方先后打开会把彼此的 schema 顶掉，导致本应用落入
-            // 恢复模式且数据表被丢弃。固定写到 Application Support/TermiPad/ 专属目录。
+            // Dedicated store URL: never use SwiftData's default location (~/Library/Application Support/
+            // default.store). Other SwiftData apps on the same Mac (such as the sibling project Launchpad)
+            // use that default file name too; opening one after the other would overwrite each other's schema, sending this app into
+            // recovery mode with its tables dropped. Always write to the dedicated Application Support/TermiPad/ directory.
             let dedicatedURL = try defaultDedicatedStoreURL()
-            // iCloud 同步必须经过独立的账户、容器、冲突与迁移设计；不能因未来出现 entitlement 而隐式开启。
+            // iCloud sync must go through a separate account, container, conflict, and migration design; it must not be enabled implicitly just because an entitlement appears in the future.
             configuration = ModelConfiguration(
                 nil,
                 schema: schema,

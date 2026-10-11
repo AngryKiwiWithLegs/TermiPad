@@ -1,77 +1,77 @@
-# TermiPad T0 开发前注意事项与准备清单
+# TermiPad T0 pre-development notes and preparation checklist
 
-**适用阶段：** 阶段 0 图标系统验收之后，进入 T0 Mac 本地任务策略核心之前。
+**Applies when:** After the stage 0 icon system acceptance and before entering the T0 local task policy core on the Mac.
 
-**目的：** T0 将首次处理“一次性临时任务”。它不是普通 UI 扩展，因此需要先冻结执行范围、结果边界和验证证据。本清单不要求用户现在申请 Apple Developer 账户、购买域名、创建 Bot 或提供任何 token。
+**Purpose:** T0 handles "one-off temporary tasks" for the first time. It is not an ordinary UI extension, so the execution scope, result boundary, and verification evidence need to be frozen first. This checklist does not ask the user to apply for an Apple Developer account, buy a domain, create a Bot, or provide any token now.
 
-## 1. 必须继承的既有约束
+## 1. Existing constraints that must be inherited
 
-| 约束 | 本轮必须如何继承 |
+| Constraint | How this round must inherit it |
 |---|---|
-| 集中验证纪律 | 每个大批次在静态审计、提交、推送后，用户只运行一次 `./scripts/verify-macos.sh`；不要求反复手工粘贴测试命令。 |
-| 命令主权 | 已保存工具的命令永不由 AI、远程元数据、MCP 或手机改写。 |
-| 本地优先 | 命令、项目范围、图标、诊断、备份与策略默认留在 Mac；网络默认关闭。 |
-| 最小数据 | 不向诊断、PWA、Telegram、MCP 客户端或手机回传 API Key、变量、路径、命令正文或完整终端输出。 |
-| 恢复兼容 | 新的任务/策略持久化字段必须有迁移、旧数据缺失字段兼容、备份/恢复取舍和隔离恢复测试。 |
-| 执行边界 | 不在 App 内实现完整远程 PTY；不开放公网端口；不让临时任务自动成为固定工具。 |
+| Consolidated verification discipline | For each large batch, after the static audit, commit, and push, the user runs `./scripts/verify-macos.sh` only once; no repeated manual pasting of test commands. |
+| Command sovereignty | The command of a saved tool is never rewritten by AI, remote metadata, MCP, or the phone. |
+| Local-first | Commands, project scopes, icons, diagnostics, backups, and policy stay on the Mac by default; the network is off by default. |
+| Minimal data | API keys, variables, paths, command bodies, or full terminal output are never returned to diagnostics, the PWA, Telegram, MCP clients, or the phone. |
+| Recovery compatibility | New persisted task/policy fields must come with migration, compatibility with old data missing the fields, a backup/restore decision, and isolated recovery tests. |
+| Execution boundary | No full remote PTY inside the app; no public port; temporary tasks never become fixed tools automatically. |
 
-## 2. 进入 T0 前唯一必须完成的验收
+## 2. The only acceptance that must be completed before entering T0
 
-当前本地图标系统提交 `0265caf` 已完成代码、测试和静态审计，但尚未在用户真实 Mac 上完成集中验证。因此，在开始 T0 前，用户回到 Mac 后应仅执行：
+The current local icon system commit `0265caf` has finished code, tests, and the static audit, but has not yet completed consolidated verification on the user's real Mac. So before starting T0, back at the Mac the user should run only:
 
 ```bash
 cd ~/TermiPad && git pull --ff-only origin master && ./scripts/verify-macos.sh
 ```
 
-需要保存的证据只有末尾的成功或失败片段；失败时再按脚本提示定位对应日志。不要在图标批次未验证前并行引入任务工作台，以免失去可归因性。
+The only evidence to keep is the success or failure fragment at the end; on failure, follow the script's hint to the matching log. Do not introduce the task workbench in parallel before the icon batch is verified, or attributability is lost.
 
-## 3. 用户需要提供或确认的 T0 策略输入
+## 3. T0 policy inputs the user needs to provide or confirm
 
-这些不是凭据，也不需要现在回答；它们应在 T0 设计评审时由 TermiPad 提供保守默认值，再让用户决定是否调整。
+These are not credentials and need no answer now; at the T0 design review TermiPad should offer conservative defaults and then let the user decide whether to adjust them.
 
-| 决策项 | T0 保守默认 | 用户后续需要确认的内容 |
+| Decision item | Conservative T0 default | What the user needs to confirm later |
 |---|---|---|
-| 首批允许项目 | 仅 TermiPad 自身项目根目录 | 是否增加其他明确项目根目录。 |
-| 首批任务类型 | 构建、单元测试、UI 测试、只读状态检查 | 是否允许其它无变量测试类命令。 |
-| 网络 | 临时任务默认标记网络需求；未经明确许可拒绝外部网络动作 | 哪些项目/任务允许联网。 |
-| 远程窗口 | T0 不联网，不开启远程窗口 | 未来是否允许、最长时长和何时自动关闭。 |
-| 结果返回 | 仅 `通过/失败/取消/超时/需要本地确认` 与结构化测试摘要 | 未来可允许哪些已脱敏诊断片段进入已授权智能体会话。 |
-| 提升为固定工具 | 只能在 Mac 本机由用户点击确认 | 哪些任务值得固化为图标工具。 |
+| First allowed projects | Only TermiPad's own project root | Whether to add other explicit project roots. |
+| First task types | Build, unit tests, UI tests, read-only status checks | Whether other variable-free test-style commands are allowed. |
+| Network | Temporary tasks mark their network needs by default; external network actions are rejected without explicit permission | Which projects/tasks may use the network. |
+| Remote window | T0 has no network and opens no remote window | Whether to allow it in the future, the maximum duration, and when it closes automatically. |
+| Result return | Only `passed/failed/cancelled/timed out/needs local confirmation` and a structured test summary | Which redacted diagnostic snippets may enter an authorized agent session in the future. |
+| Promotion to a fixed tool | Only by the user clicking confirm on the Mac | Which tasks are worth turning into icon tools. |
 
-## 4. 开发时必须维护的材料与证据
+## 4. Materials and evidence that must be maintained during development
 
-| 材料 | 为什么需要 | 维护方式 |
+| Material | Why it is needed | How it is maintained |
 |---|---|---|
-| TaskIntent 数据字典 | 防止项目、命令、风险、时限和结果字段在多入口间语义漂移 | 写入设计文档并由单元测试锁定。 |
-| 策略拒绝矩阵 | 证明未知项目、过期、重放、已撤销、超时、锁屏和无权限的任务都会拒绝 | 每种拒绝路径至少一个单元测试。 |
-| 无害测试任务集 | 用固定 build/test/status 示例测试生命周期，不引入真实密钥或破坏性命令 | 仅使用仓库内可重复命令。 |
-| 进程树和取消证据 | 证明停止操作能终止任务及其子进程，不遗留后台执行 | 集成测试/真实 Mac 验证记录。 |
-| 最小结果规范 | 防止 stdout/stderr 被不加区分地输送给手机或智能体 | 结构化状态与摘要字段逐项审计。 |
-| 迁移与备份决定 | 明确任务历史、项目引用和权限策略是否备份，避免带入本地路径或敏感运行信息 | 与现有 JSON 备份、隔离恢复设计共同审查。 |
-| 验证产物 | 保留 `.verification/<timestamp>/summary.md`、失败日志、xcresult 与 UI 附件 | 只在每个大批次的集中验证后归档。 |
+| TaskIntent data dictionary | Prevents the semantics of project, command, risk, time limit, and result fields from drifting across entry points | Written into the design docs and locked down by unit tests. |
+| Policy rejection matrix | Proves that tasks with an unknown project, expired, replayed, revoked, timed out, with a locked screen, or without permission are all rejected | At least one unit test per rejection path. |
+| Harmless test task set | Tests the lifecycle with fixed build/test/status examples, without real secrets or destructive commands | Only repeatable commands inside the repository are used. |
+| Process tree and cancellation evidence | Proves that stopping terminates the task and its child processes, leaving no background execution behind | Integration tests / real-Mac verification records. |
+| Minimal result spec | Prevents stdout/stderr from being piped indiscriminately to the phone or an agent | Structured status and summary fields are audited one by one. |
+| Migration and backup decision | States explicitly whether task history, project references, and permission policies are backed up, avoiding carrying local paths or sensitive runtime information | Reviewed together with the existing JSON backup and isolated recovery design. |
+| Verification artifacts | Keep `.verification/<timestamp>/summary.md`, failure logs, the xcresult, and UI attachments | Archived only after each large batch's consolidated verification. |
 
-## 5. 当前不需要准备的材料
+## 5. Materials that need no preparation now
 
-| 项目 | 为什么现在不需要 |
+| Item | Why it is not needed now |
 |---|---|
-| Apple Developer 账户、证书或 TestFlight | T0/T1 是 Mac 本地任务核心；原生 iPhone App 的真实分发属于后续外部闸门。 |
-| Bot token、Telegram webhook、Mini App URL | Telegram 是可选快捷入口，不参与 T0。 |
-| 公网域名、云服务或固定 IP | T0 不联网；M2 异地会话前才需要单独评估。 |
-| 远程终端/PTY 组件 | 这不属于已批准的产品范围。 |
-| API Key、SSH 私钥或真实生产密钥 | 不应作为任务测试材料，也不应提交给 TermiPad、MCP 或聊天入口。 |
+| Apple Developer account, certificates, or TestFlight | T0/T1 are the local task core on the Mac; real distribution of the native iPhone app belongs to a later external gate. |
+| Bot token, Telegram webhook, Mini App URL | Telegram is an optional shortcut entry and takes no part in T0. |
+| Public domain, cloud service, or fixed IP | T0 has no network; these need separate evaluation only before M2 remote sessions. |
+| Remote terminal / PTY components | These are not in the approved product scope. |
+| API keys, SSH private keys, or real production secrets | They should not be used as task test material, nor submitted to TermiPad, MCP, or chat entries. |
 
-## 6. 后续阶段才需要的外部条件
+## 6. External conditions needed only in later phases
 
-| 进入阶段 | 外部条件 | 说明 |
+| Phase entered | External conditions | Notes |
 |---|---|---|
-| 原生 iPhone 同网配对 | 真实 iPhone、真实 Mac、局域网、系统本地网络权限 | 用于验证 Bonjour、本地 TLS、配对、撤销和后台行为。 |
-| 原生 iPhone 长期安装/分发 | Apple 账户与适用签名条件 | 未具备前不宣称 TestFlight、App Store 或正式移动端分发已完成。 |
-| 异地会话 / PWA | HTTPS origin、设备身份、会话服务与撤销模型 | 只有 T0–T3 成熟且用户明确批准后才配置。 |
-| Telegram Mini App | 私人 Bot、Bot token 的 Keychain 存储、固定 HTTPS origin、服务端 `initData` 验证 | 仅作为可选快捷入口，禁用 webhook 与自由文本命令。 |
-| macOS 外部分发 | Developer ID、Hardened Runtime、公证、Gatekeeper 冷启动测试 | 当前仍是外部发布闸门。 |
+| Native iPhone same-network pairing | A real iPhone, a real Mac, a LAN, the system local network permission | Used to verify Bonjour, local TLS, pairing, revocation, and background behavior. |
+| Native iPhone long-term install / distribution | An Apple account and the applicable signing conditions | Until they are available, TestFlight, the App Store, or formal mobile distribution are not declared done. |
+| Remote session / PWA | HTTPS origin, device identity, session service, and revocation model | Configured only after T0–T3 mature and the user explicitly approves. |
+| Telegram Mini App | A private Bot, Keychain storage of the Bot token, a fixed HTTPS origin, server-side `initData` validation | Only an optional shortcut entry; webhooks and free-text commands are disabled. |
+| macOS external distribution | Developer ID, Hardened Runtime, notarization, Gatekeeper cold start test | Still an external release gate. |
 
-## 7. 开发前结论
+## 7. Pre-development conclusion
 
-进入 T0 前，真正需要的不是账户、云服务器或手机 Bot，而是三件事：**完成当前图标批次的集中 macOS 验证；冻结首批允许项目与任务类别的保守默认值；把任务结果最小化和权限撤销写成可测试规则。**
+Before entering T0, what is really needed is not an account, a cloud server, or a phone Bot, but three things: **finish the consolidated macOS verification of the current icon batch; freeze conservative defaults for the first allowed projects and task categories; and write task result minimization and permission revocation as testable rules.**
 
-只要这三项就绪，T0 可以完全在现有原生 macOS 项目中、本地离线推进。原生 iPhone App、PWA、Telegram、MCP 连接器和异地会话应在本地策略核心稳定后再逐层引入。
+Once these three are ready, T0 can proceed entirely inside the existing native macOS project, locally and offline. The native iPhone app, PWA, Telegram, MCP connectors, and remote sessions should be introduced layer by layer after the local policy core is stable.

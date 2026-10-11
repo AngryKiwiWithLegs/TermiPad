@@ -2,13 +2,13 @@ import XCTest
 import Foundation
 @testable import TermiPad
 
-/// 迁移与备份决定（t0-checklist §4.5）：
-/// "迁移与备份决定 — 明确任务历史、项目引用和权限策略是否备份，避免带入本地路径或敏感运行信息 — 与现有 JSON 备份、隔离恢复设计共同审查"。
+/// Migration and backup decision (t0-checklist §4.5):
+/// "Migration and backup decision — state explicitly whether task history, project references, and permission policies are backed up, avoid carrying local paths or sensitive runtime information — reviewed together with the existing JSON backup and isolated recovery design".
 ///
-/// 现存事实（`Sources/BackupService.swift:159-171`）：`TermiPadBackup.make(tools:candidates:...)`
-/// 类型签名只接受 `[TerminalTool]` + `[CandidateTool]`。`TaskIntent` / `TaskProjectScope`
-/// / `TaskReviewWindow` **类型上不可能**进入备份。本测试把这个事实固化成可执行
-/// 断言——以后即使有人扩展 `make` 签名，本测试会立即失败。
+/// Existing fact (`Sources/BackupService.swift:159-171`): the type signature of `TermiPadBackup.make(tools:candidates:...)`
+/// only accepts `[TerminalTool]` + `[CandidateTool]`. `TaskIntent` / `TaskProjectScope`
+/// / `TaskReviewWindow` **cannot, by type,** enter a backup. This test turns that fact into an executable
+/// assertion — if anyone ever extends the `make` signature, this test fails immediately.
 final class BackupServiceTaskExclusionTests: XCTestCase {
     func testEmptyBackupDoesNotMentionTaskEntities() throws {
         let backup = TermiPadBackup.make(
@@ -19,28 +19,28 @@ final class BackupServiceTaskExclusionTests: XCTestCase {
         let data = try BackupService.encode(backup)
         let json = try XCTUnwrap(String(data: data, encoding: .utf8))
 
-        // 类型系统级保证：encode 的 JSON 永远不含 task 域字段
-        XCTAssertFalse(json.contains("TaskIntent"), "JSON 备份中不能含 'TaskIntent' 类型名。")
-        XCTAssertFalse(json.contains("TaskProjectScope"), "JSON 备份中不能含 'TaskProjectScope' 类型名。")
-        XCTAssertFalse(json.contains("TaskReviewWindow"), "JSON 备份中不能含 'TaskReviewWindow' 类型名。")
-        XCTAssertFalse(json.contains("projectScopeID"), "JSON 备份中不能含 'projectScopeID' 字段。")
-        XCTAssertFalse(json.contains("reviewWindowID"), "JSON 备份中不能含 'reviewWindowID' 字段。")
-        XCTAssertFalse(json.contains("nonce"), "JSON 备份中不能含 task 重放防御 nonce。")
-        XCTAssertFalse(json.contains("riskRawValue"), "JSON 备份中不能含 task 风险级别。")
-        XCTAssertFalse(json.contains("executionStateRawValue"), "JSON 备份中不能含 task 执行状态。")
-        XCTAssertFalse(json.contains("executionExitCode"), "JSON 备份中不能含 task 退出码。")
-        XCTAssertFalse(json.contains("executionStartedAt"), "JSON 备份中不能含 task 执行开始时间。")
-        XCTAssertFalse(json.contains("executionFinishedAt"), "JSON 备份中不能含 task 执行结束时间。")
-        XCTAssertFalse(json.contains("proposedAt"), "JSON 备份中不能含 task 提案时间。")
-        XCTAssertFalse(json.contains("expiresAt"), "JSON 备份中不能含 task 过期时间。")
-        XCTAssertFalse(json.contains("approvedAt"), "JSON 备份中不能含 task 批准时间。")
-        XCTAssertFalse(json.contains("resolvedAt"), "JSON 备份中不能含 task 解决时间。")
-        XCTAssertFalse(json.contains("rootPath"), "JSON 备份中不能含 scope 项目根路径——含本地路径结构。")
-        XCTAssertFalse(json.contains("workingDirectoryPath"), "JSON 备份中不能含工具工作目录——含本地路径。")
+        // Type-system-level guarantee: the encoded JSON never contains task-domain fields
+        XCTAssertFalse(json.contains("TaskIntent"), "The JSON backup must not contain the 'TaskIntent' type name.")
+        XCTAssertFalse(json.contains("TaskProjectScope"), "The JSON backup must not contain the 'TaskProjectScope' type name.")
+        XCTAssertFalse(json.contains("TaskReviewWindow"), "The JSON backup must not contain the 'TaskReviewWindow' type name.")
+        XCTAssertFalse(json.contains("projectScopeID"), "The JSON backup must not contain the 'projectScopeID' field.")
+        XCTAssertFalse(json.contains("reviewWindowID"), "The JSON backup must not contain the 'reviewWindowID' field.")
+        XCTAssertFalse(json.contains("nonce"), "The JSON backup must not contain the task replay-defense nonce.")
+        XCTAssertFalse(json.contains("riskRawValue"), "The JSON backup must not contain the task risk level.")
+        XCTAssertFalse(json.contains("executionStateRawValue"), "The JSON backup must not contain the task execution state.")
+        XCTAssertFalse(json.contains("executionExitCode"), "The JSON backup must not contain the task exit code.")
+        XCTAssertFalse(json.contains("executionStartedAt"), "The JSON backup must not contain the task execution start time.")
+        XCTAssertFalse(json.contains("executionFinishedAt"), "The JSON backup must not contain the task execution end time.")
+        XCTAssertFalse(json.contains("proposedAt"), "The JSON backup must not contain the task proposal time.")
+        XCTAssertFalse(json.contains("expiresAt"), "The JSON backup must not contain the task expiry time.")
+        XCTAssertFalse(json.contains("approvedAt"), "The JSON backup must not contain the task approval time.")
+        XCTAssertFalse(json.contains("resolvedAt"), "The JSON backup must not contain the task resolution time.")
+        XCTAssertFalse(json.contains("rootPath"), "The JSON backup must not contain the scope's project root path — it reveals local path structure.")
+        XCTAssertFalse(json.contains("workingDirectoryPath"), "The JSON backup must not contain the tool's working directory — it contains a local path.")
     }
 
     func testPopulatedBackupStillDoesNotMentionTaskEntities() throws {
-        // 模拟最坏情况：内存里塞满 task entities + 工具，导出，看 JSON
+        // Simulate the worst case: fill memory with task entities + tools, export, and inspect the JSON
         let toolWithWorkingDir = TerminalTool(
             name: "merge-cli",
             executablePath: "/usr/local/bin/merge-cli",
@@ -65,18 +65,18 @@ final class BackupServiceTaskExclusionTests: XCTestCase {
         let data = try BackupService.encode(backup)
         let json = try XCTUnwrap(String(data: data, encoding: .utf8))
 
-        // 用户明确勾选 includeSavedVariableValues=true 时，变量值会进 JSON（这是用户选择）。
-        // 不强制 JSON 编码格式（[.prettyPrinted, .sortedKeys] 可能加空格/换行），只检查 token 关键字。
+        // When the user explicitly checks includeSavedVariableValues=true, variable values do enter the JSON (that is the user's choice).
+        // Do not enforce the JSON encoding format ([.prettyPrinted, .sortedKeys] may add spaces/newlines); only check the token keywords.
         XCTAssertTrue(json.contains("token"),
-                      "用户勾选 includeSavedVariableValues=true 时变量值应进 JSON。")
+                      "Variable values should enter the JSON when the user checks includeSavedVariableValues=true.")
         XCTAssertTrue(json.contains("keep-local"),
-                      "变量值内容应进 JSON。")
-        // 但 workingDirectoryPath 永远不进（无论 includeSavedVariableValues 是什么）
+                      "The variable value content should enter the JSON.")
+        // But workingDirectoryPath never does (whatever includeSavedVariableValues is)
         XCTAssertFalse(json.contains("workingDirectoryPath"),
-                       "workingDirectoryPath 永远不进 JSON 备份（无论用户是否勾选变量值）。")
+                       "workingDirectoryPath never enters the JSON backup (whether or not the user checks variable values).")
         XCTAssertFalse(json.contains("secret-project"),
-                       "workingDirectoryPath 的本地路径值不出现。")
-        // 任务域仍然不出现在导出中
+                       "The local path value of workingDirectoryPath must not appear.")
+        // The task domain still does not appear in the export
         XCTAssertFalse(json.contains("TaskIntent"))
         XCTAssertFalse(json.contains("TaskProjectScope"))
         XCTAssertFalse(json.contains("TaskReviewWindow"))
@@ -84,7 +84,7 @@ final class BackupServiceTaskExclusionTests: XCTestCase {
     }
 
     func testRoundTripDoesNotIntroduceTaskFields() throws {
-        // 即使走 encode → decode → re-encode 也不能凭空冒出 task 字段
+        // Even after encode → decode → re-encode, task fields must not appear out of nowhere
         let original = TermiPadBackup.make(
             tools: [],
             candidates: [],

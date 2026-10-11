@@ -7,7 +7,7 @@ on:
     branches: [master]
   workflow_dispatch:
 
-# 新的提交会取消同一分支上尚未完成的旧构建，避免浪费 macOS 构建时间。
+# A new commit cancels any unfinished older build on the same branch, to avoid wasting macOS build time.
 concurrency:
   group: macos-build-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -18,7 +18,7 @@ permissions:
 jobs:
   build:
     name: Build TermiPad on macOS
-    # TermiPad 的最低支持版本为 macOS 14；使用该稳定映像避免 macOS 15 预发布运行器的基础设施波动。
+    # TermiPad's minimum supported version is macOS 14; this stable image avoids the infrastructure flakiness of the macOS 15 pre-release runners.
     runs-on: macos-14
     timeout-minutes: 20
 
@@ -129,11 +129,11 @@ jobs:
             fi
             echo '```'
             echo
-            echo "## UI 验收产物"
+            echo "## UI acceptance artifacts"
             if [ -d ci-logs/ui-attachments ] && [ "$(find ci-logs/ui-attachments -type f | wc -l)" -gt 0 ]; then
-              echo "已导出 UI 测试截图附件；请从本次构建的 artifacts 下载查看。"
+              echo "UI test screenshot attachments were exported; download them from this build's artifacts."
             else
-              echo "未导出截图附件；请查看 UI 测试日志与 .xcresult 结果包。"
+              echo "No screenshot attachments were exported; check the UI test log and the .xcresult bundle."
             fi
           } | tee ci-logs/diagnostic-summary.md
 

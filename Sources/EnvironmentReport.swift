@@ -1,6 +1,6 @@
 import Foundation
 
-/// P2-C 只读环境报告检查的固定组件。它不枚举 PATH，也不接受外部提供的可执行文件或参数。
+/// Fixed components of the P2-C read-only environment report check. It does not enumerate PATH and does not accept externally supplied executables or arguments.
 enum EnvironmentComponent: String, CaseIterable, Identifiable, Sendable {
     case homebrew
     case cargo
@@ -75,8 +75,8 @@ struct EnvironmentReport: Equatable, Sendable {
     }
 }
 
-/// 只读本机环境检查。执行面被严格限制为：已存在的固定绝对路径 + 单一 `--version` 参数。
-/// 不启动 shell、不继承用户命令、不访问网络、不写入磁盘，也不保留输出中的本地路径。
+/// Read-only local environment check. The execution surface is strictly limited to: an existing fixed absolute path + a single `--version` argument.
+/// No shell is started, no user command is inherited, no network is accessed, nothing is written to disk, and local paths in the output are not retained.
 enum EnvironmentReporter {
     private static let timeout: TimeInterval = 2
 
@@ -152,7 +152,7 @@ enum EnvironmentReporter {
     }
 }
 
-/// P2-C 的不可绕过边界，供测试、UI 和静态验证共同引用。
+/// The non-bypassable boundary of P2-C, referenced jointly by tests, the UI, and static verification.
 enum EnvironmentReportBoundary {
     static let onlyRunsOnExplicitUserAction = true
     static let onlyUsesFixedAbsolutePaths = true

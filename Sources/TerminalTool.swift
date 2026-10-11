@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// 终端工具分类。
+/// Terminal tool categories.
 enum ToolCategory: String, Codable, CaseIterable, Identifiable {
     case ai = "AI/智能体"
     case development = "开发工具"
@@ -41,7 +41,7 @@ enum ToolCategory: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-/// 安装来源只表示可执行文件的发现位置，不代表发行方已经过验证。
+/// The installation source only indicates where the executable was found; it does not mean the publisher has been verified.
 enum ToolInstallationSource: String, Codable, CaseIterable, Sendable {
     case homebrew
     case cargo
@@ -85,7 +85,7 @@ enum ToolInstallationSource: String, Codable, CaseIterable, Sendable {
     }
 }
 
-/// 描述工具信息来自何处。用户自行编辑后始终优先于远程补充。
+/// Describes where the tool information came from. The user's own edits always take priority over remote enrichment.
 enum ToolMetadataProvenance: String, Codable, CaseIterable, Sendable {
     case local
     case manual
@@ -106,14 +106,14 @@ enum ToolMetadataProvenance: String, Codable, CaseIterable, Sendable {
     }
 }
 
-/// 发现候选的处理状态。候选不再自动进入工具墙，用户必须明确收录。
+/// Processing status of a discovered candidate. Candidates no longer enter the tool wall automatically; the user must accept them explicitly.
 enum CandidateStatus: String, Codable, CaseIterable {
     case pending
     case accepted
     case ignored
 }
 
-/// 工具格悬停时的面向使用者说明。
+/// User-facing explanation shown when hovering over a tool tile.
 struct ToolHoverContent: Equatable {
     let purpose: String
     let gettingStarted: String
@@ -128,9 +128,9 @@ struct ToolHoverContent: Equatable {
     }
 }
 
-/// 将原始工具元数据转化为友好的“用途 + 如何开始”说明。
+/// Turns raw tool metadata into a friendly "purpose + getting started" explanation.
 ///
-/// AI 或 GitHub 补充是异步操作；其进度文本不应被写成用户看到的工具功能说明。
+/// AI or GitHub enrichment is asynchronous; its progress text must not be written as the tool's function description shown to users.
 enum ToolDescriptionPresentation {
     private struct ToolUsageProfile {
         let chinesePurpose: String
@@ -155,6 +155,7 @@ enum ToolDescriptionPresentation {
         "本地发现的终端工具",
         "已发现本地工具；配置 ai 服务后可自动提炼命令说明",
         "discovered locally; details are pending enrichment",
+        "local tool discovered; configure the ai service to extract command descriptions automatically",
         "attempting ai enrichment",
         "ai enrichment in progress",
         "local terminal tool"
@@ -414,21 +415,21 @@ enum ToolDescriptionPresentation {
     }
 }
 
-/// 用户已收录的可交互终端工具。
+/// An interactive terminal tool the user has accepted.
 @Model
 final class TerminalTool {
     var id: UUID
     var name: String
     var executablePath: String
-    /// 用户明确选择的本地工作目录；旧记录缺失时为 nil，不改变原有启动行为。
+    /// The local working directory the user explicitly chose; nil when missing in old records, which leaves the original launch behavior unchanged.
     var workingDirectoryPath: String?
     var commandTemplate: String
     var toolDescription: String
     var categoryRawValue: String
     var iconSymbol: String
-    /// 内置图标的持久化样式标识；nil 兼容旧记录并表示按工具名自动派生。
+    /// Persisted style identifier of the built-in icon; nil is compatible with old records and means it is derived automatically from the tool name.
     var iconStyleIdentifier: String?
-    /// 仅保存由 ToolIconStore 创建的受控本地 PNG 文件名；旧记录缺失该字段时为 nil。
+    /// Stores only the file name of a controlled local PNG created by ToolIconStore; nil when the field is missing in old records.
     var customIconFilename: String?
     var iconURLString: String?
     var repositoryFullName: String?
@@ -436,7 +437,7 @@ final class TerminalTool {
     var metadataProvenanceRawValue: String?
     var metadataMatchConfidence: Int?
     var metadataUpdatedAt: Date?
-    /// 旧版存储没有该字段时为 nil，并安全视为未收藏。
+    /// nil when older storage lacks this field, safely treated as not favorited.
     var isFavorite: Bool?
     var isUserCustomized: Bool
     var isHidden: Bool = false
@@ -444,25 +445,25 @@ final class TerminalTool {
     var lastLaunchedAt: Date?
     var createdAt: Date
 
-    // MARK: - M0 移动端入口（track-protocol stage 4）
+    // MARK: - M0 mobile entry (track-protocol stage 4)
 
-    /// 手机端显示名；nil = 用本地 `name`（避免展示冗余）。
-    /// 永不出本机（仅在 iPhone/Telegram/PWA 入口收到时回传）。
+    /// Display name on the phone; nil = use the local `name` (avoids redundant display).
+    /// Never leaves this Mac (returned only when an iPhone/Telegram/PWA entry receives it).
     var mobileDisplayName: String?
-    /// 手机端用途说明；**严禁**含命令/路径/变量，由客户端在展示前脱敏。
-    /// 永不出本机。
+    /// Purpose description on the phone; it must **never** contain commands/paths/variables and is sanitized by the client before display.
+    /// Never leaves this Mac.
     var mobileDescription: String
-    /// 是否进入手机端最小化目录。默认 false——用户必须明确开启。
-    /// 永不出本机（除 iPhone/Telegram/PWA 入口收到外）。
+    /// Whether it enters the phone's minimal catalog. Defaults to false — the user must turn it on explicitly.
+    /// Never leaves this Mac (except when received by an iPhone/Telegram/PWA entry).
     var showInMobileEntry: Bool
-    /// 允许手机端对**已批准图标**发起启动请求。默认 false。
-    /// 即便 showInMobileEntry=true，此项为 false 时手机只能看不能启动。
+    /// Allows the phone to send launch requests for **approved icons**. Defaults to false.
+    /// Even with showInMobileEntry=true, when this is false the phone can only view, not launch.
     var allowMobileLaunchRequest: Bool
-    /// 手机端启动请求的本地确认策略。默认 .everyTime（最严格）。
+    /// Local confirmation policy for launch requests from the phone. Defaults to .everyTime (the strictest).
     var mobileLocalConfirmPolicy: MobileLocalConfirmPolicy
-    /// 用户点"撤销"按钮时写入的当前时间戳。
-    /// 双撤销机制：撤销时间戳 + 把 showInMobileEntry/allowMobileLaunchRequest 都设回 false。
-    /// 写入后 iPhone 端该工具立即失效（客户端会查询新值）。
+    /// The current timestamp written when the user clicks the "Revoke" button.
+    /// Double revocation mechanism: the revocation timestamp + setting both showInMobileEntry/allowMobileLaunchRequest back to false.
+    /// Once written, the tool is deactivated on the iPhone immediately (the client queries the new values).
     var revokeMobilePermissionAt: Date?
 
     var category: ToolCategory {
@@ -503,7 +504,7 @@ final class TerminalTool {
         self.toolDescription = toolDescription
         categoryRawValue = category.rawValue
         self.iconSymbol = iconSymbol
-        // 新记录由工具库归一化流程分配空闲回退组合，避免新增工具改变已有未知工具的图标。
+        // New records get a free fallback combination from the library normalization flow, so adding a tool does not change the icons of existing unknown tools.
         iconStyleIdentifier = nil
         customIconFilename = nil
         iconURLString = nil
@@ -518,8 +519,8 @@ final class TerminalTool {
         variableValuesJSON = nil
         lastLaunchedAt = nil
         createdAt = Date()
-        // M0 默认值：所有移动端入口字段默认关闭/最严策略。
-        // 新增工具绝不自动暴露在手机端——用户必须主动去"手机入口"section 开启。
+        // M0 defaults: every mobile entry field defaults to off / the strictest policy.
+        // A newly added tool is never exposed to the phone automatically — the user must go to the "Mobile Entry" section and turn it on.
         mobileDisplayName = nil
         mobileDescription = ""
         showInMobileEntry = false
@@ -529,7 +530,7 @@ final class TerminalTool {
     }
 }
 
-/// 工具库的本地展示排序规则。最近使用列表不访问网络，也不改变持久化数据。
+/// Local display sort rules for the library. The recent list accesses no network and does not change persisted data.
 enum ToolLibraryOrdering {
     static func recentFirst(_ tools: [TerminalTool]) -> [TerminalTool] {
         tools.sorted {
@@ -543,18 +544,18 @@ enum ToolLibraryOrdering {
     }
 }
 
-/// M0 移动端入口：手机端启动请求的本地确认策略。详见
-/// `docs/m0-m1-mobile-entry-design.md` §2.3。
+/// M0 mobile entry: local confirmation policy for launch requests from the phone. See
+/// `docs/m0-m1-mobile-entry-design.md` §2.3.
 enum MobileLocalConfirmPolicy: String, Codable, CaseIterable, Sendable {
-    /// 每次手机请求都要求 Mac 本机用户在工作台点击确认
+    /// Every phone request requires the local Mac user to click confirm in the workbench
     case everyTime
-    /// 同一会话内（≤5min）不重复确认；新会话或超时会话必须重确认
+    /// No repeated confirmation within the same session (≤5min); a new or timed-out session must be confirmed again
     case perSession
-    /// 仅 5min 内的会话，且任务风险为 .low；其他情况要求重确认
+    /// Only sessions within 5min and only when the task risk is .low; everything else requires confirming again
     case lowRiskSessionOnly
 }
 
-/// 扫描到但尚未由用户确认收录的命令。
+/// A command that was found by scanning but not yet accepted by the user.
 @Model
 final class CandidateTool {
     var id: UUID
@@ -596,7 +597,7 @@ final class CandidateTool {
         discoveredAt = Date()
     }
 
-    /// 将用户确认收录的候选转换为本地工具。命令仅来自候选名称，不采纳网络补充内容。
+    /// Converts a candidate the user accepted into a local tool. The command comes only from the candidate name; network enrichment content is not adopted.
     func makeToolForAcceptance() -> TerminalTool {
         TerminalTool(
             name: name,

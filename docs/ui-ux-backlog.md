@@ -1,23 +1,23 @@
-# TermiPad 后续 UI/UX 完善待办
+# TermiPad UI/UX Follow-up Backlog
 
-## 本地图标库、防重复与手动选择
+## Local Icon Library, Duplicate Prevention, and Manual Selection
 
-**状态：** 二期本地图标系统已完成代码实现，待一次真实 macOS 集中验证后更新稳定基线。
+**Status:** The phase-two local icon system is implemented in code; the stable baseline will be updated after one consolidated verification on real macOS.
 
-当前工具图标策略对已知常用 CLI 使用固定的本地语义映射；未识别工具则依据名称稳定地从有限的 SF Symbol 与渐变组合中回退。这一设计不联网、不读取 README、不使用远程头像，也不让 AI 改写命令或自由生成品牌图形。它适合作为安全的早期默认值，但未知工具数量增加后可能出现组合重复。
+The current tool icon strategy uses fixed local semantic mappings for known common CLIs; unrecognized tools fall back deterministically, based on their name, to a limited set of SF Symbol and gradient combinations. This design does not go online, does not read READMEs, does not use remote avatars, and does not let AI rewrite commands or freely generate brand graphics. It works as a safe early default, but combinations may repeat as the number of unknown tools grows.
 
-本批次已实现可持久化的本地图标身份和图标选择器，而不改变工具命令、来源可信度或启动流程。未知工具只在首次缺失样式时分配本地回退组合；既有工具的已分配组合不会因新增工具而改变。
+This batch implements a persistable local icon identity and an icon picker without changing tool commands, source trust, or the launch flow. An unknown tool is assigned a local fallback combination only the first time its style is missing; combinations already assigned to existing tools do not change when tools are added.
 
-| 项目 | 目标 | 安全与验收边界 |
+| Item | Goal | Safety and acceptance boundary |
 |---|---|---|
-| 扩充本地图标目录 | 已以类别化 SF Symbols 和受控调色板覆盖更多 CLI 类型 | 只使用随应用提供的符号与颜色；不下载品牌头像或远程图像。 |
-| 避免自动图标重复 | 已为未知工具持久保存本地已分配组合；首次碰撞按确定性规则分配未使用组合 | 分配只基于本地工具身份；不记录命令内容、路径、API Key 或网络元数据。 |
-| 手动图标选择器 | 已允许用户从本地图标目录中选择符号与颜色，并可恢复自动选择 | 用户选择优先于自动分配；不改变命令、模板、来源或工作目录。 |
-| 本地 PNG 覆盖 | 已继续保持自定义 PNG 的最高优先级 | 图像仅保存在本地受控目录；备份、恢复和诊断仍不传播本地二进制或路径。 |
-| 无障碍名称 | 为每一枚图标提供工具名与用途的可访问性标签 | 图标不可成为工具含义的唯一信息来源。 |
+| Expand the local icon catalog | Categorized SF Symbols and a controlled palette now cover more CLI types | Uses only symbols and colors shipped with the app; downloads no brand avatars or remote images. |
+| Avoid automatic icon duplicates | Assigned local combinations are now persisted for unknown tools; on a first collision an unused combination is assigned by deterministic rules | Assignment is based only on local tool identity; it records no command content, paths, API keys, or network metadata. |
+| Manual icon picker | Users can now choose a symbol and color from the local icon catalog and can restore automatic selection | The user's choice takes priority over automatic assignment; it does not change the command, template, source, or working directory. |
+| Local PNG override | Custom PNGs continue to keep the highest priority | Images are stored only in a locally controlled directory; backup, restore, and diagnostics still do not propagate local binaries or paths. |
+| Accessibility names | Provide every icon with an accessibility label carrying the tool name and purpose | An icon must not be the only source of information about what a tool means. |
 
-> 该批次是视觉完善项，不是网络发现、安装或远程控制能力的一部分。它应在单独代码批次完成静态审计和一次真实 macOS 集中验证后，才更新稳定基线。
+> This batch is a visual polish item, not part of any network discovery, install, or remote control capability. The stable baseline should be updated only after a separate code batch completes a static audit and one consolidated verification on real macOS.
 
-## 手机协同研究待决
+## Phone Collaboration Research Pending
 
-手机对接 TermiPad 属于独立的远程操作架构议题。任何方案必须维持本地配对、设备可撤销、最小权限、明确用户确认、不可将终端直接暴露到公网，以及不允许远程元数据自行构造或改写命令等原则。详见后续手机协同可行性设计。
+Connecting a phone to TermiPad is a separate remote-operation architecture topic. Any approach must uphold principles such as local pairing, revocable devices, least privilege, explicit user confirmation, never exposing the terminal directly to the public internet, and never letting remote metadata construct or rewrite commands on its own. See the later phone collaboration feasibility design for details.

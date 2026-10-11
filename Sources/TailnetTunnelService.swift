@@ -1,16 +1,16 @@
-// M2a 异地隧道服务（docs/m2-secure-remote-session-design.md §5）。
-// 集成模型：依赖用户自装的 Tailscale（OpenClaw 已验证模式），TermiPad 只做编排——
-// 不内嵌 tailscaled、不自造 WireGuard、永久禁用 Funnel（公网暴露红线）。
-// Mac 端只开一个仅绑 127.0.0.1 的回环监听（57147），由 `tailscale serve --tcp`
-// 把 tailnet 流量转发进来——公网/局域网/其他虚拟网卡均不可见该端口。
-// CLI 调用纪律：固定绝对路径 + 固定参数 + 无用户输入拼接，不经 shell（与
-// EnvironmentReport 同款）；全仓只允许本文件调用 tailscale CLI（verify-macos.sh 守卫）。
+// M2a remote tunnel service (docs/m2-secure-remote-session-design.md §5).
+// Integration model: relies on the Tailscale the user installed themselves (a pattern proven by OpenClaw); TermiPad only orchestrates —
+// no embedded tailscaled, no home-made WireGuard, Funnel permanently disabled (public exposure red line).
+// The Mac opens only one loopback listener bound to 127.0.0.1 (57147), and `tailscale serve --tcp`
+// forwards tailnet traffic into it — the port is invisible to the public internet, the LAN, and other virtual interfaces.
+// CLI call discipline: fixed absolute path + fixed arguments + no user input concatenated, never through a shell (same as
+// EnvironmentReport); this is the only file in the repository allowed to call the tailscale CLI (guarded by verify-macos.sh).
 import Foundation
 import Network
 
-/// 跨隔离域共享的隧道端点盒：TailnetTunnelService（MainActor）写入，
-/// MobilePairingService 的 nonisolated static 握手链在构造 MacResumeHello 时读取。
-/// NSLock 保护——握手在 listenerQueue 上运行，不能碰 MainActor 状态。
+/// Tunnel endpoint box shared across isolation domains: written by TailnetTunnelService (MainActor),
+/// read by MobilePairingService's nonisolated static handshake chain when building MacResumeHello.
+/// Protected by an NSLock — the handshake runs on listenerQueue and must not touch MainActor state.
 final class TailnetEndpointHolder: @unchecked Sendable {
     private let lock = NSLock()
     private var value: String?
@@ -39,22 +39,22 @@ final class TailnetTunnelService: ObservableObject {
 
     static let shared = TailnetTunnelService()
     static let tunnelListenerPort: UInt16 = MobilePairingCrypto.tunnelListenerPort
-    /// 回环后端端口（Mac 本机内部）。tailscaled 的 serve 前端占着 tailnet 侧
-    /// 57147 时，内核拒绝同端口号的回环绑定（EADDRINUSE，实测复现）——
-    /// OpenClaw 同款解法：前端与后端用不同端口，serve 把 tailnet:57147
-    /// 转发到 127.0.0.1:57148。手机端只见 57147，后端端口不出 Mac。
+    /// Loopback backend port (internal to the Mac). While tailscaled's serve frontend holds 57147 on the tailnet
+    /// side, the kernel refuses a loopback bind to the same port number (EADDRINUSE, reproduced in testing) —
+    /// same fix as OpenClaw: the frontend and backend use different ports, and serve forwards tailnet:57147
+    /// to 127.0.0.1:57148. The phone only ever sees 57147; the backend port never leaves the Mac.
     static let loopbackBackendPort: UInt16 = 57148
-    /// 用户偏好持久化键：开启后 app 每次启动自动恢复隧道（异地能力是常驻
-    /// 基础设施，不像配对模式那样需要屏显配对码）。
+    /// Persistence key for the user preference: once on, the tunnel is restored automatically at every app launch (remote capability is always-on
+    /// infrastructure and, unlike pairing mode, needs no on-screen pairing code).
     static let enabledDefaultsKey = "TermiPad.mobileTailnetTunnelEnabled"
-    /// 固定绝对路径白名单：只认 Homebrew 与 /usr/local 两个安装位置，
-    /// 不搜索 PATH、不接受用户配置路径。
+    /// Fixed absolute-path allowlist: only the Homebrew and /usr/local install locations are recognized;
+    /// PATH is not searched and user-configured paths are not accepted.
     nonisolated static let cliCandidatePaths = [
         "/opt/homebrew/bin/tailscale",
         "/usr/local/bin/tailscale"
     ]
 
-    /// 握手链读取的端点共享盒（static，随进程存活）。
+    /// Shared endpoint box read by the handshake chain (static, lives as long as the process).
     nonisolated static let endpointHolder = TailnetEndpointHolder()
 
     @Published private(set) var state: TunnelState = .off
@@ -64,7 +64,7 @@ final class TailnetTunnelService: ObservableObject {
 
     private init() {}
 
-    /// app 启动时调用：用户上次开启过则自动恢复。
+    /// Called at app launch: restores automatically if the user had it on last time.
     func restoreIfNeeded() {
         guard UserDefaults.standard.bool(forKey: Self.enabledDefaultsKey), state == .off else {
             return
@@ -81,7 +81,7 @@ final class TailnetTunnelService: ObservableObject {
         }
     }
 
-    /// 开启：检测 CLI → 配置 serve 转发 → 读 tailnet IP → 启动回环监听。
+    /// Enable: detect the CLI → configure serve forwarding → read the tailnet IP → start the loopback listener.
     func enable() {
         guard loopbackListener == nil, state != .detecting else { return }
         state = .detecting
@@ -99,24 +99,24 @@ final class TailnetTunnelService: ObservableObject {
         if hadListener {
             DiagnosticsStore.shared.record(.remoteTunnelClosed)
         }
-        // 后台撤销 serve 转发——失败只记诊断，UI 状态已是 off。
+        // Revoke the serve forwarding in the background — a failure is only logged to diagnostics; the UI state is already off.
         Task.detached(priority: .utility) { [port = Self.tunnelListenerPort] in
             _ = Self.runFixedCLI(arguments: ["serve", "--tcp=\(port)", "off"])
         }
-        // 关闭隧道即清会话白名单——免确认缓存绝不超出其授权通道的生命周期。
+        // Turning the tunnel off clears the session allowlist — the confirmation-free cache never outlives the channel that authorized it.
         MobileLaunchSession.shared.invalidateAll()
     }
 
-    // MARK: - 启用流程
+    // MARK: - Enable flow
 
     private func finishEnable(result: ServeConfigResult, port: UInt16) {
         switch result {
         case .binaryNotFound:
-            MobilePairingService.diagMac("隧道失败：未找到 tailscale CLI（固定路径白名单）")
-            state = .failed("未找到 Tailscale。请安装并登录后重试（brew install tailscale 或 App Store 版）。")
+            MobilePairingService.diagMac("Tunnel failed: tailscale CLI not found (fixed-path allowlist)")
+            state = .failed("Tailscale was not found. Install it, sign in, and try again (brew install tailscale or the App Store version).")
         case .cliError(let message):
-            MobilePairingService.diagMac("隧道失败：\(message)")
-            state = .failed("Tailscale 配置失败：\(message)")
+            MobilePairingService.diagMac("Tunnel failed: \(message)")
+            state = .failed("Tailscale configuration failed: \(message)")
         case .configured(let endpoint):
             startLoopbackListener(port: Self.loopbackBackendPort, endpoint: endpoint)
         }
@@ -124,37 +124,37 @@ final class TailnetTunnelService: ObservableObject {
 
     private func startLoopbackListener(port: UInt16, endpoint: String) {
         let parameters = NWParameters.tcp
-        // 仅绑回环接口：该端口对局域网/公网/其他虚拟网卡不可见，只有 tailscaled
-        // 的 serve 转发能到达——红线"不开公网端口"的最强形态。
-        // 注意：requiredLocalEndpoint 只作用于出站连接，对 NWListener 的监听
-        // 绑定**无效**（曾导致"状态就绪但端口根本没绑上"）；监听绑定必须用
-        // requiredInterfaceType = .loopback（2026-09-08 实测：自连成功）。
+        // Bind the loopback interface only: the port is invisible to the LAN / public internet / other virtual interfaces, and only tailscaled's
+        // serve forwarding can reach it — the strongest form of the "no public ports" red line.
+        // Note: requiredLocalEndpoint only applies to outbound connections and has **no effect** on an NWListener's listening
+        // bind (it once caused "state is ready but the port was never bound"); the listening bind must use
+        // requiredInterfaceType = .loopback (tested 2026-09-08: self-connection succeeded).
         parameters.requiredInterfaceType = .loopback
-        // 快速 关→开 时旧 socket 尚在 TIME_WAIT（M1 同款坑）：不设复用会报
-        // "地址已被使用"，表现为第二次打开开关必失败。
+        // On a quick off→on the old socket is still in TIME_WAIT (same pitfall as M1): without reuse it reports
+        // "address already in use", which shows up as the switch always failing the second time it is turned on.
         parameters.allowLocalEndpointReuse = true
         let listener: NWListener
         do {
             listener = try NWListener(using: parameters, on: NWEndpoint.Port(rawValue: port)!)
         } catch {
-            MobilePairingService.diagMac("隧道失败：回环监听创建失败：\(error.localizedDescription)")
-            state = .failed("本地监听启动失败：\(error.localizedDescription)")
+            MobilePairingService.diagMac("Tunnel failed: could not create the loopback listener: \(error.localizedDescription)")
+            state = .failed("Failed to start the local listener: \(error.localizedDescription)")
             return
         }
         listener.stateUpdateHandler = { [weak self] newState in
             guard let self else { return }
             Task { @MainActor in
                 if case .failed(let error) = newState {
-                    MobilePairingService.diagMac("隧道监听失败：\(error.localizedDescription)")
+                    MobilePairingService.diagMac("Tunnel listener failed: \(error.localizedDescription)")
                     self.stopLoopbackListener()
                     Self.endpointHolder.set(nil)
-                    self.state = .failed("隧道监听错误：\(error.localizedDescription)")
+                    self.state = .failed("Tunnel listener error: \(error.localizedDescription)")
                 }
             }
         }
         listener.newConnectionHandler = { connection in
-            // 与 M1 同网监听共享同一条握手链——隧道只接受已配对设备的复用请求，
-            // 首次配对必须留在同网（人工比对指纹的设计前提）。
+            // Shares the same handshake chain as the M1 local network listener — the tunnel accepts only resume requests from already-paired devices;
+            // first-time pairing must stay on the same network (the design premise of comparing fingerprints by eye).
             MobilePairingService.beginResumeOnlyHandshake(
                 on: connection,
                 queue: self.listenerQueue)
@@ -164,7 +164,7 @@ final class TailnetTunnelService: ObservableObject {
         Self.endpointHolder.set(endpoint)
         state = .ready(endpoint: endpoint)
         DiagnosticsStore.shared.record(.remoteTunnelOpened)
-        MobilePairingService.diagMac("异地隧道就绪：\(endpoint)（回环监听 + tailscale serve 转发）")
+        MobilePairingService.diagMac("Remote tunnel ready: \(endpoint) (loopback listener + tailscale serve forwarding)")
     }
 
     private func stopLoopbackListener() {
@@ -172,7 +172,7 @@ final class TailnetTunnelService: ObservableObject {
         loopbackListener = nil
     }
 
-    // MARK: - CLI 编排（固定路径 + 固定参数，后台队列执行）
+    // MARK: - CLI orchestration (fixed path + fixed arguments, run on a background queue)
 
     private enum ServeConfigResult {
         case configured(endpoint: String)
@@ -184,31 +184,31 @@ final class TailnetTunnelService: ObservableObject {
         cliCandidatePaths.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
-    /// 顺序：serve 配置转发 → tailscale ip -4 取端点。任何一步失败即放弃
-    /// （UI 显式报错，不静默降级）。
+    /// Order: serve configures the forwarding → tailscale ip -4 gets the endpoint. Any failed step aborts
+    /// (the UI reports the error explicitly, no silent degradation).
     nonisolated private static func configureServe(port: UInt16, backendPort: UInt16) -> ServeConfigResult {
         guard let binary = resolveCLIBinary() else {
             return .binaryNotFound
         }
         guard runFixedCLI(
             arguments: ["serve", "--bg", "--tcp=\(port)", "tcp://127.0.0.1:\(backendPort)"]) != nil else {
-            return .cliError("serve 转发配置未成功（确认 Tailscale 已登录）")
+            return .cliError("serve forwarding was not configured successfully (make sure Tailscale is signed in)")
         }
-        // serve 成功输出含端点行；再取本机 tailnet IPv4 拼"IP:port"。
+        // A successful serve prints the endpoint line; then take this Mac's tailnet IPv4 to build "IP:port".
         guard let ipOutput = runFixedCLI(arguments: ["ip", "-4"]),
               let tailnetIP = ipOutput
                   .split(whereSeparator: \.isNewline)
                   .first?
                   .trimmingCharacters(in: .whitespaces),
               !tailnetIP.isEmpty else {
-            return .cliError("无法读取 tailnet IP（确认 Tailscale 已连接）")
+            return .cliError("Could not read the tailnet IP (make sure Tailscale is connected)")
         }
         return .configured(endpoint: "\(tailnetIP):\(port)")
     }
 
-    /// 跑一条固定参数的 tailscale 子命令。直接 exec 绝对路径——不搜索 PATH、
-    /// 不经 shell、参数全部来自本文件的字面量。返回 stdout（含 stderr 拼接），
-    /// 退出码非 0 返回 nil。
+    /// Run one tailscale subcommand with fixed arguments. Execs the absolute path directly — no PATH search,
+    /// no shell, and every argument comes from literals in this file. Returns stdout (with stderr appended);
+    /// returns nil on a non-zero exit code.
     nonisolated private static func runFixedCLI(arguments: [String]) -> String? {
         guard let binary = resolveCLIBinary() else { return nil }
         let process = Process()

@@ -1,15 +1,15 @@
 import XCTest
 @testable import TermiPad
 
-/// M3 每日远程窗口契约测试（docs/m3-remote-allow-window-design.md）：
-/// 生命周期、自然日界、免确认裁决、锁屏失效、未认证拒绝。
+/// M3 daily remote window contract tests (docs/m3-remote-allow-window-design.md):
+/// lifecycle, calendar-day boundary, confirmation-free decision, invalidation on lock, rejection when unauthenticated.
 @MainActor
 final class RemoteAllowWindowTests: XCTestCase {
 
     func testOpenRequiresAuthentication() {
         let window = RemoteAllowWindow()
         window.open(authenticated: false)
-        XCTAssertFalse(window.isOpen, "未认证开窗必须被拒绝")
+        XCTAssertFalse(window.isOpen, "Opening the window without authentication must be rejected")
         window.open(authenticated: true)
         XCTAssertTrue(window.isOpen)
     }
@@ -21,25 +21,25 @@ final class RemoteAllowWindowTests: XCTestCase {
         window.close()
         XCTAssertFalse(window.isOpen)
         window.open(authenticated: true)
-        XCTAssertTrue(window.isOpen, "关闭后可重新开窗")
+        XCTAssertTrue(window.isOpen, "The window can be reopened after closing")
     }
 
     func testWindowExpiresAcrossDayBoundary() {
         let window = RemoteAllowWindow()
         let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
         window.open(authenticated: true, now: yesterday)
-        // 跨自然日（即使 app 一直运行）——isOpen 立即为 false。
-        XCTAssertFalse(window.isOpen, "跨日窗口必须失效")
+        // Crossing a calendar day (even with the app running the whole time) — isOpen becomes false immediately.
+        XCTAssertFalse(window.isOpen, "The window must become invalid across days")
         XCTAssertFalse(window.allowsSkipConfirmation())
     }
 
     func testAllowsSkipConfirmationOnlyWhenOpenSameDay() {
         let window = RemoteAllowWindow()
-        XCTAssertFalse(window.allowsSkipConfirmation(), "未开窗不得免确认")
+        XCTAssertFalse(window.allowsSkipConfirmation(), "No confirmation-free actions without an open window")
         window.open(authenticated: true)
         XCTAssertTrue(window.allowsSkipConfirmation())
         window.invalidateOnLock()
-        XCTAssertFalse(window.allowsSkipConfirmation(), "锁屏失效后不得免确认")
+        XCTAssertFalse(window.allowsSkipConfirmation(), "No confirmation-free actions after the lock screen invalidates the window")
     }
 
     func testInvalidateOnLockClosesWindow() {
@@ -47,18 +47,18 @@ final class RemoteAllowWindowTests: XCTestCase {
         window.open(authenticated: true)
         XCTAssertTrue(window.isOpen)
         window.invalidateOnLock()
-        XCTAssertFalse(window.isOpen, "锁屏必须关窗")
-        // 重复调用无害。
+        XCTAssertFalse(window.isOpen, "Locking the screen must close the window")
+        // Repeated calls are harmless.
         window.invalidateOnLock()
         XCTAssertFalse(window.isOpen)
     }
 
     func testSecondsRemainingCountsToMidnight() {
         let window = RemoteAllowWindow()
-        XCTAssertEqual(window.secondsRemaining, 0, "关闭态剩余为 0")
+        XCTAssertEqual(window.secondsRemaining, 0, "Remaining is 0 when closed")
         window.open(authenticated: true)
         let remaining = window.secondsRemaining
-        XCTAssertGreaterThan(remaining, 0, "开启态剩余应到当日 24:00")
+        XCTAssertGreaterThan(remaining, 0, "When open, the remaining time should run to 24:00 today")
         XCTAssertLessThanOrEqual(remaining, 24 * 3600)
     }
 }

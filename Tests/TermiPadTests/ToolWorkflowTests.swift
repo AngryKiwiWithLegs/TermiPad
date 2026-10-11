@@ -519,13 +519,13 @@ extension ToolWorkflowTests {
     func testUpdateCheckRequiresHTTPSAndComparesNumericVersionsOnly() throws {
         // UpdateCheckService.isNewer(latest:current:) — 1.2.0 > 1.1.9 → true
         XCTAssertTrue(UpdateCheckService.isNewer(latest: "1.2.0", current: "1.1.9"))
-        // 1.2 和 1.2.0 是同版本（normalize 后相等）→ false（不是 newer）
+        // 1.2 and 1.2.0 are the same version (equal after normalizing) → false (not newer)
         XCTAssertFalse(UpdateCheckService.isNewer(latest: "1.2", current: "1.2.0"))
         // 1.0.0 < 2.0.0 → false
         XCTAssertFalse(UpdateCheckService.isNewer(latest: "1.0.0", current: "2.0.0"))
-        // "1.0-beta" split 为 ["1", "0-beta"] → compactMap Int 返 [1]（不是纯数字失败）。
-        // 走补 0 路径:pad([1]) = pad([1, 0, 0]) = 同长度 — false。
-        // 即 1.0-beta 视为与 1.0.0 同版本（pre-release 标记，不算 newer）。
+        // "1.0-beta" splits into ["1", "0-beta"] → compactMap Int returns [1] (the non-numeric part fails).
+        // Takes the zero-padding path: pad([1]) = pad([1, 0, 0]) = same length — false.
+        // So 1.0-beta is treated as the same version as 1.0.0 (a pre-release marker, not newer).
         XCTAssertFalse(UpdateCheckService.isNewer(latest: "1.0-beta", current: "1.0.0"))
     }
 }
@@ -811,25 +811,25 @@ extension ToolWorkflowTests {
         XCTAssertEqual(plan?.command, "brew install gh")
         XCTAssertEqual(plan?.channel, .homebrewCore)
         XCTAssertEqual(plan?.expectedExecutableNames, ["gh"])
-        // 日期字段硬编码会让未来每次 refresh 都要改测试。改为正则匹配格式：
-        // catalogRevision = YYYY.MM.DD.N, auditedAt = YYYY-MM-DD。这样产品数据可
-        // 自由刷新而不破坏测试。
-        // 日期字段硬编码会让未来每次 refresh 都要改测试。改为正则匹配格式：
-        // catalogRevision = YYYY.MM.DD.N, auditedAt = YYYY-MM-DD。
-        // 用 if let 替代 try XCTUnwrap（XCTAssertTrue 不是 throwing context）。
+        // Hard-coding the date fields would mean changing the test on every future refresh. Match the format with a regex instead:
+        // catalogRevision = YYYY.MM.DD.N, auditedAt = YYYY-MM-DD. This way the product data can
+        // be refreshed freely without breaking the test.
+        // Hard-coding the date fields would mean changing the test on every future refresh. Match the format with a regex instead:
+        // catalogRevision = YYYY.MM.DD.N, auditedAt = YYYY-MM-DD.
+        // Use if let instead of try XCTUnwrap (XCTAssertTrue is not a throwing context).
         let revPattern = #"^\d{4}\.\d{2}\.\d{2}\.\d+$"#
         let audPattern = #"^\d{4}-\d{2}-\d{2}$"#
         if let revision = plan?.catalogRevision {
             XCTAssertTrue(revision.range(of: revPattern, options: .regularExpression) != nil,
-                          "catalogRevision 应为 YYYY.MM.DD.N 形式: \(revision)")
+                          "catalogRevision should have the form YYYY.MM.DD.N: \(revision)")
         } else {
-            XCTFail("catalogRevision 不应为 nil")
+            XCTFail("catalogRevision should not be nil")
         }
         if let audited = plan?.auditedAt {
             XCTAssertTrue(audited.range(of: audPattern, options: .regularExpression) != nil,
-                          "auditedAt 应为 YYYY-MM-DD 形式: \(audited)")
+                          "auditedAt should have the form YYYY-MM-DD: \(audited)")
         } else {
-            XCTFail("auditedAt 不应为 nil")
+            XCTFail("auditedAt should not be nil")
         }
         XCTAssertTrue(ControlledInstallCatalog.isValidFormula("git-delta"))
         XCTAssertFalse(ControlledInstallCatalog.isValidFormula("gh --formula evil"))
@@ -920,9 +920,9 @@ extension ToolWorkflowTests {
         for c in [pendingA, pendingB, ignored] { context.insert(c) }
         try context.save()
 
-        // 镜像 LaunchpadView.acceptAllPending 的核心路径
+        // Mirrors the core path of LaunchpadView.acceptAllPending
         let pending = [pendingA, pendingB, ignored].filter { $0.status == .pending }
-        XCTAssertEqual(pending.count, 2, "只批量收录 pending 候选；ignored 不动。")
+        XCTAssertEqual(pending.count, 2, "Only pending candidates are accepted in bulk; ignored ones are untouched.")
         var newTools: [TerminalTool] = []
         for candidate in pending {
             let tool = candidate.makeToolForAcceptance()
@@ -936,16 +936,16 @@ extension ToolWorkflowTests {
         let tools = try context.fetch(FetchDescriptor<TerminalTool>())
         XCTAssertEqual(tools.count, 2)
         XCTAssertEqual(Set(tools.map(\.name)), Set(["claude", "custom-cli"]))
-        // claude 是已知工具 → 语义图标（brain.head.profile）
+        // claude is a known tool → semantic icon (brain.head.profile)
         let claude = try XCTUnwrap(tools.first { $0.name == "claude" })
         XCTAssertEqual(claude.category, .ai)
         XCTAssertEqual(claude.iconSymbol, "brain.head.profile")
-        // 未知工具获得稳定回退标识
+        // An unknown tool gets a stable fallback identifier
         let custom = try XCTUnwrap(tools.first { $0.name == "custom-cli" })
         XCTAssertNotNil(custom.iconStyleIdentifier)
-        // ignored 候选保持不变
+        // The ignored candidate stays unchanged
         XCTAssertEqual(ignored.status, .ignored)
-        // pending 候选全部转为 accepted
+        // All pending candidates become accepted
         XCTAssertEqual(pendingA.status, .accepted)
         XCTAssertEqual(pendingB.status, .accepted)
     }

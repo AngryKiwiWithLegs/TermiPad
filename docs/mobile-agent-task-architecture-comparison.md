@@ -1,148 +1,148 @@
-# TermiPad 手机即时测试与智能体协作：架构比选与开发意见
+# TermiPad instant testing from the phone and agent collaboration: architecture comparison and development opinion
 
-**状态：** 后续开发意见；尚未授权实现 MCP 服务、PTY、远程输入、网络桥接、真实 Bot token 或任意终端执行。
+**Status:** Follow-up development opinion; implementing an MCP service, a PTY, remote input, network bridging, a real Bot token, or arbitrary terminal execution is not yet authorized.
 
-## 1. 决策问题
+## 1. The decision problem
 
-本比选解决的真实场景是：**用户在外面，只有手机；智能体在对话中给出新的测试或修复命令；用户无法复制该命令到家中或办公室的 Mac 终端。**用户需要的是让 Mac 代为执行、让智能体根据结果继续协作，而不是在手机上观看或手工操作一个缩小版黑色终端。
+The real scenario this comparison addresses: **the user is out with only a phone; the agent gives a new test or fix command in the conversation; the user cannot copy that command into the terminal of the Mac at home or in the office.** What the user needs is for the Mac to run it on their behalf and for the agent to keep collaborating based on the result — not to watch or operate a shrunken black terminal by hand on the phone.
 
-这与“手机点已保存图标”相关但不相同。前者需要执行临时、对话驱动的工作；后者只需请求已批准的固定工作流。因此，架构应同时覆盖两类任务，而不能强迫所有操作走同一种通道。
+This is related to "tapping a saved icon on the phone" but not the same. The former needs to run temporary, conversation-driven work; the latter only needs to request an approved fixed workflow. The architecture should therefore cover both kinds of tasks rather than forcing every operation through one channel.
 
-> **产品目标：** 用户可在手机上向智能体提出测试任务；TermiPad 在 Mac 本地以清晰、受限、可撤销的方式运行它；结果以最小必要形式回到已授权的会话。
+> **Product goal:** the user can ask the agent for a test task on the phone; TermiPad runs it locally on the Mac in a clear, restricted, revocable way; the result returns to the authorized session in the minimal necessary form.
 
-## 2. 候选方案
+## 2. Candidates
 
-| 编号 | 候选方案 | 能否执行新命令 | 能否覆盖手机图标 | 核心问题 |
+| No. | Candidate | Can it run new commands? | Can it cover phone icons? | Core problem |
 |---|---|---:|---:|---|
-| A | 手机图标直接触发固定 `LaunchIntent` | 否 | 是 | 无法执行刚在对话中生成的新命令。 |
-| B | 智能体通过直接终端 MCP 执行任意 Shell | 是 | 否，需另配界面 | 权限、输出和提示注入风险接近完整远程终端。 |
-| C | TermiPad MCP 仅调用已批准的工具 ID | 部分 | 是 | 可靠且安全，但不能覆盖临时命令。 |
-| D | TermiPad **受限临时任务会话** | 是 | 是，可复用同一入口 | 需要项目范围、权限租约、超时和结果净化等新工程。 |
-| E | 手机上的完整远程 PTY 终端 | 是 | 可有图标，但无必要 | 把产品变成远程 Shell，攻击面和维护成本最高。 |
+| A | Phone icons directly trigger a fixed `LaunchIntent` | No | Yes | Cannot run a new command just generated in the conversation. |
+| B | The agent runs arbitrary shell through a direct terminal MCP | Yes | No, a UI is needed separately | Permission, output, and prompt injection risks approach those of a full remote terminal. |
+| C | TermiPad MCP only invokes approved tool IDs | Partly | Yes | Reliable and safe, but cannot cover temporary commands. |
+| D | TermiPad **restricted temporary task session** | Yes | Yes, the same entry can be reused | Needs new engineering such as project scope, permission leases, timeouts, and result sanitization. |
+| E | A full remote PTY terminal on the phone | Yes | Icons are possible but unnecessary | Turns the product into a remote shell, with the highest attack surface and maintenance cost. |
 
-### A. 固定图标 `LaunchIntent`
+### A. Fixed icon `LaunchIntent`
 
-手机只发出一个短期、不透明的工具请求。Mac 重新检查身份、工具级授权、nonce、过期、撤销、工具健康和终端目标，再执行本地已保存的命令。
+The phone sends only a short-lived, opaque tool request. The Mac rechecks identity, per-tool authorization, nonce, expiry, revocation, tool health, and terminal target, then runs the locally saved command.
 
-它应当保留，适用于“运行 TermiPad 验证”“部署预览”“同步项目”等高频、稳定、无变量的流程，但不能解决本决策中的临时命令痛点。
+It should be kept; it suits high-frequency, stable, variable-free flows such as "run TermiPad verification", "deploy a preview", or "sync the project", but it cannot solve the temporary command pain point of this decision.
 
-### B. 直接终端 MCP
+### B. Direct terminal MCP
 
-智能体调用 `execute(command, cwd, env, timeout)`，读取完整输出，修改文件后再次运行。它最适合坐在 Mac 前的复杂开发、排错和探索；但一旦从手机异地使用，智能体、对话数据、工具输出和远程桥接共同构成高权限执行链。
+The agent calls `execute(command, cwd, env, timeout)`, reads the full output, changes files, and runs again. It suits complex development, debugging, and exploration while sitting at the Mac best; but once used remotely from the phone, the agent, conversation data, tool output, and remote bridge together form a high-privilege execution chain.
 
-本地 MCP 的 `stdio` 传输由客户端启动服务端子进程；它适合本机开发集成，不会天然解决手机到 Mac 的异地连接。[1] 若改成 HTTP，MCP 规范要求验证 `Origin`，并建议本地服务只绑定 `localhost` 并实施认证，以防 DNS rebinding 等风险。[1] 直接终端 MCP 可以作为未来的高级本机开发模式，但不应成为手机版的默认执行面。
+Local MCP's `stdio` transport has the client start the server as a child process; it suits local development integration and does not inherently solve the remote connection from phone to Mac.[1] If changed to HTTP, the MCP specification requires validating `Origin` and recommends that local servers bind only to `localhost` and implement authentication, to guard against risks such as DNS rebinding.[1] A direct terminal MCP could become an advanced local development mode in the future, but it should not be the default execution surface of the phone app.
 
-### C. TermiPad 受限 MCP
+### C. TermiPad restricted MCP
 
-TermiPad 暴露 `list_approved_tools`、`describe_tool`、`request_launch` 和 `get_request_status` 等受限工具。智能体只交给 TermiPad 一个已批准 `toolID`；TermiPad 自己持有命令内容，并按现有 Terminal/iTerm/Warp 交接规则执行。
+TermiPad exposes restricted tools such as `list_approved_tools`, `describe_tool`, `request_launch`, and `get_request_status`. The agent hands TermiPad only an approved `toolID`; TermiPad itself holds the command content and runs it by the existing Terminal/iTerm/Warp handoff rules.
 
-它具备清晰审计、逐项授权、来源与健康状态、用户可见图标目录和可撤销性，是手机与智能体共享的可靠能力库；但它不能代替临时测试。
+It offers clear auditing, per-item authorization, source and health state, an icon catalog the user can see, and revocability, making it a reliable capability library shared by the phone and agents; but it cannot replace temporary tests.
 
-### D. TermiPad 受限临时任务会话
+### D. TermiPad restricted temporary task session
 
-这是一条推荐的新能力。它不是普通新 shell，也不是远程 PTY，而是一个**一次性任务运行器**。智能体提交一份可审阅的任务建议；TermiPad 在 Mac 上创建时效有限、受项目范围约束的会话，并执行该次测试命令。
+This is the recommended new capability. It is not an ordinary new shell and not a remote PTY, but a **one-off task runner**. The agent submits a reviewable task proposal; TermiPad creates a time-limited session on the Mac, constrained to the project scope, and runs that one test command.
 
-每个任务必须包含：目标项目根目录、完整命令、用途类别、预估权限、网络需求、最长运行时间和结果返回级别。用户可在 Mac 上预先开启一个短期“远程测试窗口”，或按风险级别要求本地确认。任务结束、超时、撤销、Mac 锁屏、应用退出或会话失效时，TermiPad 停止会话并安全拒绝后续请求。
+Every task must include: the target project root, the full command, a purpose category, estimated permissions, network needs, maximum run time, and the result return level. The user can open a short "remote test window" on the Mac in advance, or require local confirmation by risk level. When the task ends, times out, is revoked, the Mac is locked, the app quits, or the session becomes invalid, TermiPad stops the session and safely rejects later requests.
 
-它解决了“新命令无法复制”的实际问题，同时使一次性命令从一开始就进入可审阅、可过期、可追踪的模型。任务并不自动成为图标工具；只有用户后来确认稳定且希望复用时，才由本机明确操作提升为固定工具。
+It solves the practical problem of "a new command cannot be copied", while putting one-off commands into a reviewable, expiring, traceable model from the start. A task does not automatically become an icon tool; only when the user later confirms it is stable and wants to reuse it is it promoted to a fixed tool by an explicit action on the Mac.
 
-### E. 完整远程 PTY
+### E. Full remote PTY
 
-完整 PTY 允许手机发送任意按键、查看连续 stdout/stderr、处理交互提示和浏览终端状态。它覆盖度最高，但没有必要才能解决本场景，且实质是远程 Shell 产品：需要处理会话劫持、屏幕/输出泄露、交互式密码提示、命令历史、持续连接、文件路径、粘贴风险和长期授权。
+A full PTY lets the phone send arbitrary keystrokes, view continuous stdout/stderr, handle interactive prompts, and browse terminal state. It has the highest coverage, but it is not needed to solve this scenario and is in substance a remote shell product: it has to deal with session hijacking, screen/output leakage, interactive password prompts, command history, persistent connections, file paths, paste risks, and long-term authorization.
 
-因此不建议将完整远程 PTY 纳入 TermiPad 产品范围。用户如确有完整远程桌面需求，应使用独立的 Screen Sharing、SSH 或受企业管理的远程开发工具，而非让 TermiPad 重复实现它们。
+So a full remote PTY is not recommended for TermiPad's product scope. A user who truly needs a full remote desktop should use separate Screen Sharing, SSH, or enterprise-managed remote development tools rather than have TermiPad reimplement them.
 
-## 3. 比选标准与结论
+## 3. Comparison criteria and conclusions
 
-评分为架构判断，不代表外部市场数据。场景覆盖权重为 30%，安全可控性为 25%，工程可实现性为 15%，持续运维负担为 10%，与 TermiPad 产品一致性为 20%。5 分为最优。
+The scores are architectural judgments and do not represent external market data. Scenario coverage is weighted 30%, security and control 25%, engineering feasibility 15%, ongoing operations burden 10%, and consistency with the TermiPad product 20%. 5 is best.
 
-| 方案 | 场景覆盖 30% | 安全可控 25% | 工程可行 15% | 运维负担 10% | 产品一致 20% | 加权判断 | 结论 |
+| Option | Scenario coverage 30% | Security and control 25% | Engineering feasibility 15% | Operations burden 10% | Product consistency 20% | Weighted judgment | Conclusion |
 |---|---:|---:|---:|---:|---:|---:|---|
-| A 固定图标 | 2 | 5 | 5 | 4 | 5 | 4.00 | 必须保留，但不足以解决临时测试。 |
-| B 直接终端 MCP | 5 | 2 | 4 | 3 | 2 | 3.35 | 适合本机高级开发，不适合手机默认路径。 |
-| C 受限 TermiPad MCP | 3 | 5 | 4 | 4 | 5 | 4.10 | 固定工作流的正确智能体接口。 |
-| **D 临时任务会话** | **5** | **4** | **3** | **3** | **5** | **4.15** | **推荐：解决核心痛点的正式新能力。** |
-| E 完整远程 PTY | 5 | 1 | 2 | 1 | 1 | 2.40 | 不纳入产品范围。 |
+| A Fixed icons | 2 | 5 | 5 | 4 | 5 | 4.00 | Must be kept, but not enough to solve temporary tests. |
+| B Direct terminal MCP | 5 | 2 | 4 | 3 | 2 | 3.35 | Suits advanced local development, not the default phone path. |
+| C Restricted TermiPad MCP | 3 | 5 | 4 | 4 | 5 | 4.10 | The right agent interface for fixed workflows. |
+| **D Temporary task session** | **5** | **4** | **3** | **3** | **5** | **4.15** | **Recommended: the formal new capability that solves the core pain point.** |
+| E Full remote PTY | 5 | 1 | 2 | 1 | 1 | 2.40 | Not in the product scope. |
 
-## 4. 推荐架构：双平面、一个本地策略核心
+## 4. Recommended architecture: two planes, one local policy core
 
-推荐不是选择 A、C 或 D 中的单项，而是建立一个 TermiPad 本地策略核心，并在其上提供两个执行平面。
+The recommendation is not to pick a single one of A, C, or D, but to build one TermiPad local policy core and offer two execution planes on top of it.
 
 ```text
-手机中的智能体对话 / PWA / Telegram Mini App
+Agent conversation on the phone / PWA / Telegram Mini App
                     │
          ┌──────────┴──────────┐
          │                     │
-固定工具请求              临时测试任务建议
-`toolID`                 项目、完整命令、时限、用途
+Fixed tool request         Temporary test task proposal
+`toolID`                 project, full command, time limit, purpose
          │                     │
          └──────────┬──────────┘
                     ▼
-        TermiPad 本地策略核心（Mac）
-  身份绑定 · 允许窗口 · 审批 · 项目范围 · 风险分级
-  nonce · 过期 · 速率限制 · 停止 · 撤销 · 审计
+        TermiPad local policy core (Mac)
+  identity binding · allow window · approval · project scope · risk tiers
+  nonce · expiry · rate limiting · stop · revocation · audit
                     │
          ┌──────────┴──────────┐
          ▼                     ▼
-已有终端交接           一次性受限任务会话
-Terminal/iTerm/Warp    非交互、超时、最小结果
+Existing terminal handoff   One-off restricted task session
+Terminal/iTerm/Warp    non-interactive, timeout, minimal result
 ```
 
-手机入口只是**传输与展示层**，不是执行权威。PWA 与 Telegram Mini App 都可以在后续作为图标面板；它们不能持有命令、路径、密钥或 Mac 的入站网络地址。Mac 应保持出站连接，绝不开放公网监听端口。Telegram Mini App 必须使用 HTTPS，并且服务端验证客户端 `initData`；Telegram Bot 的长轮询与 webhook 互斥，因此可选用出站长轮询而非 webhook。[2] [3]
+The phone entry is only the **transport and presentation layer**, not the execution authority. A PWA and a Telegram Mini App can both serve as icon panels later; they must not hold commands, paths, secrets, or the Mac's inbound network address. The Mac should keep to outbound connections and never open a public listening port. A Telegram Mini App must use HTTPS, and the server must validate the client's `initData`; a Telegram Bot's long polling and webhook are mutually exclusive, so outbound long polling can be chosen instead of a webhook.[2] [3]
 
-## 5. “干净终端”的明确规格
+## 5. An explicit specification of the "clean terminal"
 
-第一版不能承诺“任意命令都被 macOS 完美沙箱化”。App Sandbox 能在内核级限制文件、网络等访问，但应用需要明确声明权限；任意开发工具链又经常需要项目目录、派生数据、编译器、缓存、网络或签名资源。[4] 因此“干净”应是渐进的产品保证：
+The first version cannot promise that "any command is perfectly sandboxed by macOS". App Sandbox can restrict file, network, and other access at the kernel level, but an app must declare its permissions explicitly; and arbitrary development toolchains often need the project directory, derived data, compilers, caches, the network, or signing resources.[4] So "clean" should be a progressive product guarantee:
 
-| 层级 | 第一版必须做到 | 后续可增强 | 不可承诺 |
+| Layer | Must-have in the first version | Possible later enhancement | Cannot be promised |
 |---|---|---|---|
-| 生命周期 | 每个会话唯一 ID、时限、取消、超时后终止子进程组 | 崩溃恢复与任务队列 | 永久后台 shell。 |
-| 项目边界 | 用户在 Mac 本机选择项目根目录；任务以该目录为工作目录 | 安全作用域书签、每项目策略 | 任意访问整个磁盘。 |
-| 环境 | 使用最小环境变量；不回传环境值 | 白名单 PATH、临时 HOME、专用缓存目录 | 继承所有登录会话和秘密。 |
-| 网络 | 默认在任务卡中显式显示网络需求 | 对低风险测试默认禁网或按项目授权 | 让任务隐式访问任意网络。 |
-| 输入与输出 | 无交互 PTY；输入仅为经策略认可的固定命令；结果按最小级别返回 | 规则化日志脱敏和结构化测试结果 | 把完整终端记录自动发往手机/聊天服务。 |
-| 升级 | 临时任务不得自动成为固定工具 | 用户本机确认后可“保存为工具” | 智能体静默创建长期高权限工具。 |
+| Lifecycle | A unique ID per session, time limit, cancellation, and terminating the child process group after timeout | Crash recovery and a task queue | A permanent background shell. |
+| Project boundary | The user chooses the project root on the Mac; the task uses that directory as its working directory | Security-scoped bookmarks, per-project policy | Arbitrary access to the whole disk. |
+| Environment | Use minimal environment variables; do not return environment values | Allowlisted PATH, temporary HOME, dedicated cache directory | Inheriting every login session and secret. |
+| Network | By default show the network needs explicitly on the task card | Disable networking by default for low-risk tests, or authorize per project | Letting a task access arbitrary networks implicitly. |
+| Input and output | No interactive PTY; input is only fixed commands approved by policy; results are returned at the minimal level | Rule-based log redaction and structured test results | Automatically sending the full terminal record to the phone / chat service. |
+| Promotion | A temporary task must not automatically become a fixed tool | "Save as tool" after the user confirms on the Mac | An agent silently creating long-lived high-privilege tools. |
 
-## 6. 后续开发意见
+## 6. Follow-up development opinion
 
-### 建议立即排期：T0，本机任务策略核心
+### Schedule now: T0, the local task policy core
 
-在完成并确认当前本地图标系统的真实 macOS 验证后，下一批代码应实现 `TaskIntent` 和任务状态机，而不是立即接 Telegram、PWA、MCP 或 iPhone。
+After completing and confirming the real macOS verification of the current local icon system, the next batch of code should implement `TaskIntent` and the task state machine, rather than connecting Telegram, a PWA, MCP, or the iPhone right away.
 
-T0 需要覆盖：任务提案模型、风险类别、项目范围引用、完整命令审阅、短期允许窗口、签名/nonce/过期、停止和撤销、进程树管理、最小结果枚举，以及“固定工具”与“临时任务”绝不混淆的单元测试。此阶段不联网，也不启动隐藏或永久 shell。
+T0 needs to cover: the task proposal model, risk categories, project scope references, full command review, the short allow window, signature/nonce/expiry, stop and revocation, process tree management, the minimal result enum, and unit tests ensuring "fixed tools" and "temporary tasks" are never confused. This phase has no network and starts no hidden or permanent shell.
 
-### 建议随后排期：T1，本机临时测试任务界面
+### Schedule next: T1, the local temporary test task UI
 
-让用户在 Mac 上查看任务卡：命令、项目、网络需求、时限、风险、开始、取消、停止、保存为固定工具。先只支持用户主动从 TermiPad 发起一次性测试，以验证生命周期和 UI；仍不接受智能体或手机提交。
+Let the user view the task card on the Mac: command, project, network needs, time limit, risk, start, cancel, stop, save as a fixed tool. At first only support one-off tests the user starts from TermiPad, to validate the lifecycle and UI; submissions from agents or the phone are still not accepted.
 
-### 条件性排期：T2，本机 stdio TermiPad MCP
+### Conditional: T2, local stdio TermiPad MCP
 
-在 T0/T1 成熟后，提供 `stdio` MCP 服务端，让本机 MCP 客户端能够提出临时任务或调用固定工具。`stdio` 模式由客户端启动本机子进程，适合先验证智能体协作，而无需创建网络服务。[1] 每次调用仍穿过 T0 策略核心；不能暴露任意 `execute(command)` 工具。
+Once T0/T1 are mature, provide a `stdio` MCP server so local MCP clients can propose temporary tasks or invoke fixed tools. In `stdio` mode the client starts a local child process, which suits validating agent collaboration first without creating a network service.[1] Every call still passes through the T0 policy core; no arbitrary `execute(command)` tool may be exposed.
 
-### 条件性排期：T3，手机只读目录与固定工具入口
+### Conditional: T3, read-only catalog and fixed tool entry on the phone
 
-通过同网原生伴侣先打通手机的图标目录、Mac 在线状态和固定工具请求。Apple 的本地网络和 Bonjour 能力受授权与 `Info.plist` 声明约束，应在真实 iPhone/Mac 上验证。[5]
+Use the same-network native companion to first connect the phone's icon catalog, the Mac's online state, and fixed tool requests. Apple's local network and Bonjour capabilities are constrained by authorization and `Info.plist` declarations and should be verified on a real iPhone/Mac.[5]
 
-### 远期且需单独授权：T4，异地手机任务提交
+### Long-term, requiring separate authorization: T4, remote task submission from the phone
 
-仅在 T0–T3 经实际使用验证后，再选择 PWA 或 Telegram Mini App。此阶段允许手机向授权会话**提交任务建议**，但不允许手机获得 PTY；Mac 通过出站连接取回请求，仍由 T0 负责批准、执行和最小结果返回。
+Only after T0–T3 are validated by real use, choose a PWA or a Telegram Mini App. This phase lets the phone **submit task proposals** to an authorized session, but does not give the phone a PTY; the Mac fetches requests over an outbound connection, and T0 remains responsible for approval, execution, and returning the minimal result.
 
-## 7. 暂不实施范围
+## 7. Out of scope for now
 
-在本路线中，以下能力明确不进入 TermiPad：公网监听的 Mac 终端、完整远程 PTY、任意键盘输入、远程文件浏览、自动上传完整 stdout/stderr、任意命令 MCP、远程安装/升级/卸载、智能体静默扩大权限、智能体自动把临时命令固化为长期工具。
+On this roadmap the following capabilities explicitly do not enter TermiPad: a Mac terminal listening on the public internet, a full remote PTY, arbitrary keyboard input, remote file browsing, automatic upload of full stdout/stderr, an arbitrary-command MCP, remote install/upgrade/uninstall, agents silently widening permissions, and agents automatically turning temporary commands into long-lived tools.
 
-这不是回避用户痛点。T0–T4 已能完成手机异地发起临时测试、Mac 本地安全执行、结果返回并继续与智能体协作；排除的是解决该问题不需要、但会使产品变成远程 Shell 的能力。
+This is not dodging the user's pain point. T0–T4 already deliver starting a temporary test remotely from the phone, running it safely on the Mac, returning the result, and continuing to collaborate with the agent; what is excluded are capabilities that solving this problem does not need but that would turn the product into a remote shell.
 
-## 8. 最终意见
+## 8. Final opinion
 
-**采纳“TermiPad 受限临时任务会话 + 固定图标工具库”的双平面方案。**它是唯一同时覆盖“手机无法复制新命令”和“手机点击固定图标”两类真实场景、又不把 Mac 暴露为永久远程终端的方案。
+**Adopt the two-plane plan of "TermiPad restricted temporary task session + fixed icon tool library".** It is the only plan that covers both real scenarios — "a new command cannot be copied on the phone" and "tapping a fixed icon on the phone" — without exposing the Mac as a permanent remote terminal.
 
-直接终端 MCP 可以在未来作为一个明确隔离、仅本机、逐次审批的高级开发模式存在，但不是手机路线的基础。Telegram Mini App、PWA 和原生 iPhone Companion 则是后续的入口选择，不能先于 T0 任务策略核心开发。
+A direct terminal MCP may exist in the future as a clearly isolated, local-only, per-use-approved advanced development mode, but it is not the foundation of the phone roadmap. The Telegram Mini App, PWA, and native iPhone Companion are later entry choices and cannot be developed ahead of the T0 task policy core.
 
-## 参考资料
+## References
 
-[1]: https://modelcontextprotocol.io/specification/2025-03-26/basic/transports "Model Context Protocol：Transports"
-[2]: https://core.telegram.org/bots/webapps "Telegram：Mini Apps"
-[3]: https://core.telegram.org/bots/api#getupdates "Telegram Bot API：getUpdates"
-[4]: https://developer.apple.com/documentation/xcode/configuring-the-macos-app-sandbox "Apple：Configuring the macOS App Sandbox"
-[5]: https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy "Apple：TN3179 Understanding Local Network Privacy"
+[1]: https://modelcontextprotocol.io/specification/2025-03-26/basic/transports "Model Context Protocol: Transports"
+[2]: https://core.telegram.org/bots/webapps "Telegram: Mini Apps"
+[3]: https://core.telegram.org/bots/api#getupdates "Telegram Bot API: getUpdates"
+[4]: https://developer.apple.com/documentation/xcode/configuring-the-macos-app-sandbox "Apple: Configuring the macOS App Sandbox"
+[5]: https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy "Apple: TN3179 Understanding Local Network Privacy"

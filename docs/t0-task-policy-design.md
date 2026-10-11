@@ -1,55 +1,55 @@
-# T0：本地受限任务策略核心
+# T0: local restricted task policy core
 
-**状态：** 已进入实现批次；本阶段不执行任务、不创建进程、不接入网络、MCP、手机、PWA、Telegram 或 PTY。
+**Status:** In the implementation batch; this phase runs no tasks, creates no processes, and connects to no network, MCP, phone, PWA, Telegram, or PTY.
 
-## 目标
+## Goal
 
-T0 为后续的临时测试任务建立一个本地、可审计的策略核心。它解决的不是“在应用里新建一个 Shell”，而是先回答：一条一次性任务是否属于随应用发布的固定目录、是否绑定到用户本机选择的项目范围、是否在有效本地审阅窗口内、是否被重放、过期、取消或撤销。
+T0 builds a local, auditable policy core for later temporary test tasks. What it solves is not "creating a shell inside the app", but first answering: does a one-off task belong to the fixed catalog shipped with the app, is it bound to a project scope the user chose on this Mac, is it inside a valid local review window, and has it been replayed, expired, cancelled, or revoked.
 
-## 数据契约
+## Data contract
 
-| 类型 | 保存内容 | 不保存或不外传的内容 |
+| Type | What is stored | What is not stored or sent out |
 |---|---|---|
-| `TaskProjectScope` | 本地显示名、项目根目录、撤销状态、时间 | 不进 JSON 备份、隐私诊断、聊天或网页入口。 |
-| `TaskReviewWindow` | 项目范围引用、最大风险、开始/结束/撤销时间 | 不代表远程许可，不打开网络连接。 |
-| `TaskIntent` | 项目范围 ID、固定任务类型、风险、nonce、时限、状态与拒绝类别 | 不带自由命令、参数、环境变量、路径、网络地址、输入或输出。 |
-| `FixedTaskCatalog` | 随应用发布的固定任务类型、命令预览和用途 | 不从 AI、README、网页、Bot 或 MCP 接收命令。 |
+| `TaskProjectScope` | Local display name, project root, revocation state, time | Does not enter JSON backups, privacy diagnostics, chat, or web entries. |
+| `TaskReviewWindow` | Project scope reference, maximum risk, start/end/revocation time | Does not represent remote permission and opens no network connection. |
+| `TaskIntent` | Project scope ID, fixed task type, risk, nonce, time limit, state, and rejection category | Carries no free-form command, arguments, environment variables, paths, network addresses, input, or output. |
+| `FixedTaskCatalog` | The fixed task types, command previews, and purposes shipped with the app | Accepts no commands from AI, READMEs, web pages, Bots, or MCP. |
 
-## 本地状态机
+## Local state machine
 
 ```text
-创建提案 → pendingReview
+Create proposal → pendingReview
        │
-       ├─ 本机范围 + 有效审阅窗口 + nonce 未重放 → approved
-       ├─ 过期 → expired
-       ├─ 取消 → cancelled
-       └─ 范围/窗口撤销 → revoked 或 rejected
+       ├─ local scope + valid review window + nonce not replayed → approved
+       ├─ expired → expired
+       ├─ cancelled → cancelled
+       └─ scope/window revoked → revoked or rejected
 ```
 
-`approved` 在 T0 中不触发任何执行。它只证明未来 T1 的本地任务运行器可以接收到一条已经按策略审阅的任务。T0 绝不把 `approved` 当作永久后台授权。
+`approved` triggers no execution in T0. It only proves that the future T1 local task runner can receive a task already reviewed per policy. T0 never treats `approved` as a permanent background authorization.
 
-## 固定目录
+## Fixed catalog
 
-初始目录仅包含：`swift test`、`./scripts/verify-macos.sh` 与 `xcodegen generate`。目录条目有完整命令预览和风险级别；智能体、手机、MCP 和远程元数据无法创建或修改条目。
+The initial catalog contains only: `swift test`, `./scripts/verify-macos.sh`, and `xcodegen generate`. Catalog entries have a full command preview and a risk level; agents, the phone, MCP, and remote metadata cannot create or modify entries.
 
-用户若日后想把一次性任务固化为图标工具，必须在 Mac 本机通过一个单独、明确的确认动作完成；T0 不支持自动提升。
+If the user later wants to turn a one-off task into an icon tool, it must be done on the Mac through a separate, explicit confirmation action; T0 does not support automatic promotion.
 
-## 拒绝规则
+## Rejection rules
 
-| 条件 | 结果 |
+| Condition | Result |
 |---|---|
-| 任务类型不在固定目录 | `unknownTaskKind` |
-| 项目范围缺失、目录不可用或已撤销 | `projectScopeUnavailable` |
-| 从未开启本地审阅窗口 | `localReviewRequired` |
-| 已配置窗口全部过期 | `reviewWindowExpired` |
-| 窗口风险等级不足 | `riskNotPermitted` |
-| nonce 已用于另一条未拒绝任务 | `nonceReplayed` |
-| 提案已过期、已取消或不再等待审阅 | 相应固定拒绝状态 |
+| The task type is not in the fixed catalog | `unknownTaskKind` |
+| The project scope is missing, its directory is unavailable, or it is revoked | `projectScopeUnavailable` |
+| No local review window was ever opened | `localReviewRequired` |
+| All configured windows have expired | `reviewWindowExpired` |
+| The window's risk level is insufficient | `riskNotPermitted` |
+| The nonce was already used for another non-rejected task | `nonceReplayed` |
+| The proposal has expired, was cancelled, or is no longer awaiting review | The matching fixed rejection state |
 
-## 隐私与诊断
+## Privacy and diagnostics
 
-诊断只记录固定事件类别：创建提案、打开审阅窗口、策略批准/拒绝、取消和范围撤销。事件不包含项目名、路径、命令、变量、输出、密钥或网络地址；当前 JSON 备份也不包含任务范围或任务历史。
+Diagnostics record only fixed event categories: proposal created, review window opened, policy approved/rejected, cancelled, and scope revoked. Events contain no project names, paths, commands, variables, output, secrets, or network addresses; the current JSON backup contains no task scopes or task history either.
 
-## 静态防护
+## Static guards
 
-集中验证脚本对 T0 源文件禁止 `URLSession`、网络连接、WebSocket、AppleScript、`TerminalLauncher`、`Process`、PTY、`/bin/sh`、URL、`stdin`、`stdout` 和 `stderr`。它还要求固定任务目录存在。后续阶段如要引入执行器、MCP 或移动连接，必须创建独立设计、测试和审阅批次，不能通过移除 T0 防护静默扩大能力。
+For the T0 source files the consolidated verification script forbids `URLSession`, network connections, WebSocket, AppleScript, `TerminalLauncher`, `Process`, PTY, `/bin/sh`, URLs, `stdin`, `stdout`, and `stderr`. It also requires the fixed task catalog to exist. If later phases want to introduce an executor, MCP, or mobile connections, a separate design, test, and review batch must be created; capability must not be widened silently by removing the T0 guards.

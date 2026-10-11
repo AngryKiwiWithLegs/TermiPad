@@ -11,8 +11,8 @@ settings:
   base:
     SWIFT_VERSION: "5.9"
     MACOSX_DEPLOYMENT_TARGET: "14.0"
-    # UI 测试 Runner 必须至少使用 ad hoc 签名，否则本机 Gatekeeper 可能阻止其启动。
-    # “-”不需要开发者证书或 Apple Developer 团队，仅用于本地构建与测试。
+    # The UI test Runner must use at least an ad hoc signature, otherwise the local Gatekeeper may block it from launching.
+    # "-" needs no developer certificate or Apple Developer team; it is only for local builds and tests.
     CODE_SIGNING_ALLOWED: "YES"
     CODE_SIGNING_REQUIRED: "YES"
     CODE_SIGN_STYLE: Manual
@@ -33,16 +33,16 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.termipad.app
         PRODUCT_NAME: TermiPad
-        # M4 固定签名（2026-09-18）：ad-hoc 每次构建签名都变，钥匙串 item
-        # 的 ACL 绑定旧签名 → 每次重建后反复弹授权。改用 Apple Development
-        # 证书（与 iOS Companion 同一证书）→ 签名稳定，一次授权终身有效。
+        # M4 fixed signing (2026-09-18): the ad hoc signature changes on every build, and the keychain item's
+        # ACL is bound to the old signature → repeated authorization prompts after every rebuild. Switch to the Apple Development
+        # certificate (the same one as the iOS Companion) → a stable signature, authorized once and valid for good.
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "Apple Development"
         DEVELOPMENT_TEAM: 7LTPLQKWWD
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_CFBundleDisplayName: TermiPad
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        INFOPLIST_KEY_NSAppleEventsUsageDescription: "TermiPad 需要控制您选择的终端，以打开并执行您确认的命令。"
+        INFOPLIST_KEY_NSAppleEventsUsageDescription: "TermiPad needs to control the terminal you choose in order to open it and run the commands you confirm."
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
         DEAD_CODE_STRIPPING: "YES"
     scheme:
@@ -85,16 +85,16 @@ targets:
     deploymentTarget: "16.0"
     sources:
       - path: CompanionApp
-      # 应用图标（M5：iPhone 原生风格资产）
+      # App icon (M5: iPhone-native style assets)
       - path: CompanionApp/Assets.xcassets
-      # 复用 Mac 端纯逻辑层（密码学/协议/帧/Keychain），避免代码漂移
+      # Reuse the Mac's pure logic layer (cryptography / protocol / framing / Keychain) to avoid code drift
       - path: Sources/MobilePairingCrypto.swift
       - path: Sources/MobilePairingProtocol.swift
       - path: Sources/KeychainStore.swift
     info:
       path: CompanionApp/Info.plist
       properties:
-        CFBundleDisplayName: TermiPad 伴侣
+        CFBundleDisplayName: TermiPad Companion
         CFBundleShortVersionString: "1.0"
         CFBundleVersion: "1"
         LSRequiresIPhoneOS: true
@@ -103,9 +103,9 @@ targets:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        # iOS 14+ 本地发现必填：缺 NSLocalNetworkUsageDescription 或
-        # NSBonjourServices 时系统静默拦截 Bonjour——verify-macos.sh 有守卫
-        NSLocalNetworkUsageDescription: TermiPad 伴侣仅在同 Wi-Fi 局域网内发现并配对你的 Mac；不连接公网。
+        # Required for local discovery on iOS 14+: without NSLocalNetworkUsageDescription or
+        # NSBonjourServices the system silently blocks Bonjour — verify-macos.sh has a guard
+        NSLocalNetworkUsageDescription: TermiPad Companion discovers and pairs with your Mac only on the same Wi-Fi local network; it never connects to the public internet.
         NSBonjourServices:
           - _termipad-m1._tcp
     settings:
@@ -117,5 +117,5 @@ targets:
         IPHONEOS_DEPLOYMENT_TARGET: "16.0"
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "Apple Development"
-        # 免费 personal team（重新登录后 Apple 轮换了 team ID：4XRX3DHYQ6 → 7LTPLQKWWD）
+        # Free personal team (Apple rotated the team ID after signing in again: 4XRX3DHYQ6 → 7LTPLQKWWD)
         DEVELOPMENT_TEAM: "7LTPLQKWWD"
