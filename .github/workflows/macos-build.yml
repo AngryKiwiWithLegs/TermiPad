@@ -21,27 +21,17 @@ jobs:
         shell: bash
         run: |
           echo "::notice title=toolchain::$(xcodebuild -version | tr '\n' ' ') | $(swift --version 2>&1 | head -1)"
-      - name: Unit tests
-        id: tests
-        shell: bash
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          swift test 2>&1 | tee swift-test.log
-      - name: Report
-        if: always()
+      - name: Xcode builds
         shell: bash
         run: |
-          echo "::notice title=outcome::swift test outcome=${{ steps.tests.outcome }} lines=$(wc -l < swift-test.log)"
-          grep -E 'error:|fatal error:|failed|Executed [0-9]+ tests' swift-test.log | sed -E "s#$PWD/##g" | awk '!seen[$0]++' > picked.txt || true
-          echo "::notice title=picked::$(wc -l < picked.txt) lines"
-          split -l 12 -d picked.txt chunk_ || true
-          n=0
-          for f in chunk_*; do
-            [ -f "$f" ] || continue
-            n=$((n+1)); [ $n -gt 9 ] && break
-            msg=$(cut -c1-330 "$f" | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"}{print}')
-            echo "::warning title=log-$n::$msg"
+          brew install xcodegen >/dev/null 2>&1
+          xcodegen generate > xcodegen.log 2>&1; echo "::notice title=xcodegen::exit $? $(tail -n 2 xcodegen.log | tr '\n' ' ')"
+          for spec in "TermiPad|platform=macOS" "TermiPadCompanion|generic/platform=iOS Simulator" "TermiPadUITests|platform=macOS"; do
+            t="${spec%%|*}"; d="${spec##*|}"
+            set +e
+            xcodebuild -project TermiPad.xcodeproj -target "$t" -configuration Debug CODE_SIGNING_ALLOWED=NO SYMROOT="$RUNNER_TEMP/b-$t" $( [ "$t" = TermiPadCompanion ] && echo "-sdk iphonesimulator" ) build > "xb-$t.log" 2>&1
+            rc=$?
+            set -e
+            errs=$(grep -E '(error|fatal error):' "xb-$t.log" | sed -E "s#$PWD/##g" | awk '!seen[$0]++' | head -12 | cut -c1-300 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"}{print}')
+            echo "::notice title=xcodebuild-$t::exit $rc | $(grep -E 'BUILD (SUCCEEDED|FAILED)' "xb-$t.log" | tail -1)%0A$errs"
           done
-          msg=$(tail -n 12 swift-test.log | cut -c1-300 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"}{print}')
-          echo "::notice title=tail::$msg"
