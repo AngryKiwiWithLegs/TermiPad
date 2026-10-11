@@ -309,8 +309,10 @@ struct LaunchpadView: View {
     }
 
     private var toolLibrary: some View {
-        Group {
-            if filteredTools.isEmpty {
+        // Filter once per render; each use below would otherwise repeat the whole pass over the library.
+        let visibleTools = filteredTools
+        return Group {
+            if visibleTools.isEmpty {
                 ContentUnavailableView {
                     Label(emptyLibraryTitle, systemImage: emptyLibrarySymbol)
                 } description: {
@@ -327,7 +329,7 @@ struct LaunchpadView: View {
             } else {
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 18) {
-                        ForEach(filteredTools) { tool in
+                        ForEach(visibleTools) { tool in
                             ToolTile(
                                 tool: tool,
                                 language: language,
@@ -346,7 +348,7 @@ struct LaunchpadView: View {
         .navigationTitle(contentTitle)
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                Text("\(filteredTools.count) \(AppCopy.text("tools", language: language))")
+                Text("\(visibleTools.count) \(AppCopy.text("tools", language: language))")
                     .foregroundStyle(.secondary)
                     .font(.caption)
             }
@@ -946,6 +948,9 @@ struct ToolEditView: View {
     }
 
     var body: some View {
+        // Each check touches the file system, so run it once per render instead of once per use below.
+        let health = self.health
+        let workingDirectoryHealth = self.workingDirectoryHealth
         NavigationStack {
             Form {
                 Section(AppCopy.text("launchCommand", language: language)) {
