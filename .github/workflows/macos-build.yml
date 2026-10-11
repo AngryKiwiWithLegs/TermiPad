@@ -5,7 +5,7 @@ on:
     inputs:
       runner:
         description: Runner image
-        default: macos-14
+        default: macos-15
 
 permissions:
   contents: read
@@ -14,24 +14,43 @@ jobs:
   build:
     name: Probe on ${{ inputs.runner }}
     runs-on: ${{ inputs.runner }}
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Toolchain
+      - name: Unit tests
         shell: bash
         run: |
+          set +e +o pipefail
+          note() { # title, file -> one annotation with up to 14 lines
+            local msg
+            msg=$(cut -c1-300 "$2" | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"}{print}')
+            echo "::notice title=$1::$msg"
+          }
           echo "::notice title=toolchain::$(xcodebuild -version | tr '\n' ' ') | $(swift --version 2>&1 | head -1)"
+          swift test > swift-test.log 2>&1
+          echo "::notice title=swift-test::exit $? lines=$(wc -l < swift-test.log)"
+          grep -E 'error:|fatal error:| failed |Fatal|crashed|unexpected signal' swift-test.log | sed -E "s#$PWD/##g" | awk '!seen[$0]++' > problems.txt
+          echo "::notice title=problems::$(wc -l < problems.txt) lines"
+          split -l 14 -d problems.txt prob_
+          n=0
+          for f in prob_*; do
+            [ -f "$f" ] || continue
+            n=$((n+1)); [ $n -gt 8 ] && break
+            note "problem-$n" "$f"
+          done
+          grep -E 'Executed [0-9]+ tests' swift-test.log | tail -3 > executed.txt; note executed executed.txt
+          grep -E "Test Suite '(TaskOutputStream|TaskOutputCapture|PairedDeviceStoreRegression|KnownToolMatching|UpdateCheckPreference|LocalizedCopy)[A-Za-z]*' (passed|failed)" swift-test.log > newsuites.txt; note new-suites newsuites.txt
+          grep -E 'warning:' swift-test.log | sed -E "s#$PWD/##g" | awk '!seen[$0]++' | grep -E 'TaskExecutionService|TaskOutputStreamService|MobilePairingService|PairedDeviceStore|ToolIconStore|LaunchpadView|CodeReviewRegression|TerminalTool|ToolIconView|DataStoreRecovery|MobileLaunchPrompt|ControlledInstall' | head -14 > warns.txt; note warnings warns.txt
+          tail -n 10 swift-test.log > tail.txt; note tail tail.txt
       - name: Xcode builds
         shell: bash
         run: |
           set +e +o pipefail
           brew install xcodegen >/dev/null 2>&1
           xcodegen generate > xcodegen.log 2>&1; echo "::notice title=xcodegen::exit $? $(tail -n 2 xcodegen.log | tr '\n' ' ')"
-          for spec in "TermiPad|platform=macOS" "TermiPadCompanion|generic/platform=iOS Simulator" "TermiPadUITests|platform=macOS"; do
-            t="${spec%%|*}"; d="${spec##*|}"
+          for t in TermiPad TermiPadCompanion TermiPadUITests; do
             xcodebuild -project TermiPad.xcodeproj -target "$t" -configuration Debug CODE_SIGNING_ALLOWED=NO SYMROOT="$RUNNER_TEMP/b-$t" $( [ "$t" = TermiPadCompanion ] && echo "-sdk iphonesimulator" ) build > "xb-$t.log" 2>&1
             rc=$?
             errs=$(grep -E '(error|fatal error):' "xb-$t.log" | sed -E "s#$PWD/##g" | awk '!seen[$0]++' | head -12 | cut -c1-300 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"}{print}')
-            tailmsg=$(tail -n 6 "xb-$t.log" | cut -c1-250 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"}{print}')
-            echo "::notice title=xcodebuild-$t::exit $rc | $(grep -E 'BUILD (SUCCEEDED|FAILED)' "xb-$t.log" | tail -1)%0A$errs%0A--tail--%0A$tailmsg"
+            echo "::notice title=xcodebuild-$t::exit $rc | $(grep -E 'BUILD (SUCCEEDED|FAILED)' "xb-$t.log" | tail -1)%0A$errs"
           done
