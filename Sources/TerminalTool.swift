@@ -351,7 +351,14 @@ enum ToolDescriptionPresentation {
     private static func profile(for toolName: String) -> ToolUsageProfile? {
         let normalizedName = toolName.lowercased()
         if let directMatch = knownToolProfiles[normalizedName] { return directMatch }
-        return knownToolProfiles.first { normalizedName.contains($0.key) }?.value
+        // A name can contain several keys, and dictionary order changes between launches, so "first match"
+        // could show a different description each time. Always take the longest key, then the alphabetically first.
+        let containedKey = knownToolProfiles.keys
+            .filter { normalizedName.contains($0) }
+            .min { left, right in
+                left.count != right.count ? left.count > right.count : left < right
+            }
+        return containedKey.flatMap { knownToolProfiles[$0] }
     }
 
     private static func concise(_ value: String) -> String {

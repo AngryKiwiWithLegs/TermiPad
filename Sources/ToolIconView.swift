@@ -176,7 +176,14 @@ enum ToolIconCatalog {
     private static func knownDefinition(for toolName: String) -> ToolIconDefinition? {
         let normalizedName = normalizedToolName(toolName)
         if let directMatch = knownTools[normalizedName] { return directMatch }
-        return knownTools.first { normalizedName.contains($0.key) }?.value
+        // A name can contain several keys, and dictionary order changes between launches, so "first match"
+        // could give the same tool a different icon each time. Always take the longest key, then the alphabetically first.
+        let containedKey = knownTools.keys
+            .filter { normalizedName.contains($0) }
+            .min { left, right in
+                left.count != right.count ? left.count > right.count : left < right
+            }
+        return containedKey.flatMap { knownTools[$0] }
     }
 
     private static func definition(forFallbackStyleIdentifier identifier: String) -> ToolIconDefinition {

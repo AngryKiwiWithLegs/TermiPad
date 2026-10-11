@@ -19,7 +19,9 @@ import Foundation
 enum UpdateCheckService {
     /// User preference key: defaults to false — same pattern as autoEnrich / discoveryPreview;
     /// the user must turn it on explicitly before any network request is made. TermiPad promises that "automatic/network" features are all off by default.
-    static let enabledDefaultsKey = "TermiPad.updateCheckEnabled"
+    /// This is the key the Settings switch has always written. The service used to read a differently
+    /// spelled key ("TermiPad.updateCheckEnabled") that nothing ever set, so every check reported "disabled".
+    static let enabledDefaultsKey = "TermiPad.updateChecksEnabled"
 
     /// The TermiPad version the user currently has installed (read from CFBundleShortVersionString).
     /// `check()` compares the latest release tag_name with this value to decide .upToDate / .updateAvailable.

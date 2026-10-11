@@ -1101,13 +1101,20 @@ final class CompanionPairingClient: ObservableObject {
     private func handleStreamFrame(_ data: Data) {
         Self.diag("Stream frame arrived: \(data.count)B key=\(pendingSessionKey != nil ? "yes" : "no")")
         guard let key = pendingSessionKey, !data.isEmpty else { return }
+        // Decrypt once, then tell the frame types apart by their fields (the same decoding the envelope helpers do,
+        // without opening the same ciphertext up to three times).
+        guard let plaintext = try? MobilePairingCrypto.open(data, using: key) else {
+            Self.diag("Unrecognized stream frame — ignored")
+            return
+        }
+        let decoder = JSONDecoder()
         // Try the pushed chunk first (most common); state changes next.
-        if let chunk = try? MobilePairingEnvelope.openStreamChunk(data, using: key) {
+        if let chunk = try? decoder.decode(MobileStreamChunk.self, from: plaintext) {
             streamText += chunk.text
             streamConsumedOffset = chunk.offset + chunk.text.utf8.count
             return
         }
-        if let state = try? MobilePairingEnvelope.openStreamStateChange(data, using: key) {
+        if let state = try? decoder.decode(MobileStreamStateChange.self, from: plaintext) {
             streamState = state.executionState
             if state.finishedAt != nil {
                 // Task finished: keep the text for reading; the connection can be unsubscribed.
@@ -1116,7 +1123,7 @@ final class CompanionPairingClient: ObservableObject {
             return
         }
         // M4-3 interaction request frame: show the choice card.
-        if let interaction = try? MobilePairingEnvelope.openStreamInteraction(data, using: key) {
+        if let interaction = try? decoder.decode(MobileStreamInteraction.self, from: plaintext) {
             Self.diag("Received interaction request: \(interaction.prompt.prefix(20))…")
             pendingInteraction = interaction
             return
