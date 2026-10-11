@@ -1,6 +1,12 @@
 import Combine
 import Foundation
 
+/// Holder for the bytes of a cut-off character, kept between two reads of a task's capture pipe.
+/// Touched only by that pipe's read handler, which runs on one serial queue.
+private final class UnfinishedUTF8Bytes: @unchecked Sendable {
+    var bytes = Data()
+}
+
 struct TaskExecutionRequest: Equatable {
     let executableURL: URL
     let arguments: [String]
@@ -253,13 +259,20 @@ final class TaskExecutionCoordinator: ObservableObject {
         let source = DispatchSource.makeReadSource(
             fileDescriptor: pipe.fileHandleForReading.fileDescriptor,
             queue: DispatchQueue(label: "com.termipad.task-output", qos: .utility))
+        // Bytes of a character that a read cut in half. Only the event handler touches it, on the source's serial queue.
+        let unfinishedCharacter = UnfinishedUTF8Bytes()
         source.setEventHandler { [weak self] in
-            let data = pipe.fileHandleForReading.availableData
-            guard !data.isEmpty else {
+            let chunk = pipe.fileHandleForReading.availableData
+            guard !chunk.isEmpty else {
                 source.cancel()
                 return
             }
             guard let self else { return }
+            // A read can end in the middle of a multi-byte character. Decoding each read on its own then failed
+            // and the whole read was lost, so the unfinished bytes wait for the read that completes them.
+            unfinishedCharacter.bytes.append(chunk)
+            let data = TaskExecutionCoordinator.takeCompleteUTF8Prefix(from: &unfinishedCharacter.bytes)
+            guard !data.isEmpty else { return }
             Task { @MainActor in
                 let text = String(data: data, encoding: .utf8) ?? ""
                 for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
@@ -284,6 +297,33 @@ final class TaskExecutionCoordinator: ObservableObject {
         outputSources[intentID] = source
     }
 
+    /// Removes and returns the part of `buffer` that does not end inside a UTF-8 sequence. Only the bytes of an
+    /// unfinished trailing sequence (at most 3) stay behind; anything else, valid or not, is returned unchanged.
+    nonisolated static func takeCompleteUTF8Prefix(from buffer: inout Data) -> Data {
+        let bytes = [UInt8](buffer)
+        var completeCount = bytes.count
+        // An unfinished sequence is a lead byte followed by fewer continuation bytes than it announces,
+        // so its lead byte is one of the last three bytes.
+        for index in stride(from: bytes.count - 1, through: max(bytes.count - 3, 0), by: -1) {
+            let byte = bytes[index]
+            if byte & 0b1100_0000 == 0b1000_0000 { continue }  // continuation byte: keep looking for its lead
+            let sequenceLength: Int
+            if byte & 0b1110_0000 == 0b1100_0000 {
+                sequenceLength = 2
+            } else if byte & 0b1111_0000 == 0b1110_0000 {
+                sequenceLength = 3
+            } else if byte & 0b1111_1000 == 0b1111_0000 {
+                sequenceLength = 4
+            } else {
+                sequenceLength = 1
+            }
+            if bytes.count - index < sequenceLength { completeCount = index }
+            break
+        }
+        buffer = Data(bytes[completeCount...])
+        return Data(bytes[..<completeCount])
+    }
+
     /// M4-3 interaction point detection: output matches a declared pattern → push an interaction request to the phone (once per point).
     private func checkInteractionPoints(intentID: UUID, output: String) {
         guard let points = interactionPoints[intentID],
@@ -304,8 +344,12 @@ final class TaskExecutionCoordinator: ObservableObject {
     func respondInteraction(intentID: UUID, selection: String) {
         guard let pipe = inputPipes[intentID],
               interactionPoints[intentID] != nil else { return }
+        // The process can exit just before its bookkeeping is cleared in finish(). Writing to its closed pipe with
+        // the non-throwing write would raise an exception and take the app down, so skip a finished process and
+        // use the throwing variant.
+        guard activeProcesses[intentID]?.isRunning == true else { return }
         let data = Data("\(selection)\n".utf8)
-        pipe.fileHandleForWriting.write(data)
+        guard (try? pipe.fileHandleForWriting.write(contentsOf: data)) != nil else { return }
         DiagnosticsStore.shared.record(.mobileInteractionResponded)
     }
 

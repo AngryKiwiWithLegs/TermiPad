@@ -42,7 +42,11 @@ final class MobileLaunchPromptCenter: ObservableObject {
     }
 
     private func respond(_ accepted: Bool, for id: UUID) {
-        pending = nil
+        // Only the request on screen clears the prompt. When a second request replaced the first, the first
+        // one's timeout used to dismiss the second request's prompt, which then sat unanswerable until it timed out.
+        if pending?.id == id {
+            pending = nil
+        }
         timeoutTasks[id]?.cancel()
         timeoutTasks[id] = nil
         guard let continuation = continuations.removeValue(forKey: id) else { return }
