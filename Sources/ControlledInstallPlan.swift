@@ -84,9 +84,8 @@ enum ControlledInstallCatalog {
         .init(toolName: "zoxide", formula: "zoxide", repositoryFullName: "ajeetdsouza/zoxide", expectedExecutableNames: ["zoxide"])
     ]
 
-    static var reviewedPlans: [ControlledInstallPlan] {
-        definitions.compactMap { $0.makePlan() }
-    }
+    /// Built once: the catalog is static, and the review page reads this list on every render.
+    static let reviewedPlans: [ControlledInstallPlan] = definitions.compactMap { $0.makePlan() }
 
     static func isValidFormula(_ formula: String) -> Bool {
         let pattern = "^[a-z0-9][a-z0-9@+._-]*$"

@@ -87,12 +87,14 @@ struct DataStoreRecoveryView: View {
                 modelContext: modelContext
             )
             try modelContext.save()
+            // The template uses %@, which takes objects. Passing the Int counts directly made String(format:)
+            // read them as object pointers, so restoring a backup in recovery mode could crash.
             recoveryMessage = String(
                 format: AppCopy.text("restoreSummary", language: language),
-                summary.addedTools,
-                summary.updatedTools,
-                summary.addedCandidates,
-                summary.updatedCandidates
+                String(summary.addedTools),
+                String(summary.updatedTools),
+                String(summary.addedCandidates),
+                String(summary.updatedCandidates)
             )
         } catch {
             recoveryMessage = AppCopy.text("backupImportFailed", language: language)
