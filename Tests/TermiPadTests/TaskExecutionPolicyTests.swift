@@ -11,7 +11,7 @@ final class TaskExecutionPolicyTests: XCTestCase {
 
         let decision = TaskExecutionPolicy.prepare(intent: intent, scope: scope, now: Date(timeIntervalSince1970: 1_001))
         guard case .ready(let request) = decision else {
-            return XCTFail("已批准的固定项目任务应能形成受限本地执行请求。")
+            return XCTFail("An approved fixed project task should be able to form a restricted local execution request.")
         }
 
         XCTAssertEqual(request.executableURL.path, root.appendingPathComponent("scripts/verify-macos.sh").path)

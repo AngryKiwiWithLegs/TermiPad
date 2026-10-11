@@ -1,11 +1,11 @@
 import XCTest
 @testable import TermiPad
 
-/// TaskMCPSettings 契约测试（track-protocol 阶段 8 测试补强 3/4）。
+/// TaskMCPSettings contract tests (track-protocol stage 8 test hardening 3/4).
 ///
-/// 锁住 UserDefaults key 字面量 + 默认 false 行为。
+/// Locks down the UserDefaults key literal + the default-false behavior.
 final class TaskMCPSettingsContractTests: XCTestCase {
-    // MARK: - 私有 UserDefaults 行为
+    // MARK: - Private UserDefaults behavior
 
     private func makeFreshSettings() {
         UserDefaults.standard.removeObject(forKey: TaskMCPSettings.localMCPEnabledKey)
@@ -16,20 +16,20 @@ final class TaskMCPSettingsContractTests: XCTestCase {
         super.tearDown()
     }
 
-    // MARK: - 字符串 key 字面量
+    // MARK: - String key literal
 
     func testLocalMCPEnabledKeyStringIsPinned() {
-        // UserDefaults 数据迁移 — 改这一行 = 现有 user 重启后 MCP 设置"消失"
-        // 是 silent regression. 这个测试 lock 住 key 字面量.
+        // UserDefaults data migration — changing this line = existing users' MCP setting "disappears" after a restart,
+        // a silent regression. This test locks down the key literal.
         XCTAssertEqual(TaskMCPSettings.localMCPEnabledKey, "TermiPad.localMCPEnabled")
     }
 
-    // MARK: - 默认行为
+    // MARK: - Default behavior
 
     func testIsLocalMCPEnabledDefaultsToFalseWhenNotSet() {
         makeFreshSettings()
         XCTAssertFalse(TaskMCPSettings.isLocalMCPEnabled,
-                       "MCP 必须显式开启 — 默认 false 是产品红线 'Mac 不暴露公网端口'")
+                       "MCP must be turned on explicitly — default false is the product red line 'the Mac exposes no public ports'")
     }
 
     func testIsLocalMCPEnabledReturnsTrueAfterUserOptIn() {
@@ -43,19 +43,19 @@ final class TaskMCPSettingsContractTests: XCTestCase {
         UserDefaults.standard.set(true, forKey: TaskMCPSettings.localMCPEnabledKey)
         UserDefaults.standard.set(false, forKey: TaskMCPSettings.localMCPEnabledKey)
         XCTAssertFalse(TaskMCPSettings.isLocalMCPEnabled,
-                       "显式 false 后应立即生效（用户撤销 MCP）")
+                       "An explicit false should take effect immediately (the user revokes MCP)")
     }
 
-    // MARK: - 守护静态读 UserDefaults.standard
+    // MARK: - Guard the static read of UserDefaults.standard
 
     func testUsesOnlyUserDefaultsStandard() {
-        // 防止未来 commit 把 `UserDefaults.standard` 改为 suite-scoped UserDefaults
-        // (可能破坏产品契约 '本地设置写到本机 UserDefaults')
-        // 这个测试通过源码 grep 锁定字面量
+        // Prevents a future commit from changing `UserDefaults.standard` to a suite-scoped UserDefaults
+        // (which could break the product contract 'local settings are written to this Mac's UserDefaults')
+        // This test locks down the literal by grepping the source
         let source = try? String(contentsOfFile: #file, encoding: .utf8)
-        XCTAssertNotNil(source, "源码必须可读")
+        XCTAssertNotNil(source, "the source must be readable")
         let body = source ?? ""
         XCTAssertTrue(body.contains("UserDefaults.standard"),
-                       "TaskMCPSettings.isLocalMCPEnabled 必须读 UserDefaults.standard（产品契约：本机设置写到本机 UserDefaults）")
+                       "TaskMCPSettings.isLocalMCPEnabled must read UserDefaults.standard (product contract: local settings are written to this Mac's UserDefaults)")
     }
 }

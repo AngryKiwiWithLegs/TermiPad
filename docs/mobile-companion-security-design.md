@@ -1,84 +1,84 @@
-# TermiPad 手机协同安全设计
+# TermiPad phone collaboration security design
 
-**状态：** 可行性与产品边界设计完成；未进入代码实现。
+**Status:** Feasibility and product boundary design complete; code implementation has not started.
 
-## 1. 结论
+## 1. Conclusion
 
-手机控制 Mac 上的 TermiPad 在技术上可行，但它不应被定义为“手机远程终端”。正确的产品模型是：**已配对的手机向 Mac 发送一个受限的启动意图，Mac 只允许该意图引用本机已存在且已授权的工具或静态安装计划，再沿用现有终端交接逻辑。**
+Controlling TermiPad on the Mac from a phone is technically feasible, but it should not be defined as a "remote terminal on the phone". The right product model is: **a paired phone sends the Mac a restricted launch intent; the Mac only lets that intent reference tools or static install plans that already exist and are authorized locally, and then follows the existing terminal handoff logic.**
 
-手机端绝不能发送 shell、参数、变量值、工作目录、工具路径、README 内容、网络元数据或任意 JSON 指令。Mac 端不开放通用 shell、PTY、文件浏览、任意端口转发、服务安装或后台命令执行。这样可以把手机协同限定为可信工具库的遥控器，而不是新的远程代码执行入口。
+The phone must never send shell, arguments, variable values, working directories, tool paths, README content, network metadata, or arbitrary JSON instructions. The Mac opens no general shell, PTY, file browsing, arbitrary port forwarding, service installation, or background command execution. This limits phone collaboration to a remote control for a trusted tool library rather than a new remote code execution entry.
 
-Apple 当前已将 Multipeer Connectivity 标记为 deprecated，并建议迁移到 Network framework；Network framework 提供 TLS、监听、浏览和双向连接能力。[1] [2] 因此，新的手机协同应使用 **Network framework + Bonjour + 本地 TLS + Keychain/CryptoKit 密钥材料**，而不是 Multipeer Connectivity 或自建明文 HTTP 服务。
+Apple has marked Multipeer Connectivity as deprecated and recommends migrating to the Network framework, which provides TLS, listening, browsing, and bidirectional connections.[1] [2] New phone collaboration should therefore use **Network framework + Bonjour + local TLS + Keychain/CryptoKit key material**, not Multipeer Connectivity or a self-built plaintext HTTP service.
 
-## 2. 三种架构选项
+## 2. Three architecture options
 
-| 方案 | 用户体验 | 安全与运维代价 | 结论 |
+| Option | User experience | Security and operations cost | Conclusion |
 |---|---|---|---|
-| **A. 同一局域网本地配对** | 手机和 Mac 在同一 Wi-Fi/Ethernet 网络；手机点已授权图标，Mac 接收受限启动意图 | 不开放公网端口；需本地网络权限、Bonjour 服务声明、TLS、配对与撤销 | **推荐首发方案** |
-| **B. 依托用户既有安全网络接入** | 用户先通过自己管理的安全网络访问环境，再连接本地桥接服务 | 网络边界仍由用户的既有安全基础设施承担；TermiPad 不配置或销售该网络 | 仅作为高级用户文档，不内置配置能力 |
-| **C. 云端中继/跨公网远程控制** | 蜂窝网络或异地也可控制 Mac | 需要账户、持久中继、设备在线状态、滥用防护、推送、审计、服务可用性和更严格的外部安全评审 | **不纳入当前路线** |
+| **A. Local pairing on the same LAN** | The phone and Mac are on the same Wi-Fi/Ethernet network; the phone taps an authorized icon and the Mac receives a restricted launch intent | No public port is opened; needs the local network permission, a Bonjour service declaration, TLS, pairing, and revocation | **Recommended first release** |
+| **B. Relying on the user's existing secure network access** | The user first reaches the environment through a secure network they manage themselves, then connects to the local bridge service | The network boundary is still carried by the user's existing security infrastructure; TermiPad neither configures nor sells that network | Documentation for advanced users only; no built-in configuration |
+| **C. Cloud relay / remote control across the public internet** | The Mac can be controlled on cellular or from elsewhere | Needs accounts, a persistent relay, device online state, abuse protection, push, auditing, service availability, and stricter external security review | **Not on the current roadmap** |
 
-> 首版只做方案 A：同一局域网、显式配对、默认逐次批准。Mac 不监听公网接口，不做 NAT 穿透，不提供云端中继，不使用 iCloud 来同步配对密钥。
+> The first version does only option A: same LAN, explicit pairing, approval each time by default. The Mac does not listen on public interfaces, does no NAT traversal, offers no cloud relay, and does not use iCloud to sync pairing keys.
 
-## 3. 首发产品边界：Local Companion Preview
+## 3. First-release product boundary: Local Companion Preview
 
-### 3.1 可做的事情
+### 3.1 What it can do
 
-手机伴侣 App 只显示由 Mac 主动发布的**最小化目录**：工具显示名、本地图标身份、简短本地描述、是否可远程启动、上次“已交给终端”的结果状态。它不显示完整命令、模板变量、绝对路径、工作目录、API Key、备份内容或完整终端输出。
+The phone companion app shows only the **minimal catalog** the Mac publishes on its own initiative: the tool display name, local icon identity, a short local description, whether it can be launched remotely, and the result status of the last "handed to the terminal". It does not show the full command, template variables, absolute paths, the working directory, API keys, backup content, or full terminal output.
 
-手机点击工具后只发送一个 `LaunchIntent`，其中包含配对设备 ID、工具 UUID、权限配置版本、一次性 nonce、过期时间与签名。Mac 以本机 SwiftData 中的工具 UUID 查询实体，重新执行现有健康检查、远程授权规则与终端目标规则。若任一验证失败，Mac 拒绝请求并只向手机返回固定状态类别，例如“工具不再可用”“需要 Mac 本地确认”或“终端交接未完成”。
+After the phone taps a tool it sends only a `LaunchIntent` containing the paired device ID, tool UUID, permission configuration version, one-off nonce, expiry time, and signature. The Mac looks up the entity by tool UUID in the local SwiftData store and re-runs the existing health check, remote authorization rules, and terminal target rules. If any check fails, the Mac rejects the request and returns only a fixed status category to the phone, such as "tool no longer available", "local confirmation on the Mac required", or "terminal handoff not completed".
 
-### 3.2 不做的事情
+### 3.2 What it does not do
 
-首发禁止远程编辑命令、输入参数、运行任意终端、浏览文件、创建工具、修改来源可信度、接受候选、开始扫描、执行受控安装计划、读取终端屏幕、返回终端 stdout/stderr，以及无限期后台运行。它同样不能在 Mac 锁屏、休眠、应用未在受控远程模式运行，或自动化权限不可用时绕过 macOS 限制。
+The first release forbids remotely editing commands, entering arguments, running arbitrary terminals, browsing files, creating tools, changing source trust, accepting candidates, starting scans, running controlled install plans, reading the terminal screen, returning terminal stdout/stderr, and running in the background indefinitely. Nor can it bypass macOS restrictions when the Mac is locked, asleep, the app is not running in controlled remote mode, or the Automation permission is unavailable.
 
-## 4. 配对、认证与撤销
+## 4. Pairing, authentication, and revocation
 
-首次配对必须在 Mac 前完成。Mac 显示一次性 QR 码或短配对码，并在应用内显示待配对手机名称和指纹；用户在 Mac 上显式确认后，双方才建立设备关系。配对码有效期应很短、仅可使用一次，并且不包含命令或本地路径。
+First pairing must be completed at the Mac. The Mac shows a one-off QR code or short pairing code and, in the app, the name and fingerprint of the phone waiting to pair; the device relationship is established only after the user explicitly confirms on the Mac. The pairing code should be valid only briefly, usable once, and contain no commands or local paths.
 
-配对完成后，双方生成或交换独立的设备密钥。私钥和配对密钥只存入各自平台的 Keychain；Keychain 可用于保存小型机密材料、证书和通信信任资产。[3] CryptoKit 支持密钥协商、数字签名和对称加密，并优先于自行处理低层密码学内存。[4] 每个启动意图需要签名、单调 nonce、短过期时间和配对 ID；Mac 还必须做重放拒绝、速率限制和撤销检查。
+After pairing, both sides generate or exchange separate device keys. Private keys and pairing keys are stored only in each platform's Keychain; the Keychain can hold small secrets, certificates, and communication trust assets.[3] CryptoKit supports key agreement, digital signatures, and symmetric encryption, and is preferred over handling low-level cryptographic memory yourself.[4] Every launch intent needs a signature, a monotonic nonce, a short expiry, and the pairing ID; the Mac must also do replay rejection, rate limiting, and revocation checks.
 
-Mac 设置页应显示已配对设备、最近活动时间和权限状态，并提供“暂停手机协同”“撤销此设备”“撤销全部设备”三项操作。撤销必须立即使已有会话失效。配对设备名、密钥、nonce 状态和授权配置不得进入 JSON 备份、诊断包或 iCloud 同步范围。
+The Mac's Settings page should show paired devices, last activity time, and permission state, and offer three actions: "Pause phone collaboration", "Revoke this device", and "Revoke all devices". Revocation must invalidate existing sessions immediately. Paired device names, keys, nonce state, and authorization configuration must not enter JSON backups, diagnostic packages, or the iCloud sync scope.
 
-## 5. 本地传输与系统权限
+## 5. Local transport and system permissions
 
-本地桥接使用 Network framework 的 `NWListener`、`NWBrowser` 与 TLS 连接，不使用明文 HTTP。Apple 明确提供了为本地网络 TLS 创建数字身份的路径；TLS 身份由证书和私钥组成，可用于加密客户端与服务器间流量。[2] 第一版应固定一个 TermiPad 专属 Bonjour 服务类型，使用最小 TLS 版本策略，并对已配对客户端实施证书或公钥绑定，而不是接受任意局域网客户端。
+The local bridge uses the Network framework's `NWListener`, `NWBrowser`, and TLS connections, not plaintext HTTP. Apple explicitly provides a path for creating a digital identity for local network TLS; a TLS identity consists of a certificate and a private key and can encrypt traffic between client and server.[2] The first version should fix one TermiPad-specific Bonjour service type, use a minimum TLS version policy, and apply certificate or public-key pinning to paired clients rather than accepting arbitrary LAN clients.
 
-本地网络访问在 iOS/iPadOS 与 macOS 上受 Local Network 隐私控制。应用首次访问本地网络时，系统会要求用户允许；如果使用 Bonjour，还必须在 `Info.plist` 中声明具体服务类型。[1] 手机端与 Mac 端都要用清晰的中文/英文权限说明解释“仅在同一局域网内发现已配对的 TermiPad Mac，不扫描其他设备，不公开终端”。iOS 模拟器不支持此隐私行为，因此验收必须使用真实 iPhone 和真实 Mac。[1]
+Local network access is governed by the Local Network privacy control on iOS/iPadOS and macOS. The first time an app accesses the local network, the system asks the user to allow it; if Bonjour is used, the specific service types must also be declared in `Info.plist`.[1] Both the phone and the Mac must explain, in clear Chinese/English permission text, "discovers only the paired TermiPad Mac on the same LAN, does not scan other devices, and does not expose a terminal". The iOS Simulator does not support this privacy behavior, so acceptance must use a real iPhone and a real Mac.[1]
 
-## 6. 远程启动授权模型
+## 6. Remote launch authorization model
 
-默认模式是 **每次请求都需要 Mac 上确认**。这最安全，但无法满足用户完全离开电脑后的操作需求。因此可在 Mac 上由用户主动开启一个短期的“远程启动窗口”，并且只对显式选择的工具生效。
+The default mode is that **every request needs confirmation on the Mac**. This is the safest, but it cannot meet the need to operate after the user has left the computer entirely. So the user can deliberately open a short "remote launch window" on the Mac, which applies only to explicitly selected tools.
 
-| 权限模式 | 默认值 | 手机可做的事 | Mac 的保护 |
+| Permission mode | Default | What the phone can do | The Mac's protection |
 |---|---|---|---|
-| 仅查看 | 默认 | 浏览最小化工具目录与状态 | 不发起终端交接 |
-| 请求启动 | 默认可选 | 向 Mac 发送一个已存在工具的启动请求 | Mac 必须显示本地确认 |
-| 短期远程启动窗口 | 默认关闭 | 启动已逐项授权、无变量输入的工具 | 有效期、工具允许列表、健康检查、速率限制、撤销与终端交接回退 |
+| View only | Default | Browse the minimal tool catalog and status | No terminal handoff is initiated |
+| Request launch | Optional by default | Send the Mac a launch request for an existing tool | The Mac must show local confirmation |
+| Short remote launch window | Off by default | Launch tools that are individually authorized and need no variable input | Validity period, tool allowlist, health check, rate limiting, revocation, and terminal handoff fallback |
 
-安装审查计划默认永远不允许手机交接。它涉及软件供应链变化，必须保留在 Mac 的本地审查与明确确认路径中。若未来考虑放开，也必须作为独立安全评审，不能与工具启动混在一起。
+Install review plans are never allowed to be handed off from the phone, by default and always. They involve software supply-chain changes and must stay on the Mac's local review and explicit confirmation path. If opening this up is ever considered, it must be a separate security review and cannot be mixed with tool launching.
 
-## 7. 状态回传与隐私
+## 7. Status return and privacy
 
-手机只能得到固定结果类别：`已请求`、`等待 Mac 确认`、`已交给 Terminal/iTerm/Warp`、`已复制`、`Mac 不在线`、`工具不可用`、`被权限策略拒绝`。不回传命令、变量、绝对路径、进程输出、退出码、文件名或网络元数据。
+The phone can get only fixed result categories: `requested`, `waiting for Mac confirmation`, `handed to Terminal/iTerm/Warp`, `copied`, `Mac offline`, `tool unavailable`, `rejected by permission policy`. No commands, variables, absolute paths, process output, exit codes, file names, or network metadata are returned.
 
-本地诊断只记录固定计数类别，例如配对创建、配对撤销、启动请求接受/拒绝、重放拒绝、会话过期；不记录工具名称、仓库名、命令、路径、设备令牌或版本输出。
+Local diagnostics record only fixed counter categories, such as pairing created, pairing revoked, launch request accepted/rejected, replay rejected, and session expired; tool names, repository names, commands, paths, device tokens, and version output are not recorded.
 
-## 8. 分阶段实现建议
+## 8. Suggested phased implementation
 
-| 阶段 | 范围 | 验收标准 |
+| Phase | Scope | Acceptance criteria |
 |---|---|---|
-| **R0：威胁模型与原型** | `LaunchIntent` 数据模型、签名/nonce 验证、Mac 本地状态机；不开放网络 | 单元测试覆盖伪造签名、过期、重放、撤销、越权工具与变量注入拒绝 |
-| **R1：同网配对与只读目录** | 原生 iPhone App、Bonjour 发现、本地 TLS、一次性配对、最小化目录 | 真实 iPhone + Mac 的允许/拒绝本地网络权限、配对、撤销、离线和重启验证 |
-| **R2：逐次确认的远程请求** | 手机发起受限启动意图；Mac 必须本地批准 | 手机无法提交原始命令；未批准、锁屏、工具不健康和终端拒绝均安全失败 |
-| **R3：短期远程启动窗口** | Mac 明确开启、逐项工具授权、自动过期 | 仅允许无变量工具；过期、撤销、重放、网络切换和睡眠恢复均拒绝或重新配对 |
-| **R4：异地远程访问** | 仅在重新立项后评估中继、账户和服务责任 | 不属于当前承诺；需要独立隐私、安全、运营和 Apple 分发评审 |
+| **R0: threat model and prototype** | `LaunchIntent` data model, signature/nonce verification, local state machine on the Mac; no network opened | Unit tests cover rejection of forged signatures, expiry, replay, revocation, unauthorized tools, and variable injection |
+| **R1: same-network pairing and read-only catalog** | Native iPhone app, Bonjour discovery, local TLS, one-off pairing, minimal catalog | Verification on a real iPhone + Mac of allowing/denying the local network permission, pairing, revocation, offline, and restart |
+| **R2: remote requests confirmed each time** | The phone sends a restricted launch intent; the Mac must approve locally | The phone cannot submit raw commands; unapproved, locked, unhealthy tool, and terminal refusal cases all fail safely |
+| **R3: short remote launch window** | Explicitly opened on the Mac, per-tool authorization, automatic expiry | Only variable-free tools are allowed; expiry, revocation, replay, network switch, and wake from sleep all reject or require re-pairing |
+| **R4: remote access from elsewhere** | Relays, accounts, and service responsibility are evaluated only after a new project approval | Not part of the current commitment; needs separate privacy, security, operations, and Apple distribution reviews |
 
-## 9. 当前决策建议
+## 9. Current decision recommendation
 
-建议下一步只进入 **R0**，然后由用户决定是否继续 R1。R0 不需要把终端开放给手机或局域网：它只是把现有“用户点击工具后交给所选终端”的流程抽象成可审计、可拒绝、可签名的本地启动意图。只有 R0 的安全测试通过，才值得开始 iPhone App 与本地网络权限工作。
+The recommendation is to enter only **R0** next, then let the user decide whether to continue with R1. R0 does not need to open the terminal to the phone or the LAN: it only abstracts the existing "hand off to the chosen terminal after the user clicks a tool" flow into an auditable, rejectable, signable local launch intent. Only when R0's security tests pass is it worth starting the iPhone app and local network permission work.
 
-当前项目仍可保持 `TermiPad Mendocino` 的稳定定位；手机协同应采用独立预览代号，不能悄然进入现有稳定版。
+The current project can keep the stable positioning of `TermiPad Mendocino`; phone collaboration should use a separate preview codename and must not slip quietly into the existing stable version.
 
 ## References
 

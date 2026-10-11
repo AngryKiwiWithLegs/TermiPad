@@ -1,12 +1,12 @@
 import XCTest
 @testable import TermiPad
 
-/// ControlledInstallPlan 契约测试（track-protocol 阶段 8 测试补强 1/4）。
+/// ControlledInstallPlan contract tests (track-protocol stage 8 test hardening 1/4).
 ///
-/// 锁住 install plan lookup 契约 + formula regex + reviewed plans 表 13 个 entry。
-/// 不写网络/不调 Process/不写 ~ — 全部 contract-style,可 CI 稳定。
+/// Locks down the install plan lookup contract + the formula regex + the 13 entries of the reviewed plans table.
+/// No network writes / no Process calls / no writes to ~ — all contract-style, stable in CI.
 final class ControlledInstallPlanContractTests: XCTestCase {
-    // MARK: - isValidFormula regex 锁
+    // MARK: - isValidFormula regex lock
 
     func testIsValidFormulaAcceptsAlphanumericHyphenUnderscoreDotAt() {
         XCTAssertTrue(ControlledInstallCatalog.isValidFormula("gh"))
@@ -22,8 +22,8 @@ final class ControlledInstallPlanContractTests: XCTestCase {
         XCTAssertFalse(ControlledInstallCatalog.isValidFormula("gh formula=evil"))
         XCTAssertFalse(ControlledInstallCatalog.isValidFormula("gh/tap/foo"))
         XCTAssertFalse(ControlledInstallCatalog.isValidFormula(""))
-        XCTAssertFalse(ControlledInstallCatalog.isValidFormula("GH"))  // 大写首字母拒绝
-        // "1gh" 实际被接受(数字后跟字母)— regex 设计如此;测边界:空字符串和空白字符
+        XCTAssertFalse(ControlledInstallCatalog.isValidFormula("GH"))  // uppercase first letter is rejected
+        // "1gh" is actually accepted (a digit followed by letters) — that is how the regex is designed; test the boundaries: empty string and whitespace
         XCTAssertFalse(ControlledInstallCatalog.isValidFormula(""))
         XCTAssertFalse(ControlledInstallCatalog.isValidFormula(" "))
     }
@@ -31,8 +31,8 @@ final class ControlledInstallPlanContractTests: XCTestCase {
     // MARK: - reviewedPlans 13 entry contract
 
     func testReviewedPlansReturnsThirteenEntries() {
-        // 13 formula 是 verify-macos.sh:97-100 守卫"必须有 brew install (formula) 模板"对应的具体清单
-        // 加一个 entry 必须新增 1 commit + 守卫
+        // The 13 formulae are the concrete list behind the verify-macos.sh:97-100 guard "there must be a brew install (formula) template"
+        // Adding an entry requires 1 new commit + a guard
         XCTAssertEqual(ControlledInstallCatalog.reviewedPlans.count, 13)
     }
 
@@ -45,23 +45,23 @@ final class ControlledInstallPlanContractTests: XCTestCase {
     }
 
     func testReviewedPlansAllHaveAuditMetadata() {
-        // auditDate 形式 YYYY-MM-DD,catalogRevision 形式 YYYY.MM.DD.N
+        // auditDate has the form YYYY-MM-DD, catalogRevision the form YYYY.MM.DD.N
         let datePattern = #"^\d{4}-\d{2}-\d{2}$"#
         let revPattern = #"^\d{4}\.\d{2}\.\d{2}\.\d+$"#
         for plan in ControlledInstallCatalog.reviewedPlans {
             XCTAssertTrue(plan.auditedAt.range(of: datePattern, options: .regularExpression) != nil,
-                          "\(plan.toolName).auditedAt 格式错: \(plan.auditedAt)")
+                          "\(plan.toolName).auditedAt has a bad format: \(plan.auditedAt)")
             XCTAssertTrue(plan.catalogRevision.range(of: revPattern, options: .regularExpression) != nil,
-                          "\(plan.toolName).catalogRevision 格式错: \(plan.catalogRevision)")
+                          "\(plan.toolName).catalogRevision has a bad format: \(plan.catalogRevision)")
         }
     }
 
-    // MARK: - plan lookup 行为
+    // MARK: - plan lookup behavior
 
     func testPlanByRepositoryFullNameIsCaseInsensitive() {
-        // sxyazi/yazi 在源里 — lookup 应能匹 (case-insensitive 比较)
+        // sxyazi/yazi is in the source — lookup should match it (case-insensitive comparison)
         let plan = ControlledInstallCatalog.plan(forRepositoryFullName: "SXYazi/Yazi")
-        XCTAssertNotNil(plan, "case-insensitive lookup 失败 — 守卫这个契约避免匹配死掉")
+        XCTAssertNotNil(plan, "case-insensitive lookup failed — guard this contract so matching does not die")
         XCTAssertEqual(plan?.toolName, "yazi")
     }
 
@@ -72,23 +72,23 @@ final class ControlledInstallPlanContractTests: XCTestCase {
     }
 
     func testPlanByFormulaIsCaseInsensitiveAndSkipsInvalid() {
-        // lookup 跳过 isValidFormula=false 的输入(避免 lookup 注入 "gh;evil")
+        // lookup skips inputs with isValidFormula=false (prevents injecting "gh;evil" via lookup)
         let gh = ControlledInstallCatalog.plan(forFormula: "GH")
-        XCTAssertNotNil(gh, "大小写不敏感 lookup")
+        XCTAssertNotNil(gh, "case-insensitive lookup")
         let bad = ControlledInstallCatalog.plan(forFormula: "gh;rm -rf /")
-        XCTAssertNil(bad, "恶意 formula 应跳过")
+        XCTAssertNil(bad, "a malicious formula should be skipped")
     }
 
-    // MARK: - safety properties (项目红线)
+    // MARK: - safety properties (project red lines)
 
     func testSafetyBoundariesAreAlwaysTrue() {
-        // verify-macos.sh:111-113 要求这些常量保持 true — 任何 commit 改 false 立即被守卫抓住
+        // verify-macos.sh:111-113 requires these constants to stay true — any commit changing them to false is caught by the guard immediately
         XCTAssertTrue(ControlledInstallBoundary.doesNotRunInApp)
         XCTAssertTrue(ControlledInstallBoundary.doesNotAutoCollectResult)
         XCTAssertTrue(ControlledInstallBoundary.doesNotUseRemoteCommands)
         XCTAssertTrue(ControlledInstallBoundary.doesNotSupportThirdPartyTaps)
     }
 
-    // MARK: - displayName & safetySummary 双语
+    // MARK: - displayName & safetySummary in both languages
 
 }

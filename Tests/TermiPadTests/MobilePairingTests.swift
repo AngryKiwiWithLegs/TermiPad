@@ -2,10 +2,10 @@ import XCTest
 import CryptoKit
 @testable import TermiPad
 
-/// M1 配对核心契约测试（feature/m1-local-network-pairing）。
-/// 全部走内存存储双实现，不打真实 SecItem（与 KeychainStoreTests 纪律一致）。
+/// M1 pairing core contract tests (feature/m1-local-network-pairing).
+/// Everything uses the in-memory dual implementation of storage and never hits the real SecItem (same discipline as KeychainStoreTests).
 final class MobilePairingTests: XCTestCase {
-    /// 内存后端：仅测试域。与生产 KeychainMobileSecureStore 满足同一协议契约。
+    /// In-memory backend: test domain only. Satisfies the same protocol contract as the production KeychainMobileSecureStore.
     private final class InMemorySecureStore: MobileSecureKeyValueStore, @unchecked Sendable {
         private var values: [String: String] = [:]
         private let lock = NSLock()
@@ -33,14 +33,14 @@ final class MobilePairingTests: XCTestCase {
         key.withUnsafeBytes { Data($0) }
     }
 
-    // MARK: - 配对码与 nonce
+    // MARK: - Pairing code and nonce
 
     func testPairingCodeIsSixNumericDigits() {
         let allowedDigits = Set("0123456789")
         for _ in 0..<50 {
             let code = MobilePairingCrypto.generatePairingCode()
             XCTAssertEqual(code.count, MobilePairingCrypto.pairingCodeDigitCount)
-            XCTAssertTrue(code.allSatisfy { allowedDigits.contains($0) }, "配对码必须是纯数字：\(code)")
+            XCTAssertTrue(code.allSatisfy { allowedDigits.contains($0) }, "The pairing code must be digits only: \(code)")
         }
     }
 
@@ -52,7 +52,7 @@ final class MobilePairingTests: XCTestCase {
         XCTAssertNotEqual(first, second)
     }
 
-    // MARK: - 密钥协商与派生
+    // MARK: - Key agreement and derivation
 
     func testBothSidesDeriveIdenticalSessionKey() throws {
         let mac = MobilePairingIdentity.generate()
@@ -141,25 +141,25 @@ final class MobilePairingTests: XCTestCase {
         XCTAssertThrowsError(try MobilePairingCrypto.open(tampered, using: key))
     }
 
-    // MARK: - 指纹
+    // MARK: - Fingerprint
 
     func testFingerprintIsStableHexGroups() {
         let fingerprint = MobilePairingCrypto.fingerprint(forPublicKeyData: Data(repeating: 0x7A, count: 32))
-        // SHA-256 = 32 字节 → 64 hex 字符 → 16 个 4 字符分组。
+        // SHA-256 = 32 bytes → 64 hex characters → 16 groups of 4 characters.
         XCTAssertEqual(fingerprint.split(separator: ":").count, 16)
-        XCTAssertTrue(fingerprint.allSatisfy { $0.isHexDigit || $0 == ":" }, "指纹只允许 hex 与分隔符：\(fingerprint)")
+        XCTAssertTrue(fingerprint.allSatisfy { $0.isHexDigit || $0 == ":" }, "The fingerprint may only contain hex and separators: \(fingerprint)")
         XCTAssertEqual(fingerprint, fingerprint.uppercased())
         XCTAssertEqual(
             fingerprint,
             MobilePairingCrypto.fingerprint(forPublicKeyData: Data(repeating: 0x7A, count: 32)),
-            "同一公钥必须得到同一指纹")
+            "the same public key must yield the same fingerprint")
         XCTAssertNotEqual(
             fingerprint,
             MobilePairingCrypto.fingerprint(forPublicKeyData: Data(repeating: 0x7B, count: 32)),
-            "不同公钥不得碰撞指纹")
+            "different public keys must not collide in fingerprint")
     }
 
-    // MARK: - 设备记录存储
+    // MARK: - Device record storage
 
     func testDeviceStoreRoundTripRevokeAndFilter() throws {
         let store = InMemorySecureStore()

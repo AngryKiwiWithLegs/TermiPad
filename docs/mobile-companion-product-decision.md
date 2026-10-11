@@ -1,83 +1,83 @@
-# TermiPad 手机版：正式产品能力判断与可实现范围
+# TermiPad phone app: assessment as a formal product capability and achievable scope
 
-**状态：** 产品路线决策草案；尚未授权接入真实 Bot token、HTTPS 会话服务或 Mac 远程执行。
+**Status:** Product roadmap decision draft; connecting a real Bot token, an HTTPS session service, or remote execution on the Mac is not yet authorized.
 
-## 1. 需要解决的真实场景
+## 1. The real scenario to solve
 
-TermiPad 手机版应解决的不是“在手机上拥有一个终端”，而是用户离开 Mac 后仍能在自己的手机上看到一个**受控工具面板**：查看已授权工具是否可用、确认 Mac 是否可接收请求，并点击一个已配置的图标，请求 Mac 执行既有的本地终端交接流程。
+What the TermiPad phone app should solve is not "having a terminal on the phone", but letting the user still see a **controlled tool panel** on their own phone after leaving the Mac: check whether authorized tools are available, confirm whether the Mac can receive requests, and tap a configured icon to ask the Mac to run the existing local terminal handoff flow.
 
-这是一项与 TermiPad 核心一致的正式能力，而不是因为使用人数未知就应被否决的实验。判断标准应当是：它是否技术可行，是否能在可接受成本下被可靠维护，以及是否能在不暴露终端的条件下保持足够安全。结论是：**可以实现，且具备产品价值；但必须作为“受限远程入口”而不是“远程 Shell”来实现。**
+This is a formal capability consistent with TermiPad's core, not an experiment to be rejected because the number of users is unknown. The criteria should be: whether it is technically feasible, whether it can be maintained reliably at acceptable cost, and whether it can stay secure enough without exposing a terminal. The conclusion: **it can be built and has product value; but it must be implemented as a "restricted remote entry", not a "remote shell".**
 
-> 手机版的承诺应是：**从任何适当地点请求自己已授权的固定工具；Mac 仍是唯一的执行权威。**
+> The phone app's promise should be: **request your own authorized fixed tools from any appropriate place; the Mac remains the sole execution authority.**
 
-## 2. 用户实际可以做什么
+## 2. What the user can actually do
 
-| 手机动作 | 可以实现 | Mac 的最终条件 |
+| Phone action | Achievable? | The Mac's final conditions |
 |---|---|---|
-| 浏览私人图标工具目录 | 是 | 仅发布短名称、受控图标、固定状态；不发布命令、路径、变量或输出。 |
-| 查看 Mac 是否可响应 | 是 | 只显示 `在线`、`不可达`、`需要本地确认` 等固定状态。 |
-| 点击一个固定工具 | 是 | 只产生短期、不可读的启动意图，不携带命令文本。 |
-| 让 Mac 交给 Terminal / iTerm / Warp | 是，受限 | 工具存在、已逐项允许、健康检查通过、账号/设备有效、nonce 未重放、时限未过。 |
-| 请求本地确认或使用短期远程窗口 | 是 | 默认逐次确认；短期窗口必须由用户事先在 Mac 上开启并自动过期。 |
-| 输入任意 Shell、参数、路径、变量或 URL | 否 | 这些输入不会成为请求协议字段。 |
-| 浏览文件、读取 stdout/stderr、查看屏幕或进程 | 否 | 手机版只得到固定结果类别。 |
-| 远程安装、升级、卸载或改变工具信任 | 否 | 供应链变化始终留在 Mac 本地审查。 |
+| Browse the private icon tool catalog | Yes | Only short names, controlled icons, and fixed states are published; no commands, paths, variables, or output. |
+| See whether the Mac can respond | Yes | Only fixed states such as `online`, `unreachable`, and `needs local confirmation` are shown. |
+| Tap a fixed tool | Yes | Produces only a short-lived, unreadable launch intent that carries no command text. |
+| Have the Mac hand off to Terminal / iTerm / Warp | Yes, restricted | The tool exists, is allowed item by item, passes the health check, the account/device is valid, the nonce is not replayed, and the time limit has not passed. |
+| Request local confirmation or use a short remote window | Yes | Confirm each time by default; a short window must be opened by the user on the Mac beforehand and expires automatically. |
+| Enter arbitrary shell, arguments, paths, variables, or URLs | No | These inputs never become request protocol fields. |
+| Browse files, read stdout/stderr, view the screen or processes | No | The phone app gets only fixed result categories. |
+| Remotely install, upgrade, uninstall, or change tool trust | No | Supply-chain changes always stay under local review on the Mac. |
 
-因此，答案不是“手机能不能点击图标”：**能。**在完整版本中，点击的不是某段命令，而是 `LaunchIntent`：账号或设备身份、短期 action token、工具引用、一次性 nonce、过期时间和签名。Mac 本地再查询自己的工具记录、重新检查授权、健康、撤销和终端目标，最后才决定交接或拒绝。
+So the answer to "can the phone tap an icon": **yes.** In the full version, what is tapped is not a piece of command but a `LaunchIntent`: account or device identity, a short-lived action token, a tool reference, a one-off nonce, an expiry time, and a signature. The Mac then looks up its own tool record locally, rechecks authorization, health, revocation, and the terminal target, and only then decides to hand off or reject.
 
-## 3. 三条技术路径
+## 3. Three technical paths
 
-| 路径 | 能否实现“人在外面点图标” | 成本与依赖 | 正确定位 |
+| Path | Can it deliver "tap an icon while away"? | Cost and dependencies | Proper positioning |
 |---|---|---|---|
-| **同一局域网原生 iPhone Companion** | 只能在与 Mac 同网时实现 | 原生 iOS 开发、配对、Bonjour、本地 TLS、真实设备权限；发布需 Apple 外部条件 | 最低外部依赖的第一版伴侣。 |
-| **PWA 私人面板** | 可以；取决于安全会话服务与 Mac 的出站连接 | 固定 HTTPS 域名、设备配对/登录、会话服务；不需要 App Store | 独立手机入口的轻量路线。 |
-| **Telegram Mini App** | 可以；Telegram 内显示图标并向 Mac 传受限意图 | Bot、固定 HTTPS origin、服务端验证 `initData`、Mac 长轮询与持续运维 | 对已习惯用 Telegram 的用户最直接的入口。 |
+| **Same-LAN native iPhone Companion** | Only when on the same network as the Mac | Native iOS development, pairing, Bonjour, local TLS, real-device permissions; release needs Apple's external conditions | The first companion version with the fewest external dependencies. |
+| **PWA private panel** | Yes; depends on a secure session service and the Mac's outbound connection | A fixed HTTPS domain, device pairing/sign-in, a session service; no App Store needed | The lightweight route to a standalone phone entry. |
+| **Telegram Mini App** | Yes; shows icons inside Telegram and passes restricted intents to the Mac | A Bot, a fixed HTTPS origin, server-side validation of `initData`, Mac long polling, and ongoing operations | The most direct entry for users already used to Telegram. |
 
-### 同网原生伴侣
+### Same-network native companion
 
-技术上可行。Apple 的 Network framework 支持使用 TLS 的本地连接；本地 TLS 身份由证书和私钥组成，可在 Keychain 中保存并由客户端验证。[1] 本地网络和 Bonjour 受到用户授权与 `Info.plist` 声明约束，真实 iPhone 与真实 Mac 是必要验收环境。[2]
+Technically feasible. Apple's Network framework supports local connections using TLS; a local TLS identity consists of a certificate and a private key, which can be stored in the Keychain and verified by the client.[1] Local network access and Bonjour are constrained by user authorization and `Info.plist` declarations, so a real iPhone and a real Mac are the necessary acceptance environment.[2]
 
-它的优点是没有第三方聊天平台和公网会话服务；缺点是用户在蜂窝网络或异地时不能连接，并且原生 iPhone App 的真机签名、测试和分发受 Apple 账户条件限制。它是安全的第一技术路径，但不足以独自解决“我现在在外面”的完整需求。
+Its advantage is having no third-party chat platform and no public session service; its drawbacks are that the user cannot connect on cellular or when away, and that real-device signing, testing, and distribution of a native iPhone app are limited by Apple account conditions. It is a safe first technical path, but not enough by itself to meet the full need of "I am out right now".
 
-### PWA 私人面板
+### PWA private panel
 
-技术上可行，也能通过主屏快捷方式形成接近 App 的体验。它不需要 App Store，但仍必须有固定 HTTPS origin、设备身份或配对、短期会话和一个能与 Mac 协调受限意图的服务。PWA 不是安全模型；安全模型仍在 Mac 本地的 action 验证与授权窗口。
+Technically feasible, and a home-screen shortcut can give an app-like experience. It needs no App Store, but still requires a fixed HTTPS origin, device identity or pairing, short sessions, and a service that can coordinate restricted intents with the Mac. A PWA is not a security model; the security model is still the action verification and authorization window on the Mac.
 
-它适合希望使用独立 TermiPad 品牌入口、又不希望依赖 Telegram 的用户。成本集中在域名、HTTPS、会话服务和身份/撤销管理。
+It suits users who want a standalone TermiPad-branded entry and do not want to depend on Telegram. The cost is concentrated in the domain, HTTPS, the session service, and identity/revocation management.
 
 ### Telegram Mini App
 
-技术上同样可行。Telegram Mini App 可以在 Telegram 内启动完整 JavaScript 图标界面，并支持主题、安全区域、全屏和主屏快捷方式。[3] 但 Mini App 必须从受信的 HTTPS 地址加载；客户端提供的 `initData` 不能直接信任，服务端必须用 Bot token 校验并检查新鲜度。[3]
+Also technically feasible. A Telegram Mini App can launch a full JavaScript icon UI inside Telegram, with support for themes, safe areas, full screen, and home-screen shortcuts.[3] But a Mini App must be loaded from a trusted HTTPS address; the `initData` provided by the client cannot be trusted directly, and the server must verify it with the Bot token and check its freshness.[3]
 
-Mac 不必、也不应开公网端口。Telegram 的 `getUpdates` 可让 Mac 主动向 Telegram 发起长轮询；官方规定它与 webhook 互斥。[4] TermiPad 应选择长轮询，限制更新类型，忽略一切自由文本、文件和群聊内容，只接收已验证会话产生的固定 action。这样 Telegram 是传递受限请求的入口，不是进入 Mac 的网络入口。
+The Mac need not, and should not, open a public port. Telegram's `getUpdates` lets the Mac initiate long polling to Telegram; officially it is mutually exclusive with a webhook.[4] TermiPad should choose long polling, restrict update types, ignore all free text, files, and group chat content, and accept only fixed actions produced by a verified session. That way Telegram is an entry for passing restricted requests, not a network entry into the Mac.
 
-## 4. 安全条件不是否决理由，而是实现规格
+## 4. Security conditions are an implementation specification, not grounds for rejection
 
-这项功能的安全成本存在，但不需要因此放弃。安全规格应写入产品而非留给用户自行判断：Mac 永不开放公网监听端口；Bot/Mini App/PWA 不接触命令、参数、路径、工作目录、密钥或终端输出；每项工具单独授权；安装审查永远不允许远程发起；默认每次请求要求 Mac 本地确认；短期远程窗口需用户主动开启；所有请求都有账号/设备绑定、签名、nonce、过期、重放拒绝、速率限制和撤销；Mac 锁屏、休眠、应用桥接器未运行或权限不可用时安全拒绝。
+The security cost of this feature exists, but it is no reason to give it up. The security specification should be written into the product rather than left to the user's judgment: the Mac never opens a public listening port; the Bot/Mini App/PWA never touch commands, arguments, paths, working directories, secrets, or terminal output; every tool is authorized individually; install review can never be started remotely; by default every request requires local confirmation on the Mac; a short remote window must be opened deliberately by the user; all requests have account/device binding, signatures, nonces, expiry, replay rejection, rate limiting, and revocation; and when the Mac is locked, asleep, the app bridge is not running, or permissions are unavailable, requests are rejected safely.
 
-网页版、Telegram 和手机均属于不可信输入边界。即使其中一层被攻破，攻击者也只能尝试提交不透明 action；Mac 仍必须拒绝未知账号、未知工具、过期 action、重放、带变量工具、未授权工具和不健康工具。
+The web app, Telegram, and the phone are all untrusted input boundaries. Even if one of these layers is breached, an attacker can only try to submit opaque actions; the Mac must still reject unknown accounts, unknown tools, expired actions, replays, tools with variables, unauthorized tools, and unhealthy tools.
 
-## 5. 正式路线
+## 5. Formal roadmap
 
-| 阶段 | 交付内容 | 是否联网 | 为什么必要 |
+| Phase | Deliverable | Networked? | Why it is necessary |
 |---|---|---:|---|
-| **R0：受限启动策略层** | `LaunchIntent`、工具级授权、账号/设备允许列表、签名、nonce、过期、重放/撤销测试 | 否 | 把“手机点图标”变成可审计规则，而不是未来临时拼接。 |
-| **R1：Mac 伴侣状态与只读目录** | 最小目录、固定状态、用户在 Mac 上开启/暂停/撤销 | 可先本地 | 先验证用户是否能理解和管理边界。 |
-| **R2：同网原生配对** | iPhone Companion、Bonjour、本地 TLS、一次性配对、逐次本地确认 | 仅局域网 | 以最低外部依赖打通真正的图标请求。 |
-| **R3：外出入口** | 选择 PWA 或 Telegram Mini App；短期会话与 Mac 出站轮询 | 是 | 解决用户不在同网时仍可请求固定工具的场景。 |
-| **R4：短期远程启动窗口** | 只对无变量、逐项授权工具开放；自动过期与撤销 | 是 | 在明确需求下减少每次 Mac 确认摩擦。 |
+| **R0: restricted launch policy layer** | `LaunchIntent`, per-tool authorization, account/device allowlist, signatures, nonce, expiry, replay/revocation tests | No | Turns "tap an icon on the phone" into auditable rules rather than something patched together later. |
+| **R1: Mac companion status and read-only catalog** | Minimal catalog, fixed states, the user turns it on / pauses / revokes on the Mac | Can start local | First validate whether users can understand and manage the boundary. |
+| **R2: same-network native pairing** | iPhone Companion, Bonjour, local TLS, one-off pairing, local confirmation each time | LAN only | Delivers real icon requests with the fewest external dependencies. |
+| **R3: entry while away** | Choose a PWA or a Telegram Mini App; short sessions and outbound polling from the Mac | Yes | Covers requesting fixed tools when the user is not on the same network. |
+| **R4: short remote launch window** | Open only to variable-free, individually authorized tools; automatic expiry and revocation | Yes | Reduces the friction of confirming on the Mac every time, where there is a clear need. |
 
-应把 **R0–R3 视为手机版的正式后续路线**。R4 只在 R3 成熟后考虑。异地的任意终端、云端中继、远程文件浏览和终端输出回传不属于路线，因为它们不是解决当前场景所必需的能力。
+**R0–R3 should be treated as the phone app's formal follow-up roadmap.** R4 is considered only after R3 matures. Remote arbitrary terminals, cloud relays, remote file browsing, and terminal output return are not on the roadmap, because they are not capabilities the current scenario needs.
 
-## 6. 当前决策
+## 6. Current decision
 
-手机版的产品必要性成立：它解决的是用户不在 Mac 前时仍能使用自己已有工具库的连续性问题。它能实现用户所说的“用手机点图标，再由 Mac 进行受控交接”。技术并未阻止它，主要代价是原生或网页入口、设备身份、会话服务和安全测试；这些都是可规划的工程成本。
+The product need for the phone app holds: it solves the continuity problem of still being able to use one's existing tool library when away from the Mac. It can deliver what the user described as "tap an icon on the phone, then the Mac performs a controlled handoff". Technology does not stand in the way; the main costs are the native or web entry, device identity, the session service, and security testing — all engineering costs that can be planned.
 
-下一次实际开发应从 R0 开始，而不是立即把 Telegram Bot 接到 Mac。这样不会延迟目标，反而是保证后续无论选择原生 iPhone、PWA 还是 Telegram Mini App，都共享同一套可验证、可撤销的本地安全核心。
+The next actual development should start from R0 rather than wiring a Telegram Bot to the Mac right away. This does not delay the goal; on the contrary, it ensures that whichever is chosen later — native iPhone, PWA, or Telegram Mini App — they all share the same verifiable, revocable local security core.
 
-## 参考资料
+## References
 
-[1]: https://developer.apple.com/documentation/network/creating-an-identity-for-local-network-tls "Apple：Creating an Identity for Local Network TLS"
-[2]: https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy "Apple：TN3179 Understanding Local Network Privacy"
-[3]: https://core.telegram.org/bots/webapps "Telegram：Mini Apps"
-[4]: https://core.telegram.org/bots/api#getupdates "Telegram Bot API：getUpdates"
+[1]: https://developer.apple.com/documentation/network/creating-an-identity-for-local-network-tls "Apple: Creating an Identity for Local Network TLS"
+[2]: https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy "Apple: TN3179 Understanding Local Network Privacy"
+[3]: https://core.telegram.org/bots/webapps "Telegram: Mini Apps"
+[4]: https://core.telegram.org/bots/api#getupdates "Telegram Bot API: getUpdates"

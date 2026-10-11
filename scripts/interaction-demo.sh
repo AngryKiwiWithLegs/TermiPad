@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# M4-3 交互点演示脚本（docs/m4-interactive-session-design.md）：
-# 输出几行 → 提问（stdout 匹配任务定义的 INTERACT_CONTINUE? 模式）→
-# 读 stdin 等手机选择 → 按选择走不同分支收尾。
+# M4-3 interaction point demo script (docs/m4-interactive-session-design.md):
+# print a few lines → ask (stdout matches the INTERACT_CONTINUE? pattern of the task definition) →
+# read stdin and wait for the phone's choice → finish along a different branch depending on the choice.
 echo "interaction demo started"
 sleep 2
 echo "INTERACT_CONTINUE?"

@@ -2,21 +2,21 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// 当默认 SwiftData store 无法打开时显示的受控恢复说明。
-/// 恢复模式使用与默认 store 隔离的本地数据库，绝不会自动删除原数据。
+/// Controlled recovery notice shown when the default SwiftData store cannot be opened.
+/// Recovery mode uses a local database isolated from the default store and never deletes the original data automatically.
 struct DataStoreRecoveryView: View {
     let primaryStoreErrorDescription: String
 
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \TerminalTool.name) private var tools: [TerminalTool]
     @Query(sort: \CandidateTool.discoveredAt, order: .reverse) private var candidates: [CandidateTool]
-    @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.simplifiedChinese.rawValue
+    @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.defaultLanguage.rawValue
 
     @State private var isImportingBackup = false
     @State private var recoveryMessage: String?
 
     private var language: AppLanguage {
-        AppLanguage(rawValue: languageRawValue) ?? .simplifiedChinese
+        AppLanguage(rawValue: languageRawValue) ?? .defaultLanguage
     }
 
     var body: some View {

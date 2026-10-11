@@ -1,6 +1,6 @@
 import Foundation
 
-/// P2-A 的远程发现条目。它只表示可浏览的公开 GitHub 元数据，绝不是本地工具、安装计划或可执行命令。
+/// A remote discovery item for P2-A. It only represents browsable public GitHub metadata and is never a local tool, an install plan, or an executable command.
 struct DiscoveryItem: Codable, Identifiable, Equatable, Sendable {
     let repositoryID: Int
     let repositoryFullName: String
@@ -19,7 +19,7 @@ struct DiscoveryItem: Codable, Identifiable, Equatable, Sendable {
     var id: Int { repositoryID }
 }
 
-/// 网络刷新后的最小本地缓存。缓存只保存发现页展示字段、响应验证器和时间；不保存用户工具、命令、路径、变量值或 GitHub 身份。
+/// The minimal local cache after a network refresh. It stores only the fields shown on the discovery page, the response validator, and the time; it never stores the user's tools, commands, paths, variable values, or GitHub identity.
 struct DiscoveryCacheSnapshot: Codable, Equatable, Sendable {
     static let schemaVersion = 1
 
@@ -46,7 +46,7 @@ struct DiscoveryCacheSnapshot: Codable, Equatable, Sendable {
     }
 }
 
-/// 发现预览的本地缓存，不使用 SwiftData，避免远程条目进入工具库备份或影响既有 store 迁移。
+/// Local cache for the discovery preview. It does not use SwiftData, so remote items cannot enter library backups or affect existing store migrations.
 enum DiscoveryCacheStore {
     private static let storageKey = "TermiPad.discoveryPreview.cache.v1"
 
@@ -69,7 +69,7 @@ enum DiscoveryCacheStore {
     }
 }
 
-/// 仅使用公开仓库字段构成的本地排序规则。分数用于排序和解释，永远不是安全评级、官方排名或安装建议。
+/// A local ranking rule built only from public repository fields. The score is for sorting and explanation and is never a security rating, an official ranking, or an install recommendation.
 enum DiscoveryRanking {
     struct Evidence: Equatable, Sendable {
         let score: Int

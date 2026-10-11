@@ -1,6 +1,6 @@
-// 手机端配对凭据存储（docs/m0-m1-mobile-entry-design.md §3.3.1 + M2a 增补）。
-// CompanionPairingCredentials 结构体在共享协议层 Sources/MobilePairingProtocol.swift
-// （两端单一事实源，Mac 测试锁编解码兼容性）；本文件只管 Keychain 读写。
+// Phone-side pairing credential store (docs/m0-m1-mobile-entry-design.md §3.3.1 + M2a additions).
+// The CompanionPairingCredentials struct lives in the shared protocol layer, Sources/MobilePairingProtocol.swift
+// (single source of truth for both sides; the Mac tests lock down encode/decode compatibility); this file only handles Keychain reads and writes.
 import Foundation
 
 enum CompanionPairingStore {
@@ -42,7 +42,7 @@ enum CompanionPairingStore {
         return credentials
     }
 
-    /// 解除配对 / 凭据失效时清除——手机端回到未配对状态，可重新走配对流程。
+    /// Cleared on unpair / when the credentials become invalid — the phone returns to the unpaired state and can pair again.
     static func clear() {
         try? KeychainStore.remove(account: identityAccount)
         try? KeychainStore.remove(account: credentialsAccount)

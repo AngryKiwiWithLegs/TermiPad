@@ -2,7 +2,7 @@ import AppKit
 import SwiftData
 import SwiftUI
 
-/// T2 设计提示：原生 macOS 工作台仅执行已批准固定任务；可默认关闭地许可同机 MCP 提出待审阅任务，但不显示交互式终端，也不传输命令或输出。
+/// T2 design note: the native macOS workbench only runs approved fixed tasks; it can, off by default, allow same-machine MCP to propose tasks for review, but it shows no interactive terminal and transfers no commands or output.
 @MainActor
 struct TaskPolicyWorkbenchView: View {
     @Environment(\.modelContext) private var modelContext

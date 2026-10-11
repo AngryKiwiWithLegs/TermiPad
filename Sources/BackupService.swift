@@ -3,7 +3,7 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// 可迁移的本地数据快照。Keychain 凭据从不写入备份；已保存的模板变量值由用户在导出时单独决定。
+/// A portable snapshot of local data. Keychain credentials are never written to a backup; whether saved template variable values are included is decided separately by the user at export time.
 struct TermiPadBackup: Codable {
     static let currentSchemaVersion = 1
 
@@ -44,7 +44,7 @@ struct TermiPadBackup: Codable {
             categoryRawValue = tool.categoryRawValue
             iconSymbol = tool.iconSymbol
             iconStyleIdentifier = tool.iconStyleIdentifier
-            // 旧版可能存有 GitHub owner 头像；它不是可验证的工具图标，不能继续导出。
+            // Older versions may have stored a GitHub owner avatar; it is not a verifiable tool icon and must no longer be exported.
             iconURLString = nil
             repositoryFullName = tool.repositoryFullName
             installationSourceRawValue = tool.installationSourceRawValue
@@ -67,7 +67,7 @@ struct TermiPadBackup: Codable {
             tool.categoryRawValue = categoryRawValue
             tool.iconSymbol = iconSymbol
             tool.iconStyleIdentifier = iconStyleIdentifier
-            // 忽略旧备份中的远程图标 URL，防止历史 owner 头像重新进入工具墙。
+            // Ignore remote icon URLs in old backups so historical owner avatars cannot re-enter the tool wall.
             tool.iconURLString = nil
             tool.repositoryFullName = repositoryFullName
             tool.installationSourceRawValue = installationSourceRawValue ?? ToolInstallationSource.detect(for: executablePath).rawValue
@@ -97,7 +97,7 @@ struct TermiPadBackup: Codable {
             )
             tool.id = id
             tool.iconStyleIdentifier = iconStyleIdentifier
-            // 兼容 schema 1 的旧备份，但不恢复当时无验证来源的远程图标 URL。
+            // Stay compatible with schema 1 backups, but do not restore the remote icon URLs that had no verified source back then.
             tool.iconURLString = nil
             tool.repositoryFullName = repositoryFullName
             tool.metadataProvenanceRawValue = metadataProvenanceRawValue ?? ToolMetadataProvenance.local.rawValue
@@ -287,7 +287,7 @@ enum BackupServiceError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .unsupportedSchema(let version):
-            return "此备份使用了不受支持的数据版本：\(version)。"
+            return "This backup uses an unsupported data version: \(version)."
         }
     }
 }

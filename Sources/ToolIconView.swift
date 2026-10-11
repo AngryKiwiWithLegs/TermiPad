@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// 图标策略：已识别的常用工具使用专属语义图标；未知工具保存本地回退样式标识；用户本地 PNG 始终优先。
+/// Icon strategy: recognized common tools use dedicated semantic icons; unknown tools store a local fallback style identifier; the user's local PNG always takes priority.
 struct ToolIconDefinition {
     let styleIdentifier: String
     let symbol: String
@@ -124,7 +124,7 @@ enum ToolIconCatalog {
             && !manualChoices.contains(where: { $0.id == tool.iconStyleIdentifier })
     }
 
-    /// 对未知工具使用名称稳定哈希；若已有组合被占用，按固定顺序选择下一个组合。
+    /// Unknown tools use a stable hash of the name; if a combination is already taken, the next one is chosen in a fixed order.
     static func fallbackStyleIdentifier(for toolName: String, occupiedIdentifiers: Set<String> = []) -> String {
         let seed = stableHash(normalizedToolName(toolName))
         for offset in 0..<fallbackCombinationCount {
@@ -134,7 +134,7 @@ enum ToolIconCatalog {
         return fallbackStyleIdentifier(at: seed % fallbackCombinationCount)
     }
 
-    /// 旧记录可能没有样式字段。该方法只为自动回退图标写入稳定标识，并以 UUID 作为同名记录的确定性并列顺序。
+    /// Old records may have no style field. This method writes a stable identifier only for automatic fallback icons and uses the UUID as the deterministic tie-break order for records with the same name.
     @discardableResult
     static func normalizeFallbackAssignments(for tools: [TerminalTool]) -> Bool {
         let automaticTools = tools
@@ -228,7 +228,7 @@ enum ToolIconCatalog {
     }
 }
 
-/// 图标渲染只使用受控本地 PNG、内置 SF Symbol 和本地颜色；不会从网络加载品牌或所有者头像。
+/// Icon rendering uses only controlled local PNGs, built-in SF Symbols, and local colors; brand or owner avatars are never loaded from the network.
 struct ToolIconView: View {
     let tool: TerminalTool
     let size: CGFloat
@@ -255,7 +255,7 @@ struct ToolIconView: View {
         }
         .frame(width: size, height: size)
         .shadow(color: definition.primaryColor.opacity(0.20), radius: 5, y: 2)
-        .accessibilityLabel("\(tool.name) 图标")
+        .accessibilityLabel("\(tool.name) icon")
     }
 }
 

@@ -1,7 +1,7 @@
-// M3 锁屏监测（docs/m3-remote-allow-window-design.md §3.2）：
-// 远程窗口开启期间每 5 秒检查登录会话锁定状态——锁屏即关窗。
-// 窗口关闭时不轮询（零开销）；检查逻辑复用 MobileTaskConsoleService
-// 的 CGSessionCopyCurrentDictionary 单点（verify-macos.sh 守卫）。
+// M3 lock-screen monitor (docs/m3-remote-allow-window-design.md §3.2):
+// while the remote window is open, check the login session's lock state every 5 seconds — locking the screen closes the window.
+// No polling while the window is closed (zero overhead); the check reuses MobileTaskConsoleService's
+// single CGSessionCopyCurrentDictionary call site (guarded by verify-macos.sh).
 import Foundation
 
 @MainActor
@@ -10,12 +10,12 @@ final class LockStateMonitor: ObservableObject {
     static let pollInterval: TimeInterval = 5
 
     private var timer: Timer?
-    /// 最近一次检测到的锁屏状态（UI 无需展示，仅供测试断言）。
+    /// The most recently detected lock state (not shown in the UI; for test assertions only).
     private(set) var lastKnownLocked: Bool?
 
-    /// 窗口开启时启动监测；关闭时停止。首轮检查延迟 5 秒——开窗的 LA
-    /// 认证过程中系统报告的锁定状态不可靠（2026-09-19 真机：开窗即被
-    /// 判定锁屏关窗），延迟避开认证窗口期。
+    /// Start monitoring when the window opens; stop when it closes. The first check is delayed by 5 seconds — during the LA
+    /// authentication that opens the window, the lock state reported by the system is unreliable (2026-09-19 real device: the window was
+    /// judged locked and closed as soon as it opened); the delay avoids the authentication period.
     func setActive(_ active: Bool) {
         guard active != (timer != nil) else { return }
         if active {

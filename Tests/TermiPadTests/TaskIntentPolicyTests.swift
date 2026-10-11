@@ -104,7 +104,7 @@ final class TaskIntentPolicyTests: XCTestCase {
         )
     }
 
-    // MARK: - 拒绝路径逐项独立测试（t0-checklist §4.2：每种拒绝路径至少一个单测）
+    // MARK: - Each rejection path tested independently (t0-checklist §4.2: at least one unit test per rejection path)
 
     func testRejects_unknownTaskKind() throws {
         let directory = try makeTemporaryDirectory(named: "reject-unknown-kind")
@@ -137,13 +137,13 @@ final class TaskIntentPolicyTests: XCTestCase {
             expiresAt: now.addingTimeInterval(60)
         )
         let intent = TaskIntentPolicy.makeIntent(scope: scope, kind: .swiftPackageTests, now: now)
-        // 删除 scope 目录 → directoryIsAvailable 变 false
+        // Delete the scope directory → directoryIsAvailable becomes false
         try FileManager.default.removeItem(at: directory)
         XCTAssertEqual(
             TaskIntentPolicy.review(intent, scope: scope, windows: [window], existingIntents: [intent], now: now),
             .rejected(.projectScopeUnavailable)
         )
-        // scope 已被撤销也应拒绝
+        // A revoked scope should be rejected too
         let freshDirectory = try makeTemporaryDirectory(named: "reject-scope-revoked")
         defer { try? FileManager.default.removeItem(at: freshDirectory) }
         let revokedScope = TaskProjectScope(displayName: "R", rootPath: freshDirectory.path, createdAt: now)
@@ -168,7 +168,7 @@ final class TaskIntentPolicyTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 12_000)
         let scope = TaskProjectScope(displayName: "S", rootPath: directory.path, createdAt: now)
         let intent = TaskIntentPolicy.makeIntent(scope: scope, kind: .swiftPackageTests, now: now)
-        // 完全没开窗
+        // No window opened at all
         XCTAssertEqual(
             TaskIntentPolicy.review(intent, scope: scope, windows: [], existingIntents: [intent], now: now),
             .rejected(.localReviewRequired)
@@ -198,14 +198,14 @@ final class TaskIntentPolicyTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let now = Date(timeIntervalSince1970: 14_000)
         let scope = TaskProjectScope(displayName: "S", rootPath: directory.path, createdAt: now)
-        // 低风险窗口
+        // Low-risk window
         let lowWindow = TaskReviewWindow(
             projectScopeID: scope.id,
             maximumRisk: .low,
             openedAt: now,
             expiresAt: now.addingTimeInterval(60)
         )
-        // 但发起的是 .standard 风险（macOSVerification）
+        // But the request is .standard risk (macOSVerification)
         let standardIntent = TaskIntentPolicy.makeIntent(scope: scope, kind: .macOSVerification, now: now)
         XCTAssertEqual(
             TaskIntentPolicy.review(standardIntent, scope: scope, windows: [lowWindow], existingIntents: [standardIntent], now: now),
@@ -244,7 +244,7 @@ final class TaskIntentPolicyTests: XCTestCase {
             openedAt: now,
             expiresAt: now.addingTimeInterval(60)
         )
-        // 在 now-proposalLifetime-1 时创建
+        // Created at now-proposalLifetime-1
         let expired = TaskIntentPolicy.makeIntent(
             scope: scope,
             kind: .swiftPackageTests,
@@ -267,14 +267,14 @@ final class TaskIntentPolicyTests: XCTestCase {
             openedAt: now,
             expiresAt: now.addingTimeInterval(60)
         )
-        // 已批准
+        // Approved
         let intent = TaskIntentPolicy.makeIntent(scope: scope, kind: .swiftPackageTests, now: now)
         intent.state = .approved
         XCTAssertEqual(
             TaskIntentPolicy.review(intent, scope: scope, windows: [window], existingIntents: [intent], now: now),
             .rejected(.taskNotPending)
         )
-        // 已取消
+        // Cancelled
         let cancelled = TaskIntentPolicy.makeIntent(scope: scope, kind: .swiftPackageTests, now: now)
         TaskIntentPolicy.cancel(cancelled, now: now)
         XCTAssertEqual(
@@ -303,8 +303,8 @@ final class TaskIntentPolicyTests: XCTestCase {
     }
 
     func testRejects_scopeIDMismatch() throws {
-        // 隐式拒绝路径：intent.projectScopeID 指向一个不存在的 scope。
-        // review() 内 guard scope.id == intent.projectScopeID 会失败 → .projectScopeUnavailable
+        // Implicit rejection path: intent.projectScopeID points to a scope that does not exist.
+        // Inside review() the guard scope.id == intent.projectScopeID fails → .projectScopeUnavailable
         let directory = try makeTemporaryDirectory(named: "reject-id-mismatch")
         defer { try? FileManager.default.removeItem(at: directory) }
         let now = Date(timeIntervalSince1970: 19_000)

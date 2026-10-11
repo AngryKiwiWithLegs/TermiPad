@@ -1,8 +1,8 @@
 import XCTest
 @testable import TermiPad
 
-/// M2b-1 任务会话中心契约测试（docs/m2b-remote-task-console-design.md §5.3/§5.4）：
-/// 条目流上限、工具启动无输出、输出档位裁决、驻留时限清扫。全部纯逻辑。
+/// M2b-1 task session center contract tests (docs/m2b-remote-task-console-design.md §5.3/§5.4):
+/// entry feed cap, no output for tool launches, output visibility decisions, retention sweep. All pure logic.
 @MainActor
 final class MobileTaskConsoleServiceTests: XCTestCase {
 
@@ -21,13 +21,13 @@ final class MobileTaskConsoleServiceTests: XCTestCase {
 
     func testToolLaunchEntryNeverCarriesOutputOrExitCode() {
         let service = MobileTaskConsoleService()
-        service.recordToolLaunch(id: UUID(), title: "构建", succeeded: true)
-        service.recordToolLaunch(id: UUID(), title: "构建", succeeded: false)
+        service.recordToolLaunch(id: UUID(), title: "Build", succeeded: true)
+        service.recordToolLaunch(id: UUID(), title: "Build", succeeded: false)
         let snapshot = service.sessionEntries()
         XCTAssertEqual(snapshot.count, 2)
         for entry in snapshot where entry.kind == .toolLaunch {
-            XCTAssertNil(entry.outputSnippet, "工具启动（终端交接）永无输出回传")
-            XCTAssertNil(entry.exitCode, "终端交接路径无退出码")
+            XCTAssertNil(entry.outputSnippet, "Tool launches (terminal handoff) never return output")
+            XCTAssertNil(entry.exitCode, "The terminal handoff path has no exit code")
         }
         XCTAssertEqual(
             Set(snapshot.map(\.executionState)),
@@ -38,12 +38,12 @@ final class MobileTaskConsoleServiceTests: XCTestCase {
         let service = MobileTaskConsoleService()
         let limit = MobileTaskConsoleService.entryLimit
         for index in 0..<(limit + 10) {
-            service.recordToolLaunch(id: UUID(), title: "工具\(index)", succeeded: true)
+            service.recordToolLaunch(id: UUID(), title: "Tool \(index)", succeeded: true)
         }
         XCTAssertEqual(service.sessionEntries().count, limit)
-        // 最新条目在最前——环内保留的是最近的，最早的被挤掉。
+        // The newest entry comes first — the ring keeps the most recent ones and the earliest are pushed out.
         let titles = service.sessionEntries().map(\.title)
-        XCTAssertEqual(titles.first, "工具\(limit + 9)")
+        XCTAssertEqual(titles.first, "Tool \(limit + 9)")
     }
 
     func testTaskStateUpdatesInPlaceById() {
@@ -56,7 +56,7 @@ final class MobileTaskConsoleServiceTests: XCTestCase {
             id: taskID, title: "swift test", executionState: .succeeded,
             exitCode: 0, startedAt: Date(), finishedAt: Date(), outputSnippet: nil)
         let snapshot = service.sessionEntries()
-        XCTAssertEqual(snapshot.count, 1, "同一任务按 id 原位更新，不重复占位")
+        XCTAssertEqual(snapshot.count, 1, "The same task is updated in place by id and does not take a second slot")
         XCTAssertEqual(snapshot.first?.executionState, TaskExecutionState.succeeded.rawValue)
         XCTAssertEqual(snapshot.first?.exitCode, 0)
     }
@@ -71,11 +71,11 @@ final class MobileTaskConsoleServiceTests: XCTestCase {
             id: taskID, title: "swift test", executionState: .running,
             exitCode: nil, startedAt: Date(), finishedAt: nil,
             outputSnippet: "Test Suite passed")
-        XCTAssertNil(service.sessionEntries().first?.outputSnippet, "minimal 档位下输出片段一律不下发")
+        XCTAssertNil(service.sessionEntries().first?.outputSnippet, "At the minimal level output snippets are never sent")
     }
 
     func testRestrictedVisibilityKeepsOutputSnippet() {
-        // 默认档位即 restricted（设计 §5.4 建议默认）。
+        // The default level is restricted (the default suggested by design §5.4).
         UserDefaults.standard.set(
             MobileTaskConsoleService.OutputVisibility.restricted.rawValue,
             forKey: MobileTaskConsoleService.outputVisibilityDefaultsKey)
@@ -89,7 +89,7 @@ final class MobileTaskConsoleServiceTests: XCTestCase {
     }
 
     func testDefaultVisibilityIsRestricted() {
-        // 未设置时回落 restricted——设计建议默认值（用户未喊停即按此执行）。
+        // Falls back to restricted when unset — the design's suggested default (applies unless the user says otherwise).
         let service = MobileTaskConsoleService()
         XCTAssertEqual(service.currentVisibility, .restricted)
     }
@@ -102,18 +102,18 @@ final class MobileTaskConsoleServiceTests: XCTestCase {
         let oldFinished = Date().addingTimeInterval(
             -(MobileTaskConsoleService.outputRetentionInterval + 60))
         service.recordTaskState(
-            id: UUID(), title: "旧任务", executionState: .succeeded,
+            id: UUID(), title: "Old task", executionState: .succeeded,
             exitCode: 0, startedAt: oldFinished, finishedAt: oldFinished,
             outputSnippet: "stale output")
-        XCTAssertNil(service.sessionEntries().first?.outputSnippet, "结束超过驻留时限的输出片段被清扫")
+        XCTAssertNil(service.sessionEntries().first?.outputSnippet, "Output snippets past the retention period are swept away")
     }
 
     func testFixedTaskSummariesCarryCatalogLiterals() {
         let service = MobileTaskConsoleService()
         let summaries = service.fixedTaskSummaries(language: .simplifiedChinese)
         XCTAssertEqual(summaries.count, FixedTaskCatalog.definitions.count)
-        // 目录字段是 FixedTaskCatalog 公开字面量（kind/用途/命令预览），
-        // 不是用户数据——数量与 kind 集合必须与目录一一对应。
+        // The catalog fields are public FixedTaskCatalog literals (kind / purpose / command preview),
+        // not user data — the count and the set of kinds must correspond one-to-one with the catalog.
         XCTAssertEqual(
             Set(summaries.map(\.kind)),
             Set(FixedTaskCatalog.definitions.map { $0.kind.rawValue }))
@@ -121,16 +121,16 @@ final class MobileTaskConsoleServiceTests: XCTestCase {
     }
 }
 
-// MARK: - M4 流回放（docs/m4-interactive-session-design.md §2.1）
+// MARK: - M4 stream replay (docs/m4-interactive-session-design.md §2.1)
 
-/// 流服务测试需在非 MainActor 上下文构造——用 @MainActor 测试方法。
+/// The stream service tests must be constructed outside a MainActor context — use @MainActor test methods.
 @MainActor
 final class TaskOutputStreamServiceTests: XCTestCase {
 
     func testSubscribeReplaysBufferedOutputImmediately() {
         let service = TaskOutputStreamService()
         let taskID = UUID()
-        // 模拟 T1 先产出输出（订阅前缓冲已有内容）。
+        // Simulate T1 producing output first (the buffer already has content before subscribing).
         service.dispatchOutput(taskID: taskID, rawText: "line one\nline two\n")
 
         var pushed: [MobileStreamChunk] = []
@@ -141,11 +141,11 @@ final class TaskOutputStreamServiceTests: XCTestCase {
                 pushed.append(chunk)
             }
 
-        // 回放：订阅时立即推存量（此前真机实证缺失即"等待输出"根因）。
-        XCTAssertFalse(pushed.isEmpty, "订阅时必须立即推送缓冲存量")
+        // Replay: push the backlog immediately on subscribe (its absence was confirmed on a real device as the root cause of "waiting for output").
+        XCTAssertFalse(pushed.isEmpty, "The buffered backlog must be pushed immediately on subscribe")
         XCTAssertEqual(pushed.reduce(0) { $0 + $1.text.utf8.count }, "line one\nline two\n".utf8.count)
         XCTAssertEqual(cursor, pushed.last!.offset + pushed.last!.text.utf8.count)
-        // 内容经脱敏管道（普通文本原样）。
+        // The content goes through the redaction pipeline (plain text is unchanged).
         XCTAssertTrue(pushed.contains { $0.text.contains("line one") })
     }
 
@@ -156,13 +156,13 @@ final class TaskOutputStreamServiceTests: XCTestCase {
         var pushed: [MobileStreamChunk] = []
         let connectionID = UUID()
         service.registerSink(connectionID) { chunk in pushed.append(chunk) }
-        // 断线重连：声称已消费前 5 字节（"AAAA\n"）——续传只推 B 部分。
+        // Reconnect after a drop: claims the first 5 bytes ("AAAA\n") were consumed — the resume pushes only the B part.
         _ = service.subscribe(
             connectionID: connectionID, taskID: taskID, resumeOffset: 5) { chunk in
                 pushed.append(chunk)
             }
         XCTAssertTrue(pushed.contains { $0.text.contains("BBBB") })
-        XCTAssertFalse(pushed.contains { $0.text.contains("AAAA") }, "已消费部分不得重推")
+        XCTAssertFalse(pushed.contains { $0.text.contains("AAAA") }, "The already-consumed part must not be pushed again")
     }
 
     func testDispatchOutputPushesToActiveSubscriber() {
@@ -175,10 +175,10 @@ final class TaskOutputStreamServiceTests: XCTestCase {
             connectionID: connectionID, taskID: taskID, resumeOffset: nil) { chunk in
                 pushed.append(chunk)
             }
-        // 订阅后 T1 新输出 → 实时推送。
+        // New T1 output after subscribing → pushed in real time.
         service.dispatchOutput(taskID: taskID, rawText: "live output\n")
         XCTAssertTrue(pushed.contains { $0.text.contains("live output") },
-                      "订阅后的新输出必须实时推送")
+                      "New output after subscribing must be pushed in real time")
     }
 
     func testOutputIsRedactedBeforePush() {
@@ -194,7 +194,7 @@ final class TaskOutputStreamServiceTests: XCTestCase {
         service.dispatchOutput(taskID: taskID,
                                rawText: "token=supersecretvalue123\n")
         XCTAssertFalse(pushed.contains { $0.text.contains("supersecretvalue123") },
-                       "推送前必须脱敏")
+                       "Output must be redacted before being pushed")
         XCTAssertTrue(pushed.contains { $0.text.contains(OutputRedactor.mask) })
     }
 
@@ -212,6 +212,6 @@ final class TaskOutputStreamServiceTests: XCTestCase {
         service.purgeAll()
         pushed.removeAll()
         service.dispatchOutput(taskID: taskID, rawText: "after purge\n")
-        XCTAssertTrue(pushed.isEmpty, "窗口关闭后缓冲与订阅必须清空")
+        XCTAssertTrue(pushed.isEmpty, "Buffers and subscriptions must be cleared after the window closes")
     }
 }

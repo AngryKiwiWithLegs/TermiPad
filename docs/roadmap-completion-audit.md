@@ -1,36 +1,36 @@
-# TermiPad 路线图完成度审计
+# TermiPad roadmap completion audit
 
-**审计范围：** 私有 macOS Swift/SwiftUI 应用的功能、可靠性、恢复与本地效率能力。本文不将“代码可运行”混同于“可外部分发”。
+**Audit scope:** The features, reliability, recovery, and local efficiency capabilities of the private macOS Swift/SwiftUI app. This document does not confuse "the code runs" with "ready for external distribution".
 
-## 当前结论
+## Current conclusion
 
-TermiPad 的原始 P0 目标及不依赖开发者账户的 P1 能力已进入实现收口阶段。核心工作流保持为：**扫描用户主动安装的交互式 CLI → 在候选收件箱确认 → 以本地命令与变量表单启动或复制 → 本机管理与恢复**。网络补充、更新检查和诊断包均为用户主动选择的附加能力，不改变该本地优先边界。
+TermiPad's original P0 goals and the P1 capabilities that do not depend on a developer account have reached the finishing stage of implementation. The core workflow remains: **scan interactive CLIs the user installed deliberately → confirm in the review inbox → launch or copy with a local command and variable form → manage and recover on this Mac**. Network enrichment, update checks, and the diagnostic package are all add-ons the user opts into and do not change this local-first boundary.
 
-| 路线图模块 | 当前状态 | 已实现或明确闸门 |
+| Roadmap module | Current status | Implemented, or explicit gate |
 |---|---|---|
-| P0：收录可信 | 已完成 | 首启边界说明、候选收件箱、手动添加、隐藏/删除/恢复、扫描过滤与安装来源。 |
-| P0：启动可信 | 已完成 | 变量表单、模板转义、Terminal/iTerm/Warp/仅复制、自动化拒绝时复制回退、用户明确选择的本地工作目录安全包装与目录失效编辑修复，以及绝对可执行路径失效时的本地健康检查。工作目录不会进入备份或诊断包。 |
-| P0：信息可信 | 已完成 | 保守 GitHub 匹配、来源/分数可见、AI Keychain 与命令不可改写、本地图标策略。 |
-| P0：恢复与验证 | 已完成 | JSON 备份/预览/合并、旧 schema 兼容、SwiftData 固定 store 重开、集中 macOS 验证。 |
-| P1：常用动作 | 已完成 | 收藏、最近使用、菜单栏入口与应用内键盘快捷操作。 |
-| P1：诊断 | 已完成 | 本地环形事件记录、隐私化 JSON 诊断包、用户主动导出和清除。 |
-| P1：更新提示 | 已完成 | 默认关闭、用户手动 HTTPS JSON 读取、只提示不下载/安装/执行。 |
-| P1：iCloud 同步 | 外部闸门，设计已完成 | 默认 `cloudKitDatabase: .none`，并已记录账户、CloudKit 容器、冲突、迁移与双设备验收条件；见 `docs/icloud-sync-design-gate.md`。没有账户/容器配置时不伪实现。 |
-| P2-A：项目发现预览 | 已完成并通过真实 macOS 验证 | 默认关闭；仅由用户手动刷新固定公开 GitHub CLI 查询；ETag 缓存、限流退避、非 fork/非 archived 筛选、可解释排序与本地缓存均已实现。不会安装软件、生成命令、自动收录项目或上传本地工具数据。 |
-| P2-B：受控安装审查 | 已实现并在真实 macOS 验证 | 仅内置静态审核的 Homebrew core formula 目录（13 个 formula，Sources/ControlledInstallPlan.swift:71-85）；精确仓库映射；显示预期 CLI、审核修订、日期与固定命令；用户明确勾选和手动确认后才可交给所选终端或复制。不会应用内安装、读取 README 命令、支持 tap/cask 或自动收录。 |
-| P2-C：只读环境报告 | 已实现并在真实 macOS 验证 | 仅在用户点击检查时对 6 个固定绝对路径组件（Homebrew / Cargo / npm / pnpm / Bun / Python）运行 `--version`；不枚举 PATH、不运行 shell、不联网、不安装/升级/卸载/裁决冲突。Sources/EnvironmentReport.swift:80-153。 |
-| 正式外部分发 | 外部闸门 | 需要 Apple Developer 账户、Developer ID、Hardened Runtime、公证、stapling 和 Gatekeeper 隔离冷启动。 |
+| P0: trustworthy collection | Done | First-run boundary notice, review inbox, manual add, hide/delete/restore, scan filtering, and installation source. |
+| P0: trustworthy launching | Done | Variable form, template escaping, Terminal/iTerm/Warp/copy only, copy fallback when Automation is denied, safe wrapping of the local working directory the user explicitly chose with edit-to-fix when the directory is gone, and the local health check when the absolute executable path is no longer valid. The working directory never enters backups or diagnostic packages. |
+| P0: trustworthy information | Done | Conservative GitHub matching, visible source/score, AI Keychain and commands that cannot be rewritten, local icon strategy. |
+| P0: recovery and verification | Done | JSON backup/preview/merge, old schema compatibility, reopening a fixed SwiftData store, consolidated macOS verification. |
+| P1: frequent actions | Done | Favorites, recents, menu bar entry, and in-app keyboard shortcuts. |
+| P1: diagnostics | Done | Local ring event log, privacy-preserving JSON diagnostic package, export and clearing initiated by the user. |
+| P1: update notices | Done | Off by default, manual HTTPS JSON read by the user, notifies only and never downloads/installs/executes. |
+| P1: iCloud sync | External gate, design complete | Defaults to `cloudKitDatabase: .none`, and the account, CloudKit container, conflict, migration, and two-device acceptance conditions are recorded; see `docs/icloud-sync-design-gate.md`. No fake implementation without account/container configuration. |
+| P2-A: Project Discovery Preview | Done and passed real macOS verification | Off by default; only a manual user refresh of the fixed public GitHub CLI query; ETag cache, rate-limit backoff, non-fork / non-archived filtering, explainable ranking, and the local cache are all implemented. It does not install software, generate commands, collect projects automatically, or upload local tool data. |
+| P2-B: controlled install review | Implemented and verified on real macOS | Only the built-in statically reviewed Homebrew core formula catalog (13 formulae, Sources/ControlledInstallPlan.swift:71-85); exact repository mapping; shows the expected CLI, review revision, date, and fixed command; it can be handed to the chosen terminal or copied only after the user explicitly checks the box and confirms manually. It does not install in-app, read README commands, support taps/casks, or collect automatically. |
+| P2-C: read-only environment report | Implemented and verified on real macOS | Only when the user clicks Check does it run `--version` for 6 components at fixed absolute paths (Homebrew / Cargo / npm / pnpm / Bun / Python); it does not enumerate PATH, run a shell, use the network, or install/upgrade/uninstall/arbitrate conflicts. Sources/EnvironmentReport.swift:80-153. |
+| Formal external distribution | External gate | Needs an Apple Developer account, Developer ID, Hardened Runtime, notarization, stapling, and an isolated Gatekeeper cold start. |
 
-## 私有 beta 的验证要求
+## Verification requirement for the private beta
 
-每一批增强合入后，唯一需要在真实 Mac 上执行的验证仍是：
+After each batch of enhancements is merged, the only verification that needs to run on a real Mac is still:
 
 ```bash
 cd ~/TermiPad && git pull --ff-only origin master && ./scripts/verify-macos.sh
 ```
 
-该流程验证 SwiftPM 单元测试、XcodeGen、原生 macOS build、UI Runner 签名校验、UI 冒烟测试和结果包导出。它不执行、不模拟正式签名、公证或更新下载安装。
+The flow verifies the SwiftPM unit tests, XcodeGen, the native macOS build, UI Runner signature verification, the UI smoke tests, and the result bundle export. It neither performs nor simulates formal signing, notarization, or downloading and installing updates.
 
-## 未完成项的处理原则
+## Principles for handling unfinished items
 
-iCloud 同步和正式外部分发受外部资质阻塞；它们不能被本地代码替代。P2-A 的发现预览已按独立安全设计实现并通过真实 macOS 集中验证。P2-B 的安装协助和 P2-C 的依赖治理不是简单的“剩余功能”：它们仍须在单独确认下载来源信任、安装授权、可回滚策略、包管理器支持范围和隐私说明后才可启动。
+iCloud sync and formal external distribution are blocked by external qualifications; local code cannot replace them. P2-A's discovery preview has been implemented per its separate security design and passed consolidated real macOS verification. P2-B's install assistance and P2-C's dependency governance are not simply "remaining features": they can start only after download source trust, install authorization, a rollback strategy, the scope of package manager support, and the privacy notice are each confirmed separately.

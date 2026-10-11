@@ -21,27 +21,27 @@ final class TermiPadUITests: XCTestCase {
         let discoveryButton = element("discover-tools-button")
         XCTAssertTrue(
             discoveryButton.waitForExistence(timeout: 10),
-            "完成首次引导后，TermiPad 应显示“发现工具”按钮。"
+            "After completing first-run onboarding, TermiPad should show the “Discover Tools” button."
         )
         XCTAssertTrue(
             element("language-segmented-control").waitForExistence(timeout: 5),
-            "TermiPad 应显示中英文分段切换控件。"
+            "TermiPad should show the Chinese/English segmented language switch."
         )
         XCTAssertTrue(
             element("appearance-segmented-control").waitForExistence(timeout: 5),
-            "TermiPad 应显示三档外观分段切换控件。"
+            "TermiPad should show the three-option appearance segmented switch."
         )
         XCTAssertTrue(
             element("sidebar-settings").waitForExistence(timeout: 5),
-            "TermiPad 应在左边栏提供常驻设置入口。"
+            "TermiPad should provide a permanent Settings entry in the left sidebar."
         )
         XCTAssertTrue(
             element("sidebar-favorites").waitForExistence(timeout: 5),
-            "TermiPad 应在左边栏提供收藏入口。"
+            "TermiPad should provide a Favorites entry in the left sidebar."
         )
         XCTAssertTrue(
             element("sidebar-recent").waitForExistence(timeout: 5),
-            "TermiPad 应在左边栏提供最近使用入口。"
+            "TermiPad should provide a Recent entry in the left sidebar."
         )
 
         attachScreenshot(named: "termipad-library")
@@ -54,18 +54,18 @@ final class TermiPadUITests: XCTestCase {
         let discoverySidebarItem = element("sidebar-discovery-preview")
         XCTAssertTrue(
             discoverySidebarItem.waitForExistence(timeout: 5),
-            "TermiPad 应在侧边栏提供项目发现预览入口。"
+            "TermiPad should provide a Project Discovery Preview entry in the sidebar."
         )
         discoverySidebarItem.click()
 
         XCTAssertTrue(
             element("discovery-preview").waitForExistence(timeout: 5),
-            "项目发现预览应显示独立页面，而非混入候选收件箱。"
+            "Project Discovery Preview should show its own page instead of being mixed into the review inbox."
         )
-        // macOS 会折叠 ContentUnavailableView 的内部标识；以页面存在且没有刷新控件作为可观察的默认关闭证据。
+        // macOS collapses the internal identifiers of ContentUnavailableView; the page existing with no refresh control is the observable evidence of being off by default.
         XCTAssertFalse(
             element("discovery-refresh").exists,
-            "默认关闭的项目发现预览不应显示或触发刷新操作。"
+            "Project Discovery Preview, off by default, should neither show nor trigger a refresh action."
         )
 
         attachScreenshot(named: "termipad-discovery-preview-disabled")
@@ -78,21 +78,21 @@ final class TermiPadUITests: XCTestCase {
         let installEnvironmentSidebarItem = element("sidebar-install-environment")
         XCTAssertTrue(
             installEnvironmentSidebarItem.waitForExistence(timeout: 5),
-            "TermiPad 应在侧边栏提供独立的安装审查与环境报告入口。"
+            "TermiPad should provide a separate Install Review & Environment entry in the sidebar."
         )
         installEnvironmentSidebarItem.click()
 
         XCTAssertTrue(
             element("install-environment").waitForExistence(timeout: 5),
-            "安装审查与环境报告应显示独立页面，而非混入工具启动界面。"
+            "Install Review & Environment should show its own page instead of being mixed into the tool launch UI."
         )
         XCTAssertTrue(
             element("environment-report-check").waitForExistence(timeout: 5),
-            "环境报告必须提供由用户主动触发的检查操作。"
+            "The environment report must offer a check action triggered deliberately by the user."
         )
         XCTAssertFalse(
             element("install-plan-review").exists,
-            "初始状态不应自动打开安装计划审查或交接任何命令。"
+            "The initial state should not open an install plan review or hand off any command automatically."
         )
 
         attachScreenshot(named: "termipad-install-environment-idle")
@@ -105,29 +105,29 @@ final class TermiPadUITests: XCTestCase {
         let taskWorkbenchSidebarItem = element("sidebar-task-workbench")
         XCTAssertTrue(
             taskWorkbenchSidebarItem.waitForExistence(timeout: 5),
-            "TermiPad 应在侧边栏提供独立的本地任务工作台入口。"
+            "TermiPad should provide a separate Local Task Workbench entry in the sidebar."
         )
         taskWorkbenchSidebarItem.click()
 
         XCTAssertTrue(
             element("task-policy-workbench").waitForExistence(timeout: 5),
-            "本地任务策略应显示独立工作台，而不混入工具终端启动界面。"
+            "The local task policy should show its own workbench instead of being mixed into the tool terminal launch UI."
         )
         XCTAssertTrue(
             element("task-policy-boundary").waitForExistence(timeout: 5),
-            "任务工作台应明确显示受限本地执行边界。"
+            "The task workbench should clearly show the restricted local execution boundary."
         )
         XCTAssertTrue(
             element("task-mcp-local-section").waitForExistence(timeout: 5),
-            "任务工作台应显示默认关闭的本机 MCP 许可说明，而不自动启动任何本机客户端。"
+            "The task workbench should show the off-by-default local MCP permission note without starting any local client automatically."
         )
         XCTAssertTrue(
             element("task-mcp-toggle").exists,
-            "用户应能在 Mac 本机明确选择是否允许受限 MCP 提出待审阅任务。"
+            "The user should be able to choose explicitly, on the Mac, whether restricted MCP may propose tasks for review."
         )
         XCTAssertFalse(
             element("discover-tools-button").exists,
-            "任务工作台不应显示工具扫描操作，也不应暴露远程终端入口。"
+            "The task workbench should not show tool scanning actions or expose a remote terminal entry."
         )
 
         attachScreenshot(named: "termipad-task-execution-workbench")
@@ -138,15 +138,15 @@ final class TermiPadUITests: XCTestCase {
 
         XCTAssertTrue(
             element("data-recovery-screen").waitForExistence(timeout: 10),
-            "强制恢复模式应显示受控数据恢复页面。"
+            "Forced recovery mode should show the controlled data recovery page."
         )
         XCTAssertTrue(
             element("data-recovery-import-backup").waitForExistence(timeout: 5),
-            "默认数据容器无法打开时，恢复模式应提供用户主动导入 JSON 备份的入口。"
+            "When the default data container cannot be opened, recovery mode should offer an entry for the user to import a JSON backup deliberately."
         )
         XCTAssertFalse(
             element("discover-tools-button").exists,
-            "恢复模式不应假装默认工具库可用。"
+            "Recovery mode should not pretend the default library is available."
         )
 
         attachScreenshot(named: "termipad-data-recovery")
@@ -158,59 +158,59 @@ final class TermiPadUITests: XCTestCase {
 
         XCTAssertTrue(
             element("settings-terminal-picker").waitForExistence(timeout: 10),
-            "设置启动场景应展示默认终端偏好。"
+            "The settings launch scenario should show the default terminal preference."
         )
         XCTAssertTrue(
             element("settings-export-backup").waitForExistence(timeout: 5),
-            "设置启动场景应展示备份导出操作。"
+            "The settings launch scenario should show the backup export action."
         )
         XCTAssertTrue(
             element("settings-export-diagnostics").waitForExistence(timeout: 5),
-            "设置启动场景应展示用户主动导出的隐私化诊断包入口。"
+            "The settings launch scenario should show the entry for the privacy-preserving diagnostic package the user exports deliberately."
         )
         XCTAssertTrue(
             element("settings-update-check-enabled").waitForExistence(timeout: 5),
-            "设置启动场景应展示默认关闭的手动更新检查开关。"
+            "The settings launch scenario should show the off-by-default manual update check toggle."
         )
         XCTAssertFalse(
             element("discover-tools-button").exists,
-            "设置页不应显示只属于工具库的“发现工具”操作。"
+            "The Settings page should not show the “Discover Tools” action that belongs only to the library."
         )
 
         attachScreenshot(named: "termipad-settings")
     }
 
     func testToolEditMobileEntrySectionExposesFiveFieldsAndRevoke() throws {
-        // M0 移动端入口（track-protocol stage 5.2）：UI 行为测试 placeholder。
+        // M0 mobile entry (track-protocol stage 5.2): UI behavior test placeholder.
         //
-        // docs/m0-m1-mobile-entry-design.md §2.7 要求"新增 1 个 UI 场景（打开工具编辑
-        // 面板 + 看到手机入口 section）"。完整断言需要进 ToolTile 的 contextMenu
-        // 选 "编辑工具" 进入 ToolEditView sheet。
+        // docs/m0-m1-mobile-entry-design.md §2.7 requires "1 new UI scenario (open the tool edit
+        // panel + see the Mobile Entry section)". The full assertion needs to go into the ToolTile's contextMenu
+        // and choose "Edit Tool" to enter the ToolEditView sheet.
         //
-        // **已知问题**（在 stage 5.2 调研中发现）：SwiftUI 在 macOS 上 `.contextMenu`
-        // 由 NSMenu 系统层处理，XCUITest 的合成 rightClick 事件在不同 macOS 版本
-        // 上一致性差——Xcode 26.6 上 menuItems 列表返回空 label（不是 SwiftUI 端
-        // 问题，是 XCTest 事件合成限制）。stage 5.2 范围内 XCUITest 还不能可靠地
-        // 触发 SwiftUI .contextMenu。
+        // **Known issue** (found during the stage 5.2 investigation): on macOS, SwiftUI's `.contextMenu`
+        // is handled by the NSMenu system layer, and XCUITest's synthesized rightClick events are inconsistent across macOS
+        // versions — on Xcode 26.6 the menuItems list returns empty labels (not a SwiftUI-side
+        // problem but an XCTest event synthesis limitation). Within the scope of stage 5.2, XCUITest cannot yet reliably
+        // trigger a SwiftUI .contextMenu.
         //
-        // **保留价值**：本 commit 加的 SEED_TOOL fixture helper + launchApp(seedTool:)
-        // 是真实的能力增量——未来 UITest 框架升级或 SwiftUI contextMenu 在 XCUITest
-        // 修好时，本测试即可补全 5 个 M0 identifier 断言（见 commit 6f762f0 placeholder
-        // 内的 5 行 + commit 21c5a7d 的 seeder 实现）。
+        // **Value kept**: the SEED_TOOL fixture helper + launchApp(seedTool:) added in this commit
+        // are a real capability gain — when the UITest framework is upgraded or SwiftUI contextMenu is fixed in XCUITest
+        // later, this test can be completed with the 5 M0 identifier assertions (see the 5 lines in the commit 6f762f0
+        // placeholder + the seeder implementation in commit 21c5a7d).
         //
-        // 本测试在 stage 5.2 内只覆盖："seed 工作了 + 主工作区能渲染 + fixture
-        // tool 出现在工具库"——证明 SEED_TOOL 路径打通。完整 5 identifier 断言留待
-        // 后续 SwiftUI contextMenu + XCUITest 兼容性解决后补。
+        // Within stage 5.2 this test only covers: "the seed worked + the main workspace renders + the fixture
+        // tool appears in the library" — proving the SEED_TOOL path works end to end. The full 5-identifier assertion is left
+        // for later, once SwiftUI contextMenu + XCUITest compatibility is resolved.
         launchApp(seedTool: true)
         completeOnboarding()
 
         XCTAssertTrue(
             element("tool-library").waitForExistence(timeout: 10),
-            "M0 启动 + fixture tool 已 seed，工具库应能渲染。"
+            "M0 launch + the fixture tool is seeded; the library should render."
         )
         XCTAssertTrue(
             element("tool-tile-merge-cli").waitForExistence(timeout: 10),
-            "fixture tool 'merge-cli' 应该在工具库中可见（证明 SEED_TOOL 路径生效）。\n当前 UI 层级：\n\(app.debugDescription)"
+            "The fixture tool 'merge-cli' should be visible in the library (proving the SEED_TOOL path works).\nCurrent UI hierarchy:\n\(app.debugDescription)"
         )
 
         attachScreenshot(named: "termipad-m0-fixture-baseline")
@@ -235,7 +235,7 @@ final class TermiPadUITests: XCTestCase {
         let hasAccessibleMainWindow = app.windows.firstMatch.exists
         XCTAssertTrue(
             reachedForeground || hasAccessibleMainWindow,
-            "TermiPad 未能在 10 秒内进入前台或呈现可访问的主窗口。当前 UI 层级：\n\(app.debugDescription)"
+            "TermiPad did not reach the foreground or present an accessible main window within 10 seconds. Current UI hierarchy:\n\(app.debugDescription)"
         )
         attachTextDiagnostic(
             named: "termipad-launch-state",
@@ -249,25 +249,25 @@ final class TermiPadUITests: XCTestCase {
             let newWindow = app.menuBars.menuItems["New Window"]
             XCTAssertTrue(
                 newWindow.waitForExistence(timeout: 5),
-                "TermiPad 未恢复主窗口时，应用菜单应提供 New Window。"
+                "When TermiPad does not restore its main window, the app menu should offer New Window."
             )
             newWindow.click()
         }
         XCTAssertTrue(
             mainWindow.waitForExistence(timeout: 10),
-            "TermiPad 在 UI 测试中应呈现可访问的主窗口。"
+            "TermiPad should present an accessible main window in UI tests."
         )
     }
 
     private func completeOnboarding() {
         XCTAssertTrue(
             element("onboarding-sheet").waitForExistence(timeout: 10),
-            "TermiPad 首次启动应显示边界说明。"
+            "TermiPad should show the boundary notice on first launch."
         )
         let onboardingFinish = element("onboarding-finish")
         XCTAssertTrue(
             onboardingFinish.waitForExistence(timeout: 5),
-            "TermiPad 首次启动应显示边界说明并允许用户确认。"
+            "TermiPad should show the boundary notice on first launch and let the user confirm."
         )
         onboardingFinish.click()
     }

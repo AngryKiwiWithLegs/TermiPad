@@ -1,26 +1,26 @@
 import XCTest
 @testable import TermiPad
 
-/// 6 个服务的契约测试合集（track-protocol 阶段 6 测试补强）。
+/// Collection of contract tests for 6 services (track-protocol stage 6 test hardening).
 ///
-/// 全部 contract-style：不打真网络 / 不打真 FS / 不打真 keychain——
-/// 锁住"任何 commit 改了就会让用户受影响的不变量"。
+/// All contract-style: no real network / no real FS / no real keychain —
+/// they lock down "invariants that would affect users if any commit changed them".
 ///
-/// 拆分原因（合并到 1 文件 vs 6 文件）：6 个服务有不同 owner、风险面、
-/// 修改频率，集中文件让 diff 噪声难定位；分文件让代码 review 能"按服务
-/// 看单测是否覆盖这个服务的契约"。
+/// Why split (merged into 1 file vs 6 files): the 6 services have different owners, risk surfaces,
+/// and change frequencies; a single file makes diff noise hard to locate, while separate files let code review check "per service
+/// whether the unit tests cover that service's contract".
 
 // MARK: - EnvironmentReport
 
 final class EnvironmentReportTests: XCTestCase {
-    /// verify-macos.sh 第 14-15 条静态守卫已经禁止 EnvironmentReport.swift 写
-    /// shell / install / uninstall 等危险词。测试锁住版本读取的
-    /// `arguments = ["--version"]` 永远不被改成其他东西——这是用户环境被
-    /// 执行任意命令的最后一道闸。
+    /// Static guards 14-15 in verify-macos.sh already forbid EnvironmentReport.swift from containing
+    /// dangerous words such as shell / install / uninstall. The test locks down that the version read's
+    /// `arguments = ["--version"]` is never changed to anything else — this is the last gate against arbitrary commands
+    /// being executed in the user's environment.
     func testReadVersionArgumentsAreAlwaysExactlyVersionFlag() {
-        // 通过 PathLookup / versionReader 注入点调用 inspect，捕获传给
-        // `/usr/bin/xcrun` 的 arguments 列表。lookup 必须返 non-nil，versionReader
-        // 才会被调；如果 lookup 返 nil，整条路径不调 — 那就测不到 args。
+        // Call inspect through the PathLookup / versionReader injection points and capture the arguments list passed to
+        // `/usr/bin/xcrun`. lookup must return non-nil for versionReader
+        // to be called; if lookup returns nil the whole path is not called — and the args cannot be tested.
         var capturedArgs: [String] = []
         let _ = EnvironmentReporter.inspect(
             now: Date(timeIntervalSince1970: 0),
@@ -31,11 +31,11 @@ final class EnvironmentReportTests: XCTestCase {
             }
         )
         XCTAssertEqual(capturedArgs, ["--version"],
-                       "EnvironmentReporter 只能跑 --version，不能改成 -c userinput 之类")
+                       "EnvironmentReporter may only run --version and must not be changed to something like -c userinput")
     }
 
-    /// 注入点必须支持自定义 lookup/reader——这是测试"能测"的前提。
-    /// 如果未来有人把 inspect 的两个闭包参数删了，编译期会立即报错。
+    /// The injection points must support a custom lookup/reader — this is the precondition for the test "being able to test".
+    /// If someone later removes inspect's two closure parameters, the compiler reports it immediately.
     func testInspectAcceptsCustomLookupAndReader() {
         let report = EnvironmentReporter.inspect(
             now: Date(timeIntervalSince1970: 0),
@@ -47,8 +47,8 @@ final class EnvironmentReportTests: XCTestCase {
                        .available(version: "v1"))
     }
 
-    /// lookup 返 nil 的组件必须算 unavailable，绝不能 fallback 到 PATH 搜索
-    /// （verify-macos.sh 第 9 条规则禁止扫 PATH）。
+    /// A component whose lookup returns nil must count as unavailable and must never fall back to a PATH search
+    /// (rule 9 in verify-macos.sh forbids scanning PATH).
     func testNilLookupMarksComponentUnavailable() {
         let report = EnvironmentReporter.inspect(
             now: Date(timeIntervalSince1970: 0),
@@ -57,7 +57,7 @@ final class EnvironmentReportTests: XCTestCase {
         )
         for entry in report.entries {
             XCTAssertNotEqual(entry.status, .available(version: "v"),
-                               "\(entry.component) 不应被 PATH 兜底")
+                               "\(entry.component) must not fall back to PATH")
         }
     }
 }
@@ -65,57 +65,57 @@ final class EnvironmentReportTests: XCTestCase {
 // MARK: - DiscoveryService
 
 final class DiscoveryServiceTests: XCTestCase {
-    /// 锁住查询参数——任何把 "topic:cli stars:>=50 archived:false fork:false" 改成
-    /// 不带 archived/fork 过滤的 commit 都会让 fork/archived repo 进 list，
-    /// 违反产品定位。query 变化 100% 必须走 review。
+    /// Lock down the query parameters — any commit that changes "topic:cli stars:>=50 archived:false fork:false" to
+    /// one without the archived/fork filters would let fork/archived repos into the list,
+    /// violating the product positioning. A query change must go through review, 100% of the time.
     func testQueryIsFixedAndPinned() {
         XCTAssertEqual(
             DiscoveryService.query,
             "topic:cli stars:>=50 archived:false fork:false",
-            "改 query 是产品定义变更，绕过这个测试必须有显式 review"
+            "Changing the query is a product definition change; bypassing this test requires an explicit review"
         )
     }
 
-    /// makeRequest 在没 cache 时不该发 If-None-Match（避免无效条件请求），
-    /// 有 cache 时必须发以走 304 路径。锁这个：将来谁去掉 If-None-Match，测试就挂。
+    /// makeRequest should not send If-None-Match without a cache (avoids an invalid conditional request),
+    /// and must send it with a cache to take the 304 path. Lock this down: whoever removes If-None-Match later breaks the test.
     func testMakeRequestSendsIfNoneMatchOnlyWhenCacheMatchesQuery() {
         let reqNoCache = try! DiscoveryService.makeRequest(cache: nil)
         XCTAssertNil(reqNoCache.value(forHTTPHeaderField: "If-None-Match"),
-                      "无 cache 时不该带 If-None-Match（避免无效条件请求）")
+                      "No If-None-Match without a cache (avoids an invalid conditional request)")
         let reqWithCache = try! DiscoveryService.makeRequest(
             cache: DiscoveryCacheSnapshot(
                 fetchedAt: Date(timeIntervalSince1970: 1_700_000_000),
-                query: DiscoveryService.query,  // 相同 query 才发
+                query: DiscoveryService.query,  // sent only for the same query
                 entityTag: "\"abc123\"",
                 isIncomplete: false,
                 items: []
             )
         )
         XCTAssertEqual(reqWithCache.value(forHTTPHeaderField: "If-None-Match"), "\"abc123\"",
-                         "匹配 query 的 cache 必须带 If-None-Match 触发 304")
+                         "A cache matching the query must send If-None-Match to trigger a 304")
     }
 
-    /// 不同 query 的 cache 不应触发 304（语义错配），应被忽略。
+    /// A cache for a different query should not trigger a 304 (semantic mismatch) and should be ignored.
     func testMakeRequestIgnoresCacheFromDifferentQuery() {
         let req = try! DiscoveryService.makeRequest(
             cache: DiscoveryCacheSnapshot(
                 fetchedAt: Date(),
-                query: "different-query",  // 不是当前 query
+                query: "different-query",  // not the current query
                 entityTag: "\"x\"",
                 isIncomplete: false,
                 items: []
             )
         )
         XCTAssertNil(req.value(forHTTPHeaderField: "If-None-Match"),
-                      "query 不匹配的 cache 不应被使用")
+                      "A cache whose query does not match should not be used")
     }
 
-    /// User-Agent / X-GitHub-Api-Version 是支持可观察的客户端标识
-    /// （GitHub API 服务条款要求），绝不能改为通用或匿名。
+    /// User-Agent / X-GitHub-Api-Version are client identifiers that support observability
+    /// (required by the GitHub API terms of service) and must never be changed to something generic or anonymous.
     func testRequestIdentifiesAsTermiPad() throws {
         let req = try DiscoveryService.makeRequest(cache: nil)
         XCTAssertEqual(req.value(forHTTPHeaderField: "User-Agent"), "TermiPad-DiscoveryPreview",
-                       "User-Agent 不能改为通用 — GitHub 限流与审计要求")
+                       "User-Agent must not be made generic — required by GitHub rate limiting and auditing")
         XCTAssertEqual(req.value(forHTTPHeaderField: "X-GitHub-Api-Version"), "2026-03-10")
     }
 }
@@ -123,21 +123,21 @@ final class DiscoveryServiceTests: XCTestCase {
 // MARK: - GitHubService
 
 final class GitHubServiceMatchScoreTests: XCTestCase {
-    /// matchScore 是把 GitHub 返回的仓库映射到"这个工具可能是它"的核心逻辑。
-    /// 任何放宽 / 收紧都会直接影响"工具被错误关联到仓库"的概率。
-    /// 4 个固定档位 + archived 一票否决必须锁住。
+    /// matchScore is the core logic that maps a repository returned by GitHub to "this tool may be it".
+    /// Any loosening / tightening directly affects the probability of "a tool being linked to the wrong repository".
+    /// The 4 fixed tiers + the archived veto must be locked down.
     func testMatchScoreReturns100ForExactName() {
-        // 真实 GitHub API 返回的 fullName 总是 "owner/repo" 形式 — 注意 owner 前缀
-        // 是 hasSuffix 模式 ("/\(name)") 能命中的前提。Sources/GitHubService.swift:84-86
-        // 用 hasSuffix("/<name>") 匹配，所以 fullName 必须含前导 "/"。
+        // The fullName returned by the real GitHub API always has the form "owner/repo" — note that the owner prefix
+        // is the precondition for the hasSuffix pattern ("/\(name)") to match. Sources/GitHubService.swift:84-86
+        // matches with hasSuffix("/<name>"), so fullName must contain the leading "/".
         let repo = GitHubRepoItem(name: "rg", fullName: "BurntSushi/rg", description: nil, isArchived: false)
         XCTAssertEqual(GitHubService.matchScore(toolName: "rg", repository: repo), 100,
-                       "name 与 toolName 完全相同 (lowercased 比对) 应得 100")
-        // 不能用 "burntSushi/rg" 作为 toolName 期待 100：matchScore 的第二个分支
-        // 只看 fullName，name 已经 = "rg"（不是 "burntSushi/rg"），所以走前两分支都会失配；
-        // 这反映了 Sources/GitHubService.swift:84-86 的精确契约 — 测试锁这个行为。
+                       "name exactly equal to toolName (lowercased comparison) should score 100")
+        // "burntSushi/rg" cannot be used as the toolName expecting 100: matchScore's second branch
+        // only looks at fullName, and name is already = "rg" (not "burntSushi/rg"), so the first two branches both miss;
+        // this reflects the exact contract of Sources/GitHubService.swift:84-86 — the test locks down this behavior.
         XCTAssertEqual(GitHubService.matchScore(toolName: "burntSushi/rg", repository: repo), 0,
-                       "toolName=burntSushi/rg 既不 == name(==rg) 也走不通 60 分支（name 短）")
+                       "toolName=burntSushi/rg neither == name (==rg) nor reaches the 60 branch (the name is short)")
     }
 
     func testMatchScoreReturns85ForToolPrefix() {
@@ -146,7 +146,7 @@ final class GitHubServiceMatchScoreTests: XCTestCase {
     }
 
     func testMatchScoreReturns60ForContainingMatch() {
-        // 含关系需要 4 字符以上才返回 60，避免短名 false positive
+        // The containment relation needs 4+ characters to return 60, avoiding short-name false positives
         let repo = GitHubRepoItem(name: "big-tool-name", fullName: "x/big-tool-name", description: nil, isArchived: false)
         XCTAssertEqual(GitHubService.matchScore(toolName: "tool", repository: repo), 60)
     }
@@ -157,7 +157,7 @@ final class GitHubServiceMatchScoreTests: XCTestCase {
     }
 
     func testMatchScoreReturnsMinForArchived() {
-        // archived 仓库一票否决——绝不被收录候选关联
+        // An archived repository is vetoed outright — it is never linked to an accepted candidate
         let repo = GitHubRepoItem(name: "mytool", fullName: "x/mytool", description: nil, isArchived: true)
         XCTAssertEqual(GitHubService.matchScore(toolName: "mytool", repository: repo), Int.min)
     }
@@ -170,34 +170,34 @@ final class GitHubServiceMatchScoreTests: XCTestCase {
 // MARK: - AppCopy
 
 final class AppCopyTests: XCTestCase {
-    /// AppCopy.text 是所有 UI 文本的唯一通道。任何不存在的 key 应该原样
-    /// 返回 key 本身（这样开发期容易发现缺译），而不是返回空串（容易漏看）。
+    /// AppCopy.text is the only channel for all UI text. Any key that does not exist should return
+    /// the key itself unchanged (so missing translations are easy to spot during development) rather than an empty string (easy to overlook).
     func testTextReturnsKeyItselfForMissing() {
         XCTAssertEqual(AppCopy.text("__definitely_does_not_exist__", language: .simplifiedChinese),
                        "__definitely_does_not_exist__")
     }
 
-    /// 同 key 中文英文都应存在——不可能某边漏写。
+    /// The same key should exist in both Chinese and English — neither side may be missing.
     func testAllExistingKeysAreInBothLanguages() {
-        // 找一组已知两个语言都有的 key
+        // Pick a set of keys known to exist in both languages
         let knownKeys = ["discover", "addTool", "openLibrary", "scanComplete",
                          "noTools", "settingsAppearance", "aiAPIKey", "exportBackup"]
         for key in knownKeys {
             XCTAssertNotEqual(AppCopy.text(key, language: .simplifiedChinese), key,
-                               "zh 缺失：\(key)")
+                               "zh missing: \(key)")
             XCTAssertNotEqual(AppCopy.text(key, language: .english), key,
-                               "en 缺失：\(key)")
+                               "en missing: \(key)")
         }
     }
 
-    /// format 正确把 %@ 替换为字符串参数；多次出现应全部替换。
+    /// format correctly replaces %@ with the string argument; multiple occurrences should all be replaced.
     func testFormatReplacesPercentAt() {
         let out = AppCopy.format("foundCandidates", "5", language: .english)
         XCTAssertTrue(out.contains("5"))
         XCTAssertFalse(out.contains("%@"))
     }
 
-    /// Int 重载应转 String 后再 format。
+    /// The Int overload should convert to String and then format.
     func testFormatIntOverloadWorks() {
         let out = AppCopy.format("foundCandidates", 7, language: .english)
         XCTAssertTrue(out.contains("7"))

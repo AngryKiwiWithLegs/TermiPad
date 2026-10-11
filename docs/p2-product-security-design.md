@@ -1,183 +1,183 @@
-# TermiPad P2：发现、受控安装与依赖治理设计
+# TermiPad P2: discovery, controlled install, and dependency governance design
 
-**状态：** P2-A 已通过真实 macOS 验证；P2-B 受控安装审查与 P2-C 只读环境报告已进入实现批次，等待真实 macOS 集中验证。自动安装、升级、卸载与跨生态依赖裁决仍未实现。
+**Status:** P2-A has passed real macOS verification; P2-B controlled install review and P2-C read-only environment report have entered the implementation batch and await consolidated real macOS verification. Automatic install, upgrade, uninstall, and cross-ecosystem dependency arbitration remain unimplemented.
 
-**适用范围：** 私有原生 macOS Swift/SwiftUI 应用。本文将原始方案中的“GitHub 热门项目发现、浏览、一键安装”和“依赖治理”拆为可验证的产品阶段；不会把推荐元数据、README、AI 输出或网络返回内容直接变成可执行命令。
+**Scope:** A private native macOS Swift/SwiftUI app. This document splits the original plan's "GitHub trending project discovery, browsing, one-click install" and "dependency governance" into verifiable product phases; it never turns recommendation metadata, READMEs, AI output, or network responses directly into executable commands.
 
-**设计日期：** 2026-08-25。
+**Design date:** 2026-08-25.
 
-> P2 的目标不是把 TermiPad 变成包管理器，而是在不丢失“用户已安装、直接交互 CLI 的图标启动库”核心身份的前提下，让用户可以发现候选项目、理解安装影响，并把经过审查的安装动作交给自己选择的终端执行。
+> P2's goal is not to turn TermiPad into a package manager, but — without losing the core identity of "an icon launch library for directly interactive CLIs the user has installed" — to let users discover candidate projects, understand the impact of installing, and hand a reviewed install action to the terminal they chose.
 
-## 1. 原始意图与新的边界
+## 1. Original intent and the new boundary
 
-原始技术方案将 P2 定义为两项后续能力：GitHub 热门新项目发现与一键安装，以及跨 npm、pip、Homebrew、Cargo 的依赖冲突治理。它同时明确指出 GitHub 没有官方 Trending API，且陌生项目的一键安装必须先展示项目简介并要求用户确认。这个判断正确，但不足以覆盖安装阶段的供应链执行风险。
+The original technical plan defined P2 as two follow-up capabilities: discovery and one-click install of trending new GitHub projects, and dependency conflict governance across npm, pip, Homebrew, and Cargo. It also stated explicitly that GitHub has no official Trending API and that one-click install of an unfamiliar project must first show a project summary and require user confirmation. That judgment is right, but it does not cover the supply-chain execution risk of the install stage.
 
-P0/P1 的命令对象是**用户已安装并确认的本地交互式 CLI**。P2 一旦可以建议或执行安装，就新增了四类责任：TermiPad 要说明推荐依据；要限定下载与安装来源；要把安装造成的文件、网络、依赖和可执行代码影响展示给用户；还要在安装后避免把失败、同名可执行文件或服务型组件误当作可启动工具。
+The command objects of P0/P1 are **local interactive CLIs the user has installed and confirmed**. Once P2 can suggest or perform installs, four new responsibilities appear: TermiPad must explain the basis for a recommendation; must limit download and install sources; must show the user the file, network, dependency, and executable code impact of an install; and must avoid treating failures, same-named executables, or service-type components as launchable tools after installing.
 
-| 维度 | P0/P1 已有模型 | P2 后必须新增的模型 |
+| Dimension | Existing P0/P1 model | Model that must be added after P2 |
 |---|---|---|
-| 对象 | 本地已安装可执行文件 | 远程发现条目、安装候选、安装回执与版本快照 |
-| 信任来源 | 本地扫描、保守 GitHub 元数据 | GitHub 发现、官方包索引/受限安装渠道、用户审查 |
-| 风险动作 | 用户点击后向终端启动已拥有的命令 | 用户点击后可能下载、解包、编译并执行第三方代码 |
-| 完成判定 | 候选进入收件箱且用户确认 | 安装前预览、明确同意、终端执行、独立本地验证、再进入候选收件箱 |
-| 责任边界 | 不安装第三方软件 | 不静默安装；不替用户决定来源、版本、权限或依赖策略 |
+| Object | Locally installed executables | Remote discovery items, install candidates, install receipts, and version snapshots |
+| Trust source | Local scan, conservative GitHub metadata | GitHub discovery, official package indexes / restricted install channels, user review |
+| Risky action | After a user click, launching an already owned command in the terminal | After a user click, possibly downloading, unpacking, compiling, and executing third-party code |
+| Done criterion | The candidate enters the inbox and the user confirms | Pre-install preview, explicit consent, terminal execution, independent local verification, then entering the review inbox |
+| Responsibility boundary | Does not install third-party software | No silent installs; does not decide source, version, permissions, or dependency strategy for the user |
 
-## 2. 推荐决策：采用“发现 → 审查 → 受控终端安装 → 验证收录”
+## 2. Recommended decision: "discover → review → controlled terminal install → verify and collect"
 
-不建议把 P2 做成无感的“一键安装”。产品可保留简短入口文案，但真实行为应是 **一次经审查的终端安装**：用户先看到不可编辑但可复制的安装计划和完整命令，再明确选择“复制命令”或“在我选择的终端执行”。任何网络内容都不能直接拼接为 shell 命令。
+Making P2 a frictionless "one-click install" is not recommended. The product can keep a short entry label, but the real behavior should be **one reviewed terminal install**: the user first sees a non-editable but copyable install plan and the full command, then explicitly chooses "Copy command" or "Run in my chosen terminal". No network content may be concatenated directly into a shell command.
 
-| 方案 | 用户体验与能力 | 安全与产品取舍 | 成本 | 设置复杂度 |
+| Option | User experience and capability | Security and product trade-offs | Cost | Setup complexity |
 |---|---|---|---|---|
-| A. 发现与浏览，不提供安装 | 展示候选、证据和官方链接；用户自行安装后由现有扫描收录 | 风险最低，但从发现到使用的链路较长 | 低；仅用户触发的公共 API 查询 | 低 |
-| B. 受限来源的经审查终端安装（**推荐**） | 先支持官方 Homebrew formula；用户看完计划后复制或交由终端执行，完成后重新扫描 | 保留用户控制，严格限制安装来源；不试图统一解决所有生态 | 低；无服务端、无后台轮询 | 中 |
-| C. 跨生态自动安装、自动升级和全局依赖治理 | npm、pip、Cargo、Homebrew 全覆盖并自动选择隔离方式 | 产品承诺和攻击面急剧扩大；需要环境、锁定、回滚、授权、日志和长期安全响应能力 | 高；需持续兼容与安全维护 | 高 |
+| A. Discovery and browsing, no install | Shows candidates, evidence, and official links; after the user installs by themselves, the existing scan collects the tool | Lowest risk, but the path from discovery to use is longer | Low; only user-triggered public API queries | Low |
+| B. Reviewed terminal install from restricted sources (**recommended**) | Support official Homebrew formulae first; after reading the plan the user copies it or hands it to the terminal, then rescans when done | Keeps the user in control and strictly limits install sources; does not try to solve every ecosystem uniformly | Low; no server and no background polling | Medium |
+| C. Cross-ecosystem automatic install, automatic upgrade, and global dependency governance | Full coverage of npm, pip, Cargo, and Homebrew with automatic choice of isolation | Product promises and the attack surface expand sharply; needs environments, locking, rollback, authorization, logging, and long-term security response | High; needs ongoing compatibility and security maintenance | High |
 
-**当前范围：** 已完成 A；B 的实现限定为静态审核的 Homebrew core formula 安装计划与明确终端交接；C 的实现限定为用户手动触发的只读环境报告。P2-B 的产物是“可信渠道安装协助”，不是通用软件安装器；P2-C 仍不包含自动升级、卸载或跨生态冲突裁决。
+**Current scope:** A is done; B's implementation is limited to statically reviewed Homebrew core formula install plans and an explicit terminal handoff; C's implementation is limited to a read-only environment report the user triggers manually. P2-B's product is "install assistance through a trusted channel", not a general software installer; P2-C still includes no automatic upgrade, uninstall, or cross-ecosystem conflict arbitration.
 
-## 3. P2-A：热门发现与候选浏览
+## 3. P2-A: trending discovery and candidate browsing
 
-### 3.1 产品定义
+### 3.1 Product definition
 
-新增侧边栏“发现”页面。它不是工具库，也不是应用商店；其内容是一组**待审查的远程项目候选**。每条卡片必须明确展示：项目名称、仓库拥有者、仓库链接、许可信息（若 API 返回）、创建/最近推送时间、星标数、分叉数、是否 fork、是否 archived、推荐理由、数据时间与“这不是官方 Trending 排名”的声明。
+Add a "Discover" page to the sidebar. It is neither the library nor an app store; its content is a set of **remote project candidates awaiting review**. Every card must clearly show: project name, repository owner, repository link, license information (if the API returns it), created / last pushed time, star count, fork count, whether it is a fork, whether it is archived, the reason for the recommendation, the data time, and the statement "this is not an official Trending ranking".
 
-GitHub Search 结果最多返回 1,000 条，并按多因素“最佳匹配”排序；它不是官方热门榜。P2 因而不得使用“GitHub 官方热门”或“Trending”作为事实标签，而应使用“TermiPad 发现候选（可解释排序）”。搜索接口还可能返回 `incomplete_results`，出现时必须将该轮结果标记为不完整，而不是把排名呈现为稳定事实。[1]
+GitHub Search returns at most 1,000 results, sorted by a multi-factor "best match"; it is not an official trending list. P2 therefore must not use "official GitHub trending" or "Trending" as a factual label and should use "TermiPad discovery candidates (explainable ranking)". The search API may also return `incomplete_results`; when it does, that round's results must be marked incomplete instead of presenting the ranking as a stable fact.[1]
 
-### 3.2 可解释的本地启发式
+### 3.2 Explainable local heuristics
 
-首版不使用 AI 给项目排序，也不抓取任意网页。仅使用 GitHub 公共仓库 API 已提供、可显示和可缓存的字段构成**透明启发式**：近期活跃度、星标增长代理、主题标签、许可证是否存在、非 fork、非 archived、README/描述中是否出现交互式 CLI 信号。任何分数只用于本地排序，不能当作安全评级或质量担保。
+The first version does not use AI to rank projects and does not scrape arbitrary web pages. It builds a **transparent heuristic** only from fields the GitHub public repository API already provides and that can be shown and cached: recent activity, a proxy for star growth, topic tags, whether a license exists, non-fork, non-archived, and whether interactive CLI signals appear in the README/description. Any score is used only for local sorting and cannot be treated as a security rating or quality guarantee.
 
-推荐结果必须通过以下强制筛选才可呈现为“可安装渠道待查”：公开仓库、非 archived、非 fork、具备明确项目主页或 README、且没有服务/daemon/库优先的明显信号。无法判断的项目仍可作为“浏览候选”展示，但没有安装入口。
+A recommendation must pass the following mandatory filters before it can be presented as "install channel to be checked": a public repository, non-archived, non-fork, with a clear project homepage or README, and without obvious signals of being service/daemon/library-first. Projects that cannot be judged can still be shown as "browse candidates", but with no install entry.
 
-### 3.3 网络、缓存与隐私
+### 3.3 Network, cache, and privacy
 
-P2-A 默认关闭；用户手动点击“刷新发现”后才访问 `api.github.com`。不进行后台常驻监控、不设每日自动拉取、不上传工具库、命令、路径、变量值、API Key 或用户 GitHub 身份。默认匿名公共请求只适合低频个人使用；GitHub 对未认证 REST 请求设定每 IP 每小时 60 次的一般上限，搜索又有更严格的专属限制。[2] 搜索端点当前允许未认证请求每分钟 10 次、认证请求每分钟 30 次。[1]
+P2-A is off by default; `api.github.com` is accessed only after the user manually clicks "Refresh Discovery". There is no always-on background monitoring and no daily automatic fetch, and the library, commands, paths, variable values, API key, or the user's GitHub identity are never uploaded. Anonymous public requests by default only suit low-frequency personal use; GitHub sets a general limit of 60 unauthenticated REST requests per IP per hour, and search has stricter dedicated limits.[2] The search endpoint currently allows 10 unauthenticated requests per minute and 30 authenticated requests per minute.[1]
 
-实现必须在本地保存请求规范化参数、响应时间、ETag、`Last-Modified`、限流头和最小化展示字段。刷新严格串行；遇到 `429`、`403` 或 `x-ratelimit-remaining: 0` 时停止并按 `Retry-After` 或 `x-ratelimit-reset` 退避。GitHub 明确建议避免轮询、避免并发请求、使用条件请求与 `304 Not Modified` 缓存结果。[3] 用户若未来选择连接自己的 GitHub 帐户，令牌只保存在 Keychain，权限最小化且仅用于提高速率；P2-A 不需要该令牌才能工作。
+The implementation must store locally the normalized request parameters, response time, ETag, `Last-Modified`, rate-limit headers, and the minimized display fields. Refreshes are strictly serial; on `429`, `403`, or `x-ratelimit-remaining: 0`, stop and back off per `Retry-After` or `x-ratelimit-reset`. GitHub explicitly recommends avoiding polling, avoiding concurrent requests, and using conditional requests and `304 Not Modified` to cache results.[3] If the user later chooses to connect their own GitHub account, the token is stored only in the Keychain, with minimal scopes and only to raise the rate limit; P2-A does not need that token to work.
 
-### 3.4 P2-A 的非目标
+### 3.4 Non-goals of P2-A
 
-P2-A 不抓取 GitHub owner 头像，不从 README 提取可执行命令，不自动接受候选，不把 star 数当安全评分，不执行安装检查命令，不打开第三方网页，也不创建后台同步任务。
+P2-A does not fetch GitHub owner avatars, does not extract executable commands from READMEs, does not accept candidates automatically, does not treat the star count as a security score, does not run install check commands, does not open third-party web pages, and does not create background sync tasks.
 
-## 4. P2-B：受控终端安装协助
+## 4. P2-B: controlled terminal install assistance
 
-### 4.1 首版唯一受支持渠道：官方 Homebrew formula
+### 4.1 The only supported channel in the first version: official Homebrew formulae
 
-P2-B 仅支持已在用户机器存在的 Homebrew，且仅允许 **`homebrew/core` 的官方 formula**。不安装 Homebrew 自身；不执行 `curl | sh`；不支持 cask、非官方 tap、tap URL、Git URL、`--HEAD`、本地路径、`sudo`、环境变量前缀、管道、重定向、命令替换或多命令串联。
+P2-B supports only a Homebrew that already exists on the user's machine, and only **official formulae from `homebrew/core`**. It does not install Homebrew itself; does not run `curl | sh`; and does not support casks, unofficial taps, tap URLs, Git URLs, `--HEAD`, local paths, `sudo`, environment variable prefixes, pipes, redirection, command substitution, or chained commands.
 
-选择 Homebrew formula 是范围控制，不是对软件安全性的绝对承诺。Homebrew 的官方核心渠道通过维护者审查、审核过的元数据中的校验和、签名 JSON API 和官方 bottle 构建等机制降低供应链风险；官方文档同时强调第三方 tap 是可执行代码，默认不应信任。[4] 对 cask，Homebrew 说明其通常直接安装上游预编译应用，信任模型弱于 core formula；因此 cask 不进入 P2-B 首版。[4]
+Choosing Homebrew formulae is scope control, not an absolute promise about software safety. Homebrew's official core channel lowers supply-chain risk through maintainer review, checksums in reviewed metadata, a signed JSON API, and official bottle builds; the official documentation also stresses that third-party taps are executable code and should not be trusted by default.[4] For casks, Homebrew states that they usually install upstream precompiled apps directly, with a weaker trust model than core formulae; so casks are not in the first version of P2-B.[4]
 
-如果 Homebrew 不存在、版本不可读取或渠道不是官方 core，界面只显示安装条件和“复制官方说明链接”；绝不代替用户安装包管理器。Homebrew 自己也要求用户在其安装脚本执行前确认将执行的动作。[5]
+If Homebrew does not exist, its version cannot be read, or the channel is not official core, the UI shows only the install conditions and "Copy link to official instructions"; it never installs the package manager on the user's behalf. Homebrew itself also requires the user to confirm what its install script will do before running it.[5]
 
-### 4.2 安装计划而非远程命令
+### 4.2 An install plan, not a remote command
 
-远程发现条目与安装渠道之间不得存在“README 命令映射”。可安装项目必须经过一个本地签名/随应用发布的 `InstallCatalog` 映射，最少包含：稳定 GitHub repository ID、允许的 Homebrew formula 名、预期 CLI 可执行文件名集合、允许的架构、许可证提示、映射审核版本与审核时间。映射记录只能由 TermiPad 的正式更新变更；GitHub API、AI、README、搜索标题或网页内容均不能创建或修改它。
+There must be no "README command mapping" between remote discovery items and install channels. An installable project must go through a locally signed / shipped-with-the-app `InstallCatalog` mapping that contains at least: the stable GitHub repository ID, the allowed Homebrew formula name, the set of expected CLI executable names, the allowed architectures, a license note, the mapping review version, and the review time. Mapping records can only be changed by official TermiPad updates; the GitHub API, AI, READMEs, search titles, and web content cannot create or modify them.
 
-用户选择“审查安装”后，应用以只读 `InstallPlan` 呈现以下内容：
+After the user chooses "Review install", the app presents the following as a read-only `InstallPlan`:
 
-| 必显字段 | 目的 |
+| Required field | Purpose |
 |---|---|
-| 仓库、Homebrew core formula、映射审核时间 | 让用户区分发现来源与实际安装来源 |
-| 精确版本/可用版本、目标架构、预期二进制 | 避免名称近似或意外二进制 |
-| 完整固定命令 | 用户可复制、阅读并在外部终端复核 |
-| 影响说明 | 可能下载、写入 Homebrew prefix、解析依赖、运行包管理器步骤 |
-| 可信度限制 | 明确“官方渠道/校验和不等于无恶意或适合你的环境” |
-| 已安装/冲突/未知状态 | 只读预检结果；未知状态禁止默认执行 |
-| 取消与复制路径 | 复制始终可用，取消不留下安装状态 |
+| Repository, Homebrew core formula, mapping review time | Lets the user tell the discovery source from the actual install source |
+| Exact version / available version, target architecture, expected binaries | Avoids near-miss names or unexpected binaries |
+| Full fixed command | The user can copy it, read it, and double-check it in an external terminal |
+| Impact notice | May download, write to the Homebrew prefix, resolve dependencies, and run package-manager steps |
+| Limits of trust | States explicitly that "an official channel / checksum does not mean free of malice or right for your environment" |
+| Installed / conflict / unknown state | Read-only pre-check result; an unknown state forbids default execution |
+| Cancel and copy paths | Copy is always available, and cancel leaves no install state behind |
 
-安装命令由本地 token 化 recipe 编译，首版仅允许等价于 `brew install --formula <approved-formula>` 的参数序列。编译器不得接收一段自由文本；对 formula 名使用严格正则和 allowlist 双重校验，并在执行前将 token 重新序列化为展示文本。任何不符合语法、含换行或 shell 元字符的输入均应拒绝并写入仅含固定事件类别的本地诊断。
+The install command is compiled from a local tokenized recipe; the first version allows only argument sequences equivalent to `brew install --formula <approved-formula>`. The compiler must not accept a piece of free text; the formula name is checked by both a strict regex and an allowlist, and before execution the tokens are re-serialized into the displayed text. Any input that does not fit the syntax or contains newlines or shell metacharacters must be rejected and written to local diagnostics containing only the fixed event category.
 
-### 4.3 用户确认、终端边界与收录
+### 4.3 User confirmation, the terminal boundary, and collection
 
-默认主按钮为“复制安装命令”。“在终端执行”只有在用户勾选“我已审查完整命令与影响”后才可用，并在按钮中显示实际 formula 名。TermiPad 仍将命令交给用户在设置中选择的 Terminal.app、iTerm、Warp 或复制目标；不会在应用进程内直接运行包管理器、请求管理员权限、输入密码、绕过终端自动化授权或隐藏输出。
+The default primary button is "Copy install command". "Run in terminal" becomes available only after the user checks "I reviewed the full command and its impact", and the button shows the actual formula name. TermiPad still hands the command to the Terminal.app, iTerm, Warp, or copy target the user chose in Settings; it never runs the package manager directly in the app process, requests admin privileges, enters passwords, bypasses terminal Automation authorization, or hides output.
 
-终端返回并不代表成功。用户回到 TermiPad 后必须主动点击“验证并扫描”；应用只做现有的本地 PATH/受限目录扫描、健康检查和候选收件箱流程。只有发现 `InstallCatalog` 允许的预期可执行文件并经用户确认后，才创建工具库记录。安装失败、额外文件、服务型组件、同名但路径不匹配的文件或扫描不确定性都不得自动收录。
+A terminal returning does not mean success. Back in TermiPad the user must deliberately click "Verify and scan"; the app only does the existing local PATH / restricted directory scan, health check, and review inbox flow. A library record is created only when an expected executable allowed by `InstallCatalog` is found and the user confirms. Install failures, extra files, service-type components, same-named files at mismatched paths, or scan uncertainty must never lead to automatic collection.
 
-### 4.4 安装记录、卸载与隐私
+### 4.4 Install records, uninstall, and privacy
 
-本地 `InstallReceipt` 仅保存：渠道、catalog ID、formula、用户确认时间、计划版本、验证结果枚举与用户手动关联的工具 ID。它不保存终端完整输出、Homebrew prefix、绝对路径、环境变量、下载 URL、命令历史或用户目录。默认 JSON 备份不含 receipt；诊断只记录安装计划打开/复制/交给终端/验证成功或失败等固定类别。
+The local `InstallReceipt` stores only: channel, catalog ID, formula, user confirmation time, plan version, the verification result enum, and the tool ID the user linked manually. It does not store full terminal output, the Homebrew prefix, absolute paths, environment variables, download URLs, command history, or user directories. The default JSON backup contains no receipts; diagnostics record only fixed categories such as install plan opened / copied / handed to terminal / verification succeeded or failed.
 
-P2-B 不提供“一键卸载”或“回滚”。卸载和升级一样可能影响其他工具，必须先在未来的受控版本治理设计中提供依赖影响预览、明确确认、失败恢复与证据模型后再讨论。
+P2-B offers no "one-click uninstall" or "rollback". Uninstalling, like upgrading, can affect other tools; it can be discussed only after a future controlled version governance design provides dependency impact preview, explicit confirmation, failure recovery, and an evidence model.
 
-## 5. P2-C：依赖与版本治理的正确拆分
+## 5. P2-C: splitting dependency and version governance correctly
 
-“防止重复安装、版本冲突并自动选择最合适隔离方式”不是一个跨生态的通用操作。包管理器的来源、依赖解析、安装位置、生命周期脚本、锁定文件和回滚能力各不相同。因此 P2-C 不能从“自动裁决”开始，只能从**只读清单与局部预检**开始。
+"Preventing duplicate installs and version conflicts and automatically choosing the most suitable isolation" is not a general cross-ecosystem operation. Package managers differ in sources, dependency resolution, install locations, lifecycle scripts, lock files, and rollback ability. So P2-C cannot start from "automatic arbitration"; it can only start from a **read-only inventory and local pre-checks**.
 
-| 生态 | 已知风险/语义 | P2 的允许动作 | P2 首版禁止动作 |
+| Ecosystem | Known risks / semantics | Actions P2 allows | Actions forbidden in the first P2 version |
 |---|---|---|---|
-| Homebrew core formula | 官方 core 有审核和校验机制，但安装仍会改变用户 prefix 与依赖集 | 检测已安装、只读 `info`/版本摘要、单 formula 安装计划 | third-party tap、cask、卸载、升级、`--HEAD`、自动修复依赖 |
-| npm | `npm install`/`npm ci` 可运行 `preinstall`、`install`、`postinstall`、`prepare` 等生命周期脚本。[6] | 仅在 P2-C 研究期显示生态风险与复制命令 | 自动/终端执行全局 npm 安装、Git URL、生命周期脚本绕过承诺 |
-| pip | 默认不防远程篡改且可能运行发行包任意代码；安全模式要求本地 hashes、全依赖 pin 和常见情况下的 binary-only 策略。[7] | 仅显示环境检测、虚拟环境建议和复制命令 | 修改系统 Python、`--break-system-packages`、自动创建/选择环境、未锁定安装 |
-| Cargo | `cargo install` 默认可能重新解析依赖；`--locked` 才使用随包提供的 lockfile。[8] | 只读列出安装记录和版本；后续可预览固定 crate 计划 | Git source、分支/tag 浮动引用、没有 lockfile 时自动降级安装 |
+| Homebrew core formula | Official core has review and checksum mechanisms, but installing still changes the user's prefix and dependency set | Detect installed state, read-only `info` / version summary, single-formula install plan | Third-party taps, casks, uninstall, upgrade, `--HEAD`, automatic dependency repair |
+| npm | `npm install`/`npm ci` can run lifecycle scripts such as `preinstall`, `install`, `postinstall`, and `prepare`.[6] | Only show ecosystem risks and a copyable command during the P2-C research period | Automatic / terminal-executed global npm installs, Git URLs, promises to bypass lifecycle scripts |
+| pip | By default it does not protect against remote tampering and may run arbitrary code from distributions; the secure mode requires local hashes, pinning of all dependencies, and in common cases a binary-only policy.[7] | Only show environment detection, a virtual environment suggestion, and a copyable command | Modifying the system Python, `--break-system-packages`, automatically creating/choosing environments, unlocked installs |
+| Cargo | `cargo install` may re-resolve dependencies by default; only `--locked` uses the lockfile shipped with the package.[8] | Read-only listing of install records and versions; later, previewing a pinned crate plan | Git sources, floating branch/tag references, automatically falling back to an install without a lockfile |
 
-P2-C 的第一个可交付物应是“环境与安装来源报告”：按工具显示检测到的包管理器、安装位置类别、已知版本、是否由 TermiPad receipt 关联、是否可安全检查、以及“需要用户在终端处理”的原因。它不能尝试跨 Homebrew/npm/pip/Cargo 求解依赖树，也不能把“版本较新”自动解释为“应升级”。
+P2-C's first deliverable should be an "environment and install source report": per tool, show the detected package manager, the install location category, the known version, whether it is linked to a TermiPad receipt, whether it can be checked safely, and the reason it "needs the user to handle it in the terminal". It must not try to solve dependency trees across Homebrew/npm/pip/Cargo, nor automatically interpret "a newer version" as "should upgrade".
 
-pip 本身说明安装过程会选择依赖并可能构建 wheel；它提供 `--dry-run --report` 生成 JSON 解析报告，但失败恢复不是其承诺。[9] Cargo 也说明 `--locked` 的代价是不会获得依赖修复或更新。[8] 这些差异说明 TermiPad 最多可以展示生态各自给出的计划和证据，不能声称自己已经计算出一个通用的“最优隔离/无冲突方案”。
+pip itself states that the install process selects dependencies and may build wheels; it offers `--dry-run --report` to produce a JSON resolution report, but failure recovery is not something it promises.[9] Cargo also states that the cost of `--locked` is not getting dependency fixes or updates.[8] These differences show that TermiPad can at most present the plans and evidence each ecosystem gives, and cannot claim to have computed a general "optimal isolation / conflict-free solution".
 
-## 2026-08-25：P2-B / P2-C 当前实现边界
+## 2026-08-25: current implementation boundary of P2-B / P2-C
 
-本批次把原始方案中的“一键安装”落实为 **受控安装审查**，把“依赖与版本治理”落实为 **只读环境报告**。二者都以增加可见信息和用户确认作为目标，不把包管理器的下载、脚本执行、升级、卸载或冲突裁决搬入 TermiPad。
+This batch realizes the original plan's "one-click install" as **controlled install review**, and "dependency and version governance" as a **read-only environment report**. Both aim to add visible information and user confirmation, and do not move package-manager downloads, script execution, upgrades, uninstalls, or conflict arbitration into TermiPad.
 
-| 能力 | 当前实现边界 | 明确不做的事项 |
+| Capability | Current implementation boundary | Explicit non-goals |
 |---|---|---|
-| P2-B 受控安装审查 | 随应用发布的静态审核目录；仅精确匹配已列出的 GitHub 完整仓库名；当前仅生成固定 `brew install <formula>` 的 Homebrew core formula 计划；展示渠道、仓库、预期 CLI、目录修订、审核日期与完整命令；用户明确勾选审查后才能交给其已选终端。 | 不读取 README 安装说明；不接受远程命令；不支持第三方 tap、cask、URL、Git 仓库、npm/pip/Cargo 安装；不在应用内执行；不等待安装结果；不自动收录。 |
-| P2-C 只读环境报告 | 仅在用户点击后检查固定绝对路径中的 Homebrew、Cargo、npm、pnpm、Bun 与 Python；每个路径只运行 `--version`，输出只保留在当前页面。 | 不枚举 PATH；不运行 shell；不使用用户输入路径或参数；不联网；不安装、升级、卸载或修复；不保存路径、版本或报告。 |
+| P2-B controlled install review | A statically reviewed catalog shipped with the app; matches only the exact full GitHub repository names listed; currently generates only Homebrew core formula plans with a fixed `brew install <formula>`; shows the channel, repository, expected CLI, catalog revision, review date, and full command; the plan can be handed to the user's chosen terminal only after they explicitly check that they reviewed it. | Does not read README install instructions; accepts no remote commands; no third-party taps, casks, URLs, Git repositories, or npm/pip/Cargo installs; no in-app execution; does not wait for the install result; no automatic collection. |
+| P2-C read-only environment report | Only after the user clicks does it check Homebrew, Cargo, npm, pnpm, Bun, and Python at fixed absolute paths; each path only runs `--version`, and the output is kept only on the current page. | Does not enumerate PATH; runs no shell; uses no user-supplied paths or arguments; no network; no install, upgrade, uninstall, or repair; saves no paths, versions, or reports. |
 
-> 即使用户将计划交给终端，后续下载与执行仍由用户在其选择的终端和包管理器中自行审查。TermiPad 不把“命令已交接”解释为“安装成功”，也不自动将任何可执行文件写入工具库。用户如要收录新 CLI，仍须执行本地扫描，并在候选收件箱中明确确认。
+> Even if the user hands a plan to the terminal, the later download and execution are still reviewed by the user in the terminal and package manager they chose. TermiPad does not interpret "command handed off" as "install succeeded", and never writes any executable into the library automatically. To collect a new CLI, the user must still run a local scan and confirm explicitly in the review inbox.
 
-诊断仅增加四个固定事件类别：环境报告请求、安装计划查看、安装计划交接、安装计划交接失败。诊断不会记录 formula、仓库名、命令、路径或版本文本。
+Diagnostics add only four fixed event categories: environment report requested, install plan viewed, install plan handed off, install plan handoff failed. Diagnostics never record the formula, repository name, command, path, or version text.
 
-## 6. 攻击面与强制控制
+## 6. Attack surface and mandatory controls
 
-| 新攻击面 | 典型失败模式 | P2 的强制控制 | 残余风险与用户告知 |
+| New attack surface | Typical failure mode | P2's mandatory control | Residual risk and user notice |
 |---|---|---|---|
-| 热门排序操纵 | star、fork 或描述被操纵 | 透明启发式、非官方排名标签、来源字段和时间戳 | 热度不代表安全、维护质量或适合度 |
-| 同名/近似名项目 | typosquatting、slopsquatting、冒名仓库 | discovery 与 install catalog 分离；安装只允许稳定仓库 ID 映射 | 用户仍需阅读项目和渠道信息 |
-| README/AI 提示注入 | 远程文本诱导执行命令 | README/AI 永不生成安装 recipe；AI 无法改变命令 | 远程描述仅是参考内容 |
-| 仓库接管或 release 变更 | 已发现项目后被换内容 | 使用审核 catalog、展示审核时间、渠道重新验证 | 官方渠道与签名降低风险，不保证无恶意 |
-| 下载/构建阶段执行代码 | package lifecycle、编译、post-install | P2-B 仅 Homebrew core formula；npm/pip/Cargo 不执行 | 即使通过渠道审核，安装仍可能执行第三方代码 |
-| 第三方 tap/registry 混入 | 加载可执行 recipe 或 dependency confusion | 禁止非官方 tap、替换 registry、Git URL、额外 index | 未来若扩展必须另设 per-ecosystem policy |
-| Shell 注入 | 网络字段进入 shell、参数被拼接 | token recipe、allowlist、拒绝元字符、无自由文本命令 | 现有用户自定义启动命令仍由用户负责 |
-| 权限升级 | `sudo`、密码输入、系统目录写入 | recipe 禁止 `sudo`；应用不读取/输入密码 | 用户可在外部终端自行做高权限操作，TermiPad 不协助 |
-| PATH/二进制混淆 | 同名可执行文件被误收录 | 预期 executable allowlist、健康检查、候选收件箱 | 无法确定时保留为待处理，不自动添加 |
-| 隐私扩大 | 后台发送工具库、令牌或路径 | 默认关闭、仅手动刷新、最小字段缓存、Keychain、无路径/命令日志 | GitHub 仍可看到请求 IP 与公共查询 |
-| API 限流/不可用 | 刷新导致限流或错误重试 | 串行、ETag、退避、缓存回退、不自动重试风暴 | 发现功能可能暂不可用，不影响本地库 |
+| Manipulated popularity ranking | Stars, forks, or descriptions are manipulated | Transparent heuristics, the unofficial ranking label, source fields, and timestamps | Popularity does not mean safety, maintenance quality, or suitability |
+| Same-named / look-alike projects | Typosquatting, slopsquatting, impersonating repositories | Discovery and the install catalog are separate; installs allow only stable repository ID mappings | The user still needs to read the project and channel information |
+| README / AI prompt injection | Remote text induces command execution | README/AI never generate install recipes; AI cannot change commands | Remote descriptions are reference content only |
+| Repository takeover or release change | Content is swapped after a project was discovered | Use the reviewed catalog, show the review time, re-verify the channel | Official channels and signatures lower the risk but do not guarantee the absence of malice |
+| Code execution during download/build | Package lifecycle, compilation, post-install | P2-B is Homebrew core formulae only; npm/pip/Cargo are not executed | Even after channel review, installing may still execute third-party code |
+| Third-party tap/registry mixed in | Loading executable recipes or dependency confusion | Unofficial taps, replaced registries, Git URLs, and extra indexes are forbidden | Any future extension must set a separate per-ecosystem policy |
+| Shell injection | Network fields reach the shell, arguments are concatenated | Token recipes, allowlist, rejection of metacharacters, no free-text commands | Existing user-defined launch commands remain the user's responsibility |
+| Privilege escalation | `sudo`, password entry, writes to system directories | Recipes forbid `sudo`; the app never reads or enters passwords | The user can do privileged operations in an external terminal themselves; TermiPad does not assist |
+| PATH / binary confusion | A same-named executable is collected by mistake | Expected executable allowlist, health check, review inbox | When uncertain, keep it pending and do not add it automatically |
+| Privacy expansion | The library, tokens, or paths are sent in the background | Off by default, manual refresh only, minimal field cache, Keychain, no path/command logs | GitHub can still see the request IP and the public query |
+| API rate limiting / unavailability | A refresh triggers rate limiting or error retries | Serial requests, ETag, backoff, cache fallback, no automatic retry storms | Discovery may be temporarily unavailable without affecting the local library |
 
-## 7. 建议的数据与模块边界
+## 7. Suggested data and module boundaries
 
-P2 应新增独立模块，绝不把远程候选直接塞入 `TerminalTool`：
+P2 should add separate modules and never stuff remote candidates directly into `TerminalTool`:
 
 ```text
-DiscoveryService          只获取并缓存远程 DTO；不产生命令
-DiscoveryRanking          只做可解释排序；不作安全评级
-InstallCatalog            随应用发布的审核映射；远程数据不可修改
-InstallPolicy             渠道、参数、版本、权限与禁止语法的纯函数策略
-InstallPlanCompiler       从 token 化 recipe 生成只读安装计划
-InstallReviewView         展示证据、影响、精确命令与明确确认
-TerminalLauncher          复用现有用户选择终端/复制边界，不扩权
-InstallVerifier           复用扫描、健康检查与候选收件箱；不以终端退出码直接收录
-EnvironmentReportService  只读生态检测与版本快照，不自动修复
+DiscoveryService          only fetches and caches remote DTOs; produces no commands
+DiscoveryRanking          only does explainable ranking; no security rating
+InstallCatalog            the reviewed mapping shipped with the app; remote data cannot modify it
+InstallPolicy             pure-function policy for channels, arguments, versions, permissions, and forbidden syntax
+InstallPlanCompiler       generates the read-only install plan from tokenized recipes
+InstallReviewView         shows evidence, impact, the exact command, and explicit confirmation
+TerminalLauncher          reuses the existing user-chosen terminal / copy boundary, with no added privileges
+InstallVerifier           reuses the scan, health check, and review inbox; never collects directly from a terminal exit code
+EnvironmentReportService  read-only ecosystem detection and version snapshot, no automatic repair
 ```
 
-建议的核心模型为 `DiscoveryItem`、`DiscoveryEvidence`、`CatalogEntry`、`InstallRecipe`、`InstallPlan`、`InstallReceipt`、`EnvironmentSnapshot` 和 `VerificationResult`。其中 `CatalogEntry` 与 `InstallRecipe` 必须是应用随版本发布、可审计、可单测的静态数据；`DiscoveryItem` 是可过期的缓存数据；`InstallReceipt` 只保存在本机且默认不进入备份。
+The suggested core models are `DiscoveryItem`, `DiscoveryEvidence`, `CatalogEntry`, `InstallRecipe`, `InstallPlan`, `InstallReceipt`, `EnvironmentSnapshot`, and `VerificationResult`. `CatalogEntry` and `InstallRecipe` must be static data that ships with the app version and is auditable and unit-testable; `DiscoveryItem` is expirable cache data; `InstallReceipt` is stored only on this Mac and stays out of backups by default.
 
-## 8. 实施分期、验收与退出条件
+## 8. Implementation phases, acceptance, and exit conditions
 
-| 阶段 | 交付内容 | 必须通过的安全验收 | 不做什么 |
+| Phase | Deliverable | Security acceptance that must pass | What it does not do |
 |---|---|---|---|
-| P2-A0：策略与测试骨架 | 数据模型、缓存、限流、排序解释、网络开关 | 所有网络默认关闭；无 token 情况可优雅退化；所有 API 错误与限流可测试 | 不显示安装按钮 |
-| P2-A1：发现浏览 | 手动刷新、缓存、来源证据、非官方排名说明、链接复制/打开 | ETag/退避、禁止头像、禁止 README 命令、结果不完整标识、隐私诊断审计 | 不自动刷新或推荐到工具库 |
-| P2-B0：安装计划 | 静态 Homebrew core catalog、预检、命令编译、审查界面 | policy fuzz/单测拒绝所有 shell 元字符、tap、URL、`sudo`、未知 formula；plan snapshot 测试 | 不实际执行安装 |
-| P2-B1：受控终端交接 | 复制优先、明确确认后终端交接、安装 receipt、重新扫描 | 自动化拒绝复制回退；不能从终端退出码自动收录；UI/单测覆盖取消、失败和同名冲突 | 不安装 Homebrew、不卸载、不升级 |
-| P2-C0：只读环境报告 | Homebrew/npm/pip/Cargo 检测、版本与来源报告 | 不运行安装/升级；不写用户环境；输出不含路径、命令、令牌 | 不自动解决依赖或版本冲突 |
-| P2-C1：单生态受控升级研究 | 仅在签名发行与真实用户试用后另立项 | 每个生态独立威胁模型、回滚、冲突和故障恢复验证 | 不做跨生态统一求解器 |
+| P2-A0: policy and test skeleton | Data model, cache, rate limiting, ranking explanation, network switch | All networking off by default; degrades gracefully without a token; every API error and rate limit is testable | Shows no install button |
+| P2-A1: discovery browsing | Manual refresh, cache, source evidence, the unofficial ranking notice, copy/open link | ETag/backoff, avatars forbidden, README commands forbidden, incomplete-result marker, privacy diagnostics audit | No automatic refresh or recommending into the library |
+| P2-B0: install plan | Static Homebrew core catalog, pre-check, command compilation, review UI | Policy fuzz/unit tests reject all shell metacharacters, taps, URLs, `sudo`, and unknown formulae; plan snapshot tests | Does not actually run an install |
+| P2-B1: controlled terminal handoff | Copy first, terminal handoff after explicit confirmation, install receipt, rescan | Copy fallback when Automation is denied; no automatic collection from a terminal exit code; UI/unit tests cover cancel, failure, and same-name conflicts | Does not install Homebrew, uninstall, or upgrade |
+| P2-C0: read-only environment report | Homebrew/npm/pip/Cargo detection, version and source report | Runs no install/upgrade; does not write to the user's environment; output contains no paths, commands, or tokens | Does not resolve dependency or version conflicts automatically |
+| P2-C1: research on controlled single-ecosystem upgrades | A separate project only after signed releases and trials with real users | A separate threat model per ecosystem, with rollback, conflict, and failure recovery verification | No unified cross-ecosystem solver |
 
-每个阶段均应扩展 `scripts/verify-macos.sh` 的静态策略防护、Swift 单元测试、Xcode 原生 build 与 UI 冒烟。P2-B/C 改变“点击可能导致第三方代码安装”的用户信任模型，因此在外部分发前还必须完成 Developer ID、Hardened Runtime、公证、Gatekeeper 冷启动与真实旧 store 升级验证；这些既有外部闸门不会因 P2 设计而消失。
+Every phase should extend the static policy guards in `scripts/verify-macos.sh`, the Swift unit tests, the native Xcode build, and the UI smoke tests. P2-B/C change the user trust model to "a click may lead to third-party code being installed", so before external distribution, Developer ID, Hardened Runtime, notarization, Gatekeeper cold start, and real old-store upgrade verification must also be completed; these existing external gates do not go away because of the P2 design.
 
-## 9. 推荐的第一开发批次
+## 9. Recommended first development batch
 
-获准进入实现后，应只启动 **P2-A0 + P2-A1**。它能让产品获得“发现新 CLI”的价值，同时不改变 P0/P1 的“只对已安装工具执行启动命令”的边界。完成并通过真实 macOS 集中验证后，再由用户决定是否开启 P2-B0 的 Homebrew 安装计划；该阶段仍不执行安装。
+Once implementation is approved, only **P2-A0 + P2-A1** should start. This gives the product the value of "discovering new CLIs" without changing the P0/P1 boundary of "launch commands run only for installed tools". After it is done and passes consolidated real macOS verification, the user decides whether to open P2-B0's Homebrew install plan; that phase still runs no install.
 
-P2-B1 需要一次单独的产品确认，因为它首次把 TermiPad 从“启动器”扩展为“会将安装命令交给终端的协助者”。只有在用户明确接受上述来源限制、确认体验与诊断边界后才应实施。
+P2-B1 needs a separate product confirmation, because it is the first time TermiPad extends from a "launcher" to "an assistant that hands install commands to the terminal". It should be implemented only after the user explicitly accepts the source restrictions above and confirms the experience and diagnostics boundaries.
 
 ## References
 
@@ -194,6 +194,6 @@ P2-B1 需要一次单独的产品确认，因为它首次把 TermiPad 从“启�
 
 ## Implementation status — 2026-08-25
 
-**TermiPad Mendocino — Discovery Preview** 已开始实现 P2-A0 与 P2-A1 的本地代码批次。该批次仅覆盖固定公开 GitHub 查询、手动刷新、ETag 条件缓存、串行请求、限流信息、非 fork/非 archived 筛选、可解释排序、本地缓存、双语预览界面、默认关闭的设置开关，以及对应的单元/UI 回归测试。
+**TermiPad Mendocino — Discovery Preview** has started implementing the local code batch for P2-A0 and P2-A1. The batch covers only the fixed public GitHub query, manual refresh, ETag conditional caching, serial requests, rate-limit information, non-fork / non-archived filtering, explainable ranking, the local cache, a bilingual preview UI, an off-by-default settings switch, and the corresponding unit/UI regression tests.
 
-本批次**不含**任何安装、卸载、升级、Homebrew 调用、npm/pip/Cargo 调用、命令生成、终端交接、自动收录、README 抓取、AI 排序、GitHub 身份连接或后台刷新。远程条目不写入 SwiftData 工具库、候选收件箱、JSON 备份或隐私化诊断包。实现完成后仍必须在真实 macOS 环境执行完整集中验证，才能将本批次标记为通过。
+This batch contains **no** install, uninstall, upgrade, Homebrew invocation, npm/pip/Cargo invocation, command generation, terminal handoff, automatic collection, README scraping, AI ranking, GitHub identity connection, or background refresh. Remote items are not written to the SwiftData library, the review inbox, JSON backups, or the privacy-preserving diagnostic package. After implementation, the full consolidated verification must still be run in a real macOS environment before this batch can be marked as passed.

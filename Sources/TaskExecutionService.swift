@@ -14,7 +14,7 @@ enum TaskExecutionDecision: Equatable {
     case rejected(TaskExecutionRejectionReason)
 }
 
-/// T1 纯本机预检与生命周期状态机。固定目录之外的内容无法形成执行请求。
+/// T1 purely local pre-check and lifecycle state machine. Nothing outside the fixed catalog can form an execution request.
 enum TaskExecutionPolicy {
     static func prepare(
         intent: TaskIntent,
@@ -106,21 +106,21 @@ enum TaskExecutionPolicy {
     }
 }
 
-/// T1 的唯一进程入口。任务以空 stdin 运行；stdout/stderr 默认丢弃
-/// （minimal 档位——M2b-2 之前的行为），仅保留退出码和固定状态。
-/// M2b-2（docs/m2b-remote-task-console-design.md §5.4）：输出档位 ≥
-/// restricted 时，stdout/stderr 捕获进**仅内存** ring buffer（上限
-/// 32 KB / 400 行任一先到即停）——供任务会话回传末尾片段（脱敏后）。
-/// 捕获缓冲永不落盘、不进备份、不进诊断。
+/// The only process entry point of T1. Tasks run with empty stdin; stdout/stderr are discarded by default
+/// (minimal visibility — the behavior before M2b-2), keeping only the exit code and fixed states.
+/// M2b-2 (docs/m2b-remote-task-console-design.md §5.4): when the output visibility is ≥
+/// restricted, stdout/stderr are captured into an **in-memory only** ring buffer (capped at
+/// 32 KB / 400 lines, whichever comes first) — so the task session can return the tail snippet (after redaction).
+/// The capture buffer is never written to disk, backups, or diagnostics.
 @MainActor
 final class TaskExecutionCoordinator: ObservableObject {
     static let shared = TaskExecutionCoordinator()
 
-    /// 输出捕获缓冲上限（字节 / 行数，任一先到即停——超过后输出只计数丢弃）。
+    /// Output capture buffer limits (bytes / lines, whichever comes first — beyond that, output is only counted and discarded).
     static let outputCaptureByteLimit = 32 * 1024
     static let outputCaptureLineLimit = 400
 
-    /// 单任务的仅内存输出捕获（行数组，ring 自然保留末尾；计数不被截断丢失）。
+    /// In-memory only output capture for a single task (array of lines; the ring naturally keeps the tail; the counts are not lost to truncation).
     struct OutputCapture {
         private(set) var lines: [String] = []
         private(set) var totalBytes = 0
@@ -137,7 +137,7 @@ final class TaskExecutionCoordinator: ObservableObject {
             totalBytes += byteCount
         }
 
-        /// 末尾最多 32 行——restricted 档位回传的就是这个切片。
+        /// At most the last 32 lines — this is exactly the slice returned at the restricted level.
         func tailSnippet() -> String {
             lines.suffix(32).joined(separator: "\n")
         }
@@ -147,23 +147,23 @@ final class TaskExecutionCoordinator: ObservableObject {
     private var activeProcesses: [UUID: Process] = [:]
     private var activeIntents: [UUID: TaskIntent] = [:]
     private var completionHandlers: [UUID: () -> Void] = [:]
-    /// 档位 ≥ restricted 时的捕获中任务（intentID → 缓冲 + 收流管道）。
+    /// Tasks being captured when the visibility is ≥ restricted (intentID → buffer + receiving pipe).
     private var outputCaptures: [UUID: OutputCapture] = [:]
     private var outputPipes: [UUID: Pipe] = [:]
     private var outputSources: [UUID: DispatchSourceRead] = [:]
-    /// M4-3：声明了交互点的任务的 stdin 管道（手机选中项写回进程）。
+    /// M4-3: stdin pipes of tasks that declare interaction points (the phone's selection is written back to the process).
     private var inputPipes: [UUID: Pipe] = [:]
-    /// 该任务声明的交互点（启动时从定义拷贝）。
+    /// The interaction points declared by the task (copied from the definition at start).
     private var interactionPoints: [UUID: [TaskInteractionPoint]] = [:]
-    /// 已触发过的交互点（同一任务每个交互点只触发一次）。
+    /// Interaction points already triggered (each interaction point fires only once per task).
     private var triggeredInteractions: [UUID: Set<Int>] = [:]
 
-    /// 是否捕获输出（档位裁决——读取 Mac 端权威设置）。
+    /// Whether to capture output (visibility decision — reads the authoritative setting on the Mac).
     var capturesOutput: Bool {
         MobileTaskConsoleService.shared.currentVisibility != .minimal
     }
 
-    /// M2b-3：手机取消任务时取回活动 intent（进程停止需要 intent 对象）。
+    /// M2b-3: retrieve the active intent when the phone cancels a task (stopping the process needs the intent object).
     func intent(forID id: UUID) -> TaskIntent? {
         activeIntents[id]
     }
@@ -192,12 +192,12 @@ final class TaskExecutionCoordinator: ObservableObject {
         if capturesOutput {
             attachOutputCapture(for: intent.id, to: process)
         } else {
-            // minimal 档位：维持原行为——stdout/stderr 全丢弃。
+            // minimal visibility: keep the original behavior — discard all stdout/stderr.
             process.standardOutput = FileHandle.nullDevice
             process.standardError = FileHandle.nullDevice
         }
-        // M4-3：任务声明了交互点 → stdin 用管道（手机选择项写回）；
-        // 未声明的任务维持空输入（红线不变）。
+        // M4-3: the task declares interaction points → stdin uses a pipe (the phone's selection is written back);
+        // tasks that declare none keep empty input (the red line is unchanged).
         if let points = intent.kind.flatMap({ FixedTaskCatalog.definition(for: $0)?.interactionPoints }),
            !points.isEmpty {
             let inputPipe = Pipe()
@@ -237,13 +237,13 @@ final class TaskExecutionCoordinator: ObservableObject {
         TaskExecutionPolicy.markStopped(intent)
         DiagnosticsStore.shared.record(.taskExecutionStopped)
         process.terminate()
-        // 条目登记统一由 finish()（terminationHandler 必经路径）做——
-        // 这里提前登记会被 finish 的二次登记用空片段覆盖。
+        // Entry registration is done in one place, finish() (the path every terminationHandler goes through) —
+        // registering early here would be overwritten with an empty snippet by finish's second registration.
     }
 
-    /// 档位 ≥ restricted：stdout+stderr 合并捕获到仅内存 ring buffer。
-    /// 行级读取（DispatchSourceRead），字节/行数上限任一先到即停——
-    /// 缓冲不落盘；任务结束即从管道字典移除（缓冲保留到条目登记）。
+    /// Visibility ≥ restricted: stdout+stderr are captured together into an in-memory only ring buffer.
+    /// Line-level reads (DispatchSourceRead), stopping at whichever of the byte/line limits comes first —
+    /// the buffer is never written to disk; when the task ends it is removed from the pipe dictionary (the buffer is kept until the entry is registered).
     private func attachOutputCapture(for intentID: UUID, to process: Process) {
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -265,11 +265,11 @@ final class TaskExecutionCoordinator: ObservableObject {
                 for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
                     self.outputCaptures[intentID]?.append(String(line))
                 }
-                // M4 流式分发：捕获的每段文本即推给活跃订阅者
-                // （TaskOutputStreamService 内部做游标、合帧、脱敏、背压）。
+                // M4 streaming dispatch: every captured piece of text is pushed to active subscribers right away
+                // (TaskOutputStreamService handles cursors, framing, redaction, and backpressure internally).
                 TaskOutputStreamService.shared.dispatchOutput(
                     taskID: intentID, rawText: text)
-                // M4-3 交互点检测：输出匹配声明模式 → 推送交互请求。
+                // M4-3 interaction point detection: output matches a declared pattern → push an interaction request.
                 self.checkInteractionPoints(intentID: intentID, output: text)
             }
         }
@@ -284,14 +284,14 @@ final class TaskExecutionCoordinator: ObservableObject {
         outputSources[intentID] = source
     }
 
-    /// M4-3 交互点检测：输出匹配声明模式 → 推交互请求给手机（每点一次）。
+    /// M4-3 interaction point detection: output matches a declared pattern → push an interaction request to the phone (once per point).
     private func checkInteractionPoints(intentID: UUID, output: String) {
         guard let points = interactionPoints[intentID],
               let triggered = triggeredInteractions[intentID] else { return }
         for (index, point) in points.enumerated() where !triggered.contains(index) {
             guard output.range(of: point.triggerPattern, options: .regularExpression) != nil else { continue }
             triggeredInteractions[intentID]?.insert(index)
-            MobilePairingService.diagMac("任务交互点触发：\(point.prompt.prefix(20))…")
+            MobilePairingService.diagMac("Task interaction point triggered: \(point.prompt.prefix(20))…")
             TaskOutputStreamService.shared.dispatchInteraction(
                 taskID: intentID,
                 prompt: point.prompt,
@@ -300,7 +300,7 @@ final class TaskExecutionCoordinator: ObservableObject {
         }
     }
 
-    /// 手机选中项写回进程 stdin（仅声明交互点的任务有管道）。
+    /// Write the phone's selection back to the process's stdin (only tasks that declare interaction points have a pipe).
     func respondInteraction(intentID: UUID, selection: String) {
         guard let pipe = inputPipes[intentID],
               interactionPoints[intentID] != nil else { return }
@@ -309,12 +309,12 @@ final class TaskExecutionCoordinator: ObservableObject {
         DiagnosticsStore.shared.record(.mobileInteractionResponded)
     }
 
-    /// 任务生命周期落地：状态 + 退出码 + （档位 ≥ restricted 时）脱敏后的
-    /// 末尾片段登记进手机会话条目流（MobileTaskConsoleService 做档位裁决）。
+    /// Landing the task lifecycle: status + exit code + (when the visibility is ≥ restricted) the redacted
+    /// tail snippet are registered into the phone's session entry feed (MobileTaskConsoleService makes the visibility decision).
     private func recordConsoleEntry(for intent: TaskIntent) {
         let title = intent.kind.flatMap { kind in
-            FixedTaskCatalog.definition(for: kind)?.purpose(language: .simplifiedChinese)
-        } ?? "固定任务"
+            FixedTaskCatalog.definition(for: kind)?.purpose(language: .current)
+        } ?? "Fixed task"
         let snippet = outputCaptures.removeValue(forKey: intent.id)
         let rawSnippet = (snippet?.tailSnippet()).map(OutputRedactor.redact)
         MobileTaskConsoleService.shared.recordTaskState(
@@ -354,8 +354,8 @@ final class TaskExecutionCoordinator: ObservableObject {
             TaskExecutionPolicy.markExited(intent, exitCode: exitCode)
             DiagnosticsStore.shared.record(exitCode == 0 ? .taskExecutionSucceeded : .taskExecutionFailed)
         }
-        // M2b-2：任务结束（退出/超时/停止）即登记会话条目——状态、退出码、
-        // 末尾脱敏片段（档位裁决在 MobileTaskConsoleService 内）。
+        // M2b-2: as soon as a task ends (exit / timeout / stop) the session entry is registered — status, exit code,
+        // and the redacted tail snippet (the visibility decision is inside MobileTaskConsoleService).
         recordConsoleEntry(for: intent)
         let completion = completionHandlers.removeValue(forKey: intentID)
         completion?()

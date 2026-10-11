@@ -1,83 +1,83 @@
-# TermiPad 私有 Beta 发布前审计
+# TermiPad private beta pre-release audit
 
-**审计范围：** 私有开发与受控 beta 候选，不包含 Mac App Store 或外部分发。
+**Audit scope:** Private development and controlled beta candidates; excludes the Mac App Store and external distribution.
 
-**当前已验证功能基线：** `b6b37e7`（`Stabilize task workbench UI assertion`），包含 T2 本机受限 MCP 协作 `3a60ffb`、其 Swift 6/Core Foundation 兼容修复、OpenCode `2025-11-25` 精确协议协商修复 `5c7d202`、工作台自动保存状态反馈与稳定 UI 冒烟修复 `38aae06`/`0cdbc90`、T1 本机受限任务执行器 `5edeb8f`、T0 本地受限任务策略核心 `8750200`、此前的本地图标系统 `0265caf` 与 Mendocino 工作区视觉基线 `70d9d40`。
+**Currently verified feature baseline:** `b6b37e7` (`Stabilize task workbench UI assertion`), including T2 local restricted MCP collaboration `3a60ffb`, its Swift 6 / Core Foundation compatibility fixes, the OpenCode `2025-11-25` exact protocol negotiation fix `5c7d202`, the workbench auto-save status feedback and stable UI smoke fixes `38aae06`/`0cdbc90`, the T1 local restricted task executor `5edeb8f`, the T0 local restricted task policy core `8750200`, the earlier local icon system `0265caf`, and the Mendocino workspace visual baseline `70d9d40`.
 
-**审计日期：** 2026-08-27。
+**Audit date:** 2026-08-27.
 
-> 本文是发布闸门，而不是发布说明。它记录已完成的本地工程收口，以及任何外部测试者获得安装包前仍必须满足的独立条件。
+> This document is a release gate, not release notes. It records the local engineering work that is finished, and the separate conditions that must still be met before any external tester receives an installer.
 
-## 1. 已完成并在真实 Mac 验证的基线
+## 1. Baseline completed and verified on a real Mac
 
-在用户的 Apple Silicon Mac（Xcode 26.6、Swift 6.3.3、XcodeGen 2.46.0）上，Mendocino 工作区基线 `70d9d40`、本地图标系统批次 `0265caf`、T0 本地受限任务策略核心 `8750200`/修复 `1cb82d3`、T1 本机受限任务执行器 `5edeb8f`/修复 `274d6ea` 与 T2 本机受限 MCP 协作 `3a60ffb`/兼容修复 `030b747`、`f5383d3`、`2564665`、`6569c3a`、`4fe6472`、`5c7d202`、`44b8ae1`、`38aae06`、`0cdbc90` 均已通过 `./scripts/verify-macos.sh` 的完整集中验证。最近一次回归验证的结果目录为 `.verification/20260829-213928`（一键收录全部修复），输出 `TEST EXECUTE SUCCEEDED` 与 `[通过] ui-smoke-test`。`5c7d202` 仅精确接受 `2025-03-26` 与已由 OpenCode 1.14.33 证实的 `2025-11-25` 初始化版本，并回显被接受的版本；未扩大 MCP 工具、请求字段或执行权限。随后在 OpenCode 1.14.33 中以 NVIDIA NIM 的 DeepSeek V4 Flash 开展了一次隔离只读演练：仅 `termipad-local` 被启用，`quick9-wormhole` 被临时禁用，且只调用 `list_task_scopes` 与 `list_fixed_tasks`；范围返回为空、固定目录返回三个预定义任务，没有创建、批准、执行或取消任务，也没有返回命令、路径、参数、环境变量、文件内容或终端输出。演练结束后，用户关闭了 TermiPad 本机 MCP 开关，并将临时 OpenCode 配置内的 `termipad-local` 设回 `disabled`。`44b8ae1` 仅令 UI 测试在已呈现可访问主窗口但 XCTest 未报告 `.runningForeground` 时继续执行既有页面断言；`38aae06` 保留即时自动保存并增加用户可见状态反馈，`0cdbc90` 仅将 UI 冒烟断言收敛到跨 macOS 版本稳定的工作台边界和开关元素。该流程还覆盖工具链与脚本语法检查、Swift 源码回归防护、Swift Package 清单检查、XcodeGen 工程生成、原生 macOS 构建、UI Runner 签名校验及单元测试。该批次以 11 英寸 iPad Pro 纵向工作区为首次窗口的视觉基准，并按 macOS 可见区域自适应；它仅强化原生工作区面板、工具卡片和辅助页面层级，不模拟 iPad 设备机身或改变功能/安全行为。UI 测试显式隔离内存数据容器，并在 macOS 仅恢复菜单栏而未恢复窗口时创建主窗口；失败时会自动导出启动状态、界面层级和截图附件。
+On the user's Apple Silicon Mac (Xcode 26.6, Swift 6.3.3, XcodeGen 2.46.0), the Mendocino workspace baseline `70d9d40`, the local icon system batch `0265caf`, the T0 local restricted task policy core `8750200` / fix `1cb82d3`, the T1 local restricted task executor `5edeb8f` / fix `274d6ea`, and T2 local restricted MCP collaboration `3a60ffb` / compatibility fixes `030b747`, `f5383d3`, `2564665`, `6569c3a`, `4fe6472`, `5c7d202`, `44b8ae1`, `38aae06`, `0cdbc90` have all passed the full consolidated verification of `./scripts/verify-macos.sh`. The result directory of the latest regression verification is `.verification/20260829-213928` (the accept-all fix), with output `TEST EXECUTE SUCCEEDED` and `[PASS] ui-smoke-test`. `5c7d202` accepts exactly `2025-03-26` and the `2025-11-25` initialization version confirmed with OpenCode 1.14.33, and echoes the accepted version; it does not widen MCP tools, request fields, or execution permissions. An isolated read-only walkthrough was then run in OpenCode 1.14.33 with NVIDIA NIM's DeepSeek V4 Flash: only `termipad-local` was enabled, `quick9-wormhole` was temporarily disabled, and only `list_task_scopes` and `list_fixed_tasks` were called; the scope list came back empty and the fixed catalog returned three predefined tasks, with no task created, approved, run, or cancelled, and no commands, paths, arguments, environment variables, file contents, or terminal output returned. After the walkthrough the user turned off TermiPad's local MCP switch and set `termipad-local` back to `disabled` in the temporary OpenCode configuration. `44b8ae1` only lets UI tests continue with the existing page assertions when an accessible main window is presented but XCTest has not reported `.runningForeground`; `38aae06` keeps immediate auto-save and adds user-visible status feedback, and `0cdbc90` only narrows the UI smoke assertions to workbench boundary and switch elements that are stable across macOS versions. The flow also covers toolchain and script syntax checks, Swift source regression guards, the Swift Package manifest check, XcodeGen project generation, the native macOS build, UI Runner signature verification, and unit tests. This batch uses the 11-inch iPad Pro portrait workspace as the visual baseline for the first window and adapts to the macOS visible area; it only strengthens the native workspace panel, tool card, and auxiliary page hierarchy, and neither imitates an iPad device body nor changes feature/security behavior. UI tests explicitly isolate an in-memory data container and create the main window when macOS restores only the menu bar and not the window; on failure they automatically export launch state, UI hierarchy, and screenshot attachments.
 
-| 已验证或已实现的控制项 | 当前结论 | 证据或实现位置 |
+| Verified or implemented control | Current conclusion | Evidence or implementation location |
 |---|---|---|
-| 用户确认候选后才进入工具库 | 已实现 | `CandidateTool` 状态与 `LaunchpadView.accept` |
-| AI 不可生成或覆盖启动命令 | 已实现并有回归测试 | `AIService.swift`、信任边界测试 |
-| GitHub 仅接受官方映射或高置信匹配 | 已实现并有回归测试 | `GitHubService.swift` |
-| GitHub owner 头像不作工具图标 | 已实现；旧 URL 不渲染、不导出、不恢复 | `ToolIconView.swift`、`BackupService.swift` |
-| API Key 不进入备份 | 已实现 | Keychain 存储与 `BackupService.swift` |
-| Terminal/iTerm 自动化被拒绝时复制命令 | 已实现；提示文字有单元测试 | `TerminalLauncher.swift` |
-| 默认数据容器失败时不删除旧存储 | 已实现 | `TermiPadApp.swift`、`TermiPadDataStore.makeRecoveryContainer` |
-| 用户主动导入 JSON 至隔离恢复库 | 已实现并有 UI 冒烟测试 | `DataStoreRecoveryView.swift`、`testRecoveryLaunchOffersBackupImport` |
-| iCloud 隐式启用 | 明确禁止 | 所有本地容器显式 `cloudKitDatabase: .none` |
-| Mendocino 项目发现预览 | 已实现并在真实 macOS 验证 | 默认关闭；仅用户手动刷新固定公开 GitHub CLI 查询；ETag 缓存、非 fork/非 archived 筛选、公开字段本地解释排序、限流提示与隐私化诊断均有覆盖。不会安装软件、生成命令、写入工具库或自动联网。 |
-| P2-B 受控安装审查 | 已实现并在真实 macOS 验证 | 仅内置静态审核的 Homebrew core formula 目录；精确仓库映射；显示预期 CLI、审核修订、日期与固定命令；明确勾选和用户手动确认 Homebrew 后，才可交给已选终端或复制。不会应用内安装、读取 README 命令、支持 tap/cask 或自动收录。 |
-| P2-C 只读环境报告 | 已实现并在真实 macOS 验证 | 仅用户点击后在固定绝对路径中以 `--version` 检查 Homebrew、Cargo、npm、pnpm、Bun、Python；不用 shell、不联网、不保存路径/版本；不会安装、升级、卸载或裁决冲突。 |
-| Mendocino 工作区视觉强化 | 已实现并在真实 macOS 验证 | 11 英寸 iPad Pro 纵向工作区作为首次窗口视觉基准；macOS 可见区域自适应、原生侧边栏、柔和工作区面板、工具卡片与辅助页面统一层级；不模拟设备外壳或触控系统控件。 |
-| 二期本地图标系统 | 已实现并在真实 macOS 验证 | 扩展本地 SF Symbol 目录；未知工具回退样式持久化、确定性分配与碰撞消解；用户手动选择/恢复自动图标；本地 PNG 最高优先级；备份恢复保留样式标识；验证脚本禁止网络图标资源。 |
-| T0 本地受限任务策略核心 | 已实现并在真实 macOS 验证 | 固定任务目录、项目范围、短期本地审阅窗口、风险等级、nonce、过期、取消、撤销和固定诊断事件；任务范围与历史不进入 JSON 备份或隐私诊断。T0 仅审阅策略，不执行命令、不创建进程、不接网络、MCP、移动入口或 PTY；验证脚本禁止这些能力。 |
-| T1 本机受限任务执行器 | 已实现并在真实 macOS 验证 | 仅消费 T0 已批准的固定任务；以项目范围为当前目录、固定可执行文件和参数、空 stdin/stdout/stderr 运行；支持停止和任务级超时，只保存状态、时间与退出码。无 Shell、PATH 搜索、网络、MCP、移动入口、PTY、终端交接或完整输出保留。 |
-| T2 本机受限 MCP 协作 | 已实现、真实 macOS 验证且完成 OpenCode 隔离只读演练 | 用户在 Mac 本机明确开启且应用运行时，独立 `stdio` 服务端仅可经本机 CFMessagePort 桥接列出项目范围/固定任务、提出待本机审阅任务、读取最小状态或取消尚未开始任务。OpenCode 1.14.33 的 `2025-11-25` 协商和只读 `list_task_scopes`/`list_fixed_tasks` 已实机演练，结束后服务恢复关闭。桥接不提供认证，但也不开放网络、HTTP/WebSocket、任意 Shell、路径、参数、环境变量、文件浏览、PTY、终端交接或完整输出；stdio 层不直接访问 SwiftData。 |
+| A candidate enters the library only after the user confirms | Implemented | `CandidateTool` state and `LaunchpadView.accept` |
+| AI cannot generate or overwrite the launch command | Implemented, with regression tests | `AIService.swift`, trust boundary tests |
+| GitHub accepts only the official mapping or a high-confidence match | Implemented, with regression tests | `GitHubService.swift` |
+| GitHub owner avatars are not used as tool icons | Implemented; old URLs are not rendered, exported, or restored | `ToolIconView.swift`, `BackupService.swift` |
+| API keys stay out of backups | Implemented | Keychain storage and `BackupService.swift` |
+| The command is copied when Terminal/iTerm Automation is denied | Implemented; the hint text has unit tests | `TerminalLauncher.swift` |
+| The old store is not deleted when the default data container fails | Implemented | `TermiPadApp.swift`, `TermiPadDataStore.makeRecoveryContainer` |
+| The user deliberately imports JSON into an isolated recovery library | Implemented, with a UI smoke test | `DataStoreRecoveryView.swift`, `testRecoveryLaunchOffersBackupImport` |
+| Implicit iCloud enablement | Explicitly forbidden | All local containers explicitly set `cloudKitDatabase: .none` |
+| Mendocino Project Discovery Preview | Implemented and verified on real macOS | Off by default; only a manual user refresh of the fixed public GitHub CLI query; ETag cache, non-fork / non-archived filtering, local explainable ranking from public fields, rate-limit hints, and privacy-preserving diagnostics are all covered. It does not install software, generate commands, write to the library, or connect automatically. |
+| P2-B controlled install review | Implemented and verified on real macOS | Only the built-in statically reviewed Homebrew core formula catalog; exact repository mapping; shows the expected CLI, review revision, date, and fixed command; it can be handed to the chosen terminal or copied only after the box is explicitly checked and the user confirms Homebrew manually. It does not install in-app, read README commands, support taps/casks, or collect automatically. |
+| P2-C read-only environment report | Implemented and verified on real macOS | Only after a user click does it check Homebrew, Cargo, npm, pnpm, Bun, and Python at fixed absolute paths with `--version`; no shell, no network, no saved paths/versions; it does not install, upgrade, uninstall, or arbitrate conflicts. |
+| Mendocino workspace visual strengthening | Implemented and verified on real macOS | The 11-inch iPad Pro portrait workspace as the visual baseline for the first window; adaptation to the macOS visible area, a native sidebar, soft workspace panels, and one hierarchy for tool cards and auxiliary pages; no imitation of a device shell or touch system controls. |
+| Phase-two local icon system | Implemented and verified on real macOS | Extended local SF Symbol catalog; persisted fallback styles for unknown tools with deterministic assignment and collision resolution; manual selection / restoring the automatic icon by the user; local PNG has the highest priority; backup and restore keep the style identifier; the verification script forbids network icon resources. |
+| T0 local restricted task policy core | Implemented and verified on real macOS | Fixed task catalog, project scope, short local review window, risk level, nonce, expiry, cancellation, revocation, and fixed diagnostic events; task scopes and history stay out of JSON backups and privacy diagnostics. T0 only reviews policy; it runs no commands, creates no processes, and connects to no network, MCP, mobile entry, or PTY; the verification script forbids these capabilities. |
+| T1 local restricted task executor | Implemented and verified on real macOS | Consumes only fixed tasks approved by T0; runs with the project scope as the current directory, a fixed executable and arguments, and empty stdin/stdout/stderr; supports stopping and a task-level timeout, and stores only state, time, and exit code. No shell, PATH search, network, MCP, mobile entry, PTY, terminal handoff, or full output retention. |
+| T2 local restricted MCP collaboration | Implemented, verified on real macOS, and the isolated OpenCode read-only walkthrough is done | When the user explicitly turns it on on the Mac and the app is running, the separate `stdio` server can, only through the local CFMessagePort bridge, list project scopes / fixed tasks, propose tasks for local review, read minimal status, or cancel tasks that have not started. OpenCode 1.14.33's `2025-11-25` negotiation and the read-only `list_task_scopes`/`list_fixed_tasks` were exercised on the real machine, and the service was turned off again afterwards. The bridge provides no authentication, but it also opens no network, HTTP/WebSocket, arbitrary shell, paths, arguments, environment variables, file browsing, PTY, terminal handoff, or full output; the stdio layer does not access SwiftData directly. |
 
-## 2. 当前阻塞项：不能直接公开或外部分发
+## 2. Current blockers: it cannot be published or distributed externally as is
 
-当前 `project.yml` 明确使用 ad hoc 签名（`CODE_SIGN_IDENTITY: "-"`），并将 `ENABLE_HARDENED_RUNTIME` 设为 `NO`。这适合开发机上的构建与 UI 测试 Runner 验证，但**不是 Developer ID 分发配置**。因此，当前状态可作为受控开发与自测版本，不能宣称为已准备好供外部下载安装的 release build。
+The current `project.yml` explicitly uses ad hoc signing (`CODE_SIGN_IDENTITY: "-"`) and sets `ENABLE_HARDENED_RUNTIME` to `NO`. This suits builds and UI test Runner verification on a development machine, but it is **not a Developer ID distribution configuration**. So the current state can serve as a controlled development and self-test version and cannot be described as a release build ready for external download and install.
 
-Apple 对 Mac App Store 外分发的建议是使用 **Developer ID** 签名，并在分发前用 Gatekeeper 已启用的 Mac 测试最终用户启动体验。[1] Apple 的公证要求包括：所有分发的可执行文件具有有效签名，使用 Developer ID 类型证书，启用 Hardened Runtime，使用安全时间戳，并避免在发行包中保留值为 `true` 的 `com.apple.security.get-task-allow` entitlement。[2] Hardened Runtime 的例外权限应按最小必要原则配置。[3]
+Apple's recommendation for distribution outside the Mac App Store is to sign with **Developer ID** and to test the end-user launch experience on a Mac with Gatekeeper enabled before distributing.[1] Apple's notarization requirements include: all distributed executables have valid signatures, a Developer ID type certificate is used, Hardened Runtime is enabled, a secure timestamp is used, and the release package does not keep a `com.apple.security.get-task-allow` entitlement with the value `true`.[2] Hardened Runtime exception entitlements should be configured on the principle of least necessity.[3]
 
-| 发布闸门 | 当前状态 | 可接受完成标准 |
+| Release gate | Current status | Acceptable completion criterion |
 |---|---|---|
-| Developer ID Application 证书与团队配置 | 未配置 | 仅在发行配置中使用 Developer ID Application 身份；不得用 ad hoc、开发证书或 Mac Distribution 代替。 |
-| Hardened Runtime | 未配置 | 发行 App target 开启；仅在确有功能需要时添加最小例外 entitlement。 |
-| Apple Events 权限 | 已声明用途文本 | 保留 `NSAppleEventsUsageDescription`，并在干净账户上验证 Terminal/iTerm 首次授权、拒绝和复制回退。 |
-| 发行包 entitlement | 未审计 | 导出后确认没有 `get-task-allow=true`，并保存 `codesign -d --entitlements :-` 输出。 |
-| 公证与票据 | 未执行 | 使用 `notarytool` 上传，等待接受结果，staple 票据，并保留请求 ID 与日志。 |
-| Gatekeeper 冷启动 | 未执行 | 在未参与构建的 Gatekeeper 启用 Mac 上，对下载后带 quarantine 属性的最终包验证启动。 |
-| 版本号与更新策略 | 未固定 | 固定 `CFBundleShortVersionString`/`CFBundleVersion`，并确定私有 beta 的回滚、过期和更新通知机制。 |
+| Developer ID Application certificate and team configuration | Not configured | Use the Developer ID Application identity only in the release configuration; ad hoc, development certificates, or Mac Distribution must not be substituted. |
+| Hardened Runtime | Not configured | Enabled for the release app target; add minimal exception entitlements only when a feature truly needs them. |
+| Apple Events permission | Usage text declared | Keep `NSAppleEventsUsageDescription`, and verify first-time authorization, denial, and copy fallback for Terminal/iTerm on a clean account. |
+| Release package entitlements | Not audited | After export, confirm there is no `get-task-allow=true`, and save the output of `codesign -d --entitlements :-`. |
+| Notarization and ticket | Not run | Upload with `notarytool`, wait for acceptance, staple the ticket, and keep the request ID and log. |
+| Gatekeeper cold start | Not run | On a Gatekeeper-enabled Mac that took no part in the build, verify launching the final package downloaded with the quarantine attribute. |
+| Version number and update strategy | Not fixed | Fix `CFBundleShortVersionString`/`CFBundleVersion`, and decide the private beta's rollback, expiry, and update notification mechanisms. |
 
-## 3. iCloud 同步：已完成设计闸门，未实施功能
+## 3. iCloud sync: design gate complete, feature not implemented
 
-iCloud 不是可以用本地开关伪造的功能。它仍需要有效的 Apple Developer 团队、CloudKit 容器与 capability 配置、同步范围和冲突规则确认、迁移策略以及至少两台设备的真实验证。当前版本的显式本地配置与设计文档只是防止未来 entitlement 或容器配置意外开启同步，并不代表 iCloud 已实现。
+iCloud is not a feature that can be faked with a local switch. It still needs a valid Apple Developer team, a CloudKit container and capability configuration, confirmed sync scope and conflict rules, a migration strategy, and real verification on at least two devices. The current version's explicit local configuration and design document only prevent a future entitlement or container configuration from turning sync on by accident; they do not mean iCloud is implemented.
 
-| 项目 | 当前结论 |
+| Item | Current conclusion |
 |---|---|
-| 本地默认行为 | 已验证为 `cloudKitDatabase: .none` |
-| iCloud 设计与验收条件 | 已记录于 `docs/icloud-sync-design-gate.md` |
-| Apple Developer 团队与 CloudKit 容器 | 外部前置条件，当前未具备 |
-| 多设备冲突、迁移与数据边界验证 | 未开始；不得以本地测试替代 |
+| Local default behavior | Verified as `cloudKitDatabase: .none` |
+| iCloud design and acceptance conditions | Recorded in `docs/icloud-sync-design-gate.md` |
+| Apple Developer team and CloudKit container | External prerequisites, currently not available |
+| Multi-device conflict, migration, and data boundary verification | Not started; local tests must not be used as a substitute |
 
-## 4. 数据恢复与升级验证
+## 4. Data recovery and upgrade verification
 
-备份 schema 版本为 `1`，并使用可选字段保持旧 JSON 的兼容性。单元测试确认旧 schema 1 JSON 在缺失新增信任字段时可解码，并根据本地可执行路径安全推导来源。旧 `iconURLString` 不会被渲染、导出或恢复；API Key 永不进入 JSON 备份。
+The backup schema version is `1` and uses optional fields to stay compatible with old JSON. Unit tests confirm that old schema 1 JSON decodes when the newer trust fields are missing, and that the source is derived safely from the local executable path. The old `iconURLString` is not rendered, exported, or restored; API keys never enter a JSON backup.
 
-默认 SwiftData store 无法创建时，应用不再删除或覆盖原 store，而是打开隔离的恢复库并要求用户主动选择 JSON 备份导入。自动测试已覆盖旧 schema 1 JSON 导入恢复库后保存并重开，以及恢复页面提供导入入口。
+When the default SwiftData store cannot be created, the app no longer deletes or overwrites the original store; it opens an isolated recovery library and asks the user to choose a JSON backup to import deliberately. Automated tests already cover importing old schema 1 JSON into the recovery library, saving, and reopening, and the recovery page offering the import entry.
 
-| 恢复场景 | 自动覆盖 | 发行前仍需人工、但仅一次的真实系统验证 |
+| Recovery scenario | Covered automatically | Still needs manual — but only one-time — verification on a real system before release |
 |---|---|---|
-| schema 1 JSON 缺少新增信任字段 | 是 | 否 |
-| 旧 JSON 中远程头像 URL | 是 | 否 |
-| 导出时 API Key 排除 | 是 | 否 |
-| 导入合并后持久化并重启读取 | 是 | 否 |
-| 默认 store 无法打开时显示安全恢复入口 | 是（受控强制恢复） | 否 |
-| 既有 SwiftData store 升级到新版本 | 否 | 是 |
-| 真实损坏或无法迁移 store 下的数据完整性与人工恢复 | 否 | 是 |
+| Schema 1 JSON missing the newer trust fields | Yes | No |
+| Remote avatar URL in old JSON | Yes | No |
+| API key excluded on export | Yes | No |
+| Persisting after an import merge and reading after restart | Yes | No |
+| Showing the safe recovery entry when the default store cannot be opened | Yes (controlled forced recovery) | No |
+| Upgrading an existing SwiftData store to the new version | No | Yes |
+| Data integrity and manual recovery with a really corrupted or unmigratable store | No | Yes |
 
-## 5. 推荐的受控私有 Beta 发行流程
+## 5. Recommended controlled private beta release process
 
-发布负责人应先在干净工作树运行 `./scripts/verify-macos.sh`，并归档 `.verification/<timestamp>/summary.md`、完整日志、`.xcresult` 与 UI 附件。随后以 **Release** 配置归档，使用 Developer ID Application 证书签名，开启 Hardened Runtime。归档后的 app 必须先执行签名与 entitlement 审查，再打包为 DMG、PKG 或 ZIP 之一；打包格式一旦确定，应作为后续 beta 的固定通道，以便复现与回滚。
+The release owner should first run `./scripts/verify-macos.sh` on a clean working tree and archive `.verification/<timestamp>/summary.md`, the full logs, the `.xcresult`, and the UI attachments. Then archive with the **Release** configuration, sign with the Developer ID Application certificate, and enable Hardened Runtime. The archived app must go through the signature and entitlement review before being packaged as one of DMG, PKG, or ZIP; once the packaging format is decided, it should be the fixed channel for later betas, for reproducibility and rollback.
 
 ```bash
 codesign --verify --deep --strict --verbose=4 "TermiPad.app"
@@ -86,13 +86,13 @@ codesign -d --entitlements :- "TermiPad.app"
 spctl -a -vvv --type execute "TermiPad.app"
 ```
 
-随后应通过 Xcode Organizer 的 Developer ID 分发流程，或用 `xcrun notarytool` 上传公证。Apple 已停止接受 `altool` 与 Xcode 13 或更早版本的公证上传；应使用 `notarytool` 或 Xcode 14 及更高版本。[2] 公证通过后，应将票据 staple 到最终工件，并在隔离属性存在的条件下测试。Apple 说明，票据会让 Gatekeeper 知道该软件已经公证；公证服务也会审查签名问题并返回日志。[2]
+Then go through the Developer ID distribution flow in Xcode Organizer, or upload for notarization with `xcrun notarytool`. Apple no longer accepts notarization uploads from `altool` or Xcode 13 and earlier; use `notarytool` or Xcode 14 and later.[2] After notarization succeeds, staple the ticket to the final artifact and test with the quarantine attribute present. Apple explains that the ticket tells Gatekeeper the software has been notarized; the notary service also reviews signing problems and returns a log.[2]
 
-## 6. 私有 Beta 放行结论
+## 6. Private beta release conclusion
 
-**P0 已完成代码与真实 macOS 验证收口。P1 中不依赖账户的本地能力也已完成。TermiPad Mendocino 的 P2-A 项目发现、P2-B 受控安装审查、P2-C 只读环境报告，以及 T0/T1/T2 受限任务与本机 MCP 协作均已完成真实 macOS 验证。** 这包括安全的候选收件箱、保守发现、手动管理、命令模板、终端启动/复制回退、信任来源、备份/隔离恢复、收藏/最近使用、诊断、默认关闭的更新检查、本地图标、工具健康检查、每工具工作目录、默认关闭的公开项目发现、静态审核 Homebrew 安装计划、手动触发的本地版本环境报告，以及仅能提出待审阅任务或读取最小状态的本机 stdio MCP 服务端。
+**P0 is complete in code and real macOS verification. The account-independent local capabilities of P1 are also complete. TermiPad Mendocino's P2-A project discovery, P2-B controlled install review, P2-C read-only environment report, and the T0/T1/T2 restricted tasks and local MCP collaboration have all completed real macOS verification.** This includes the safe review inbox, conservative discovery, manual management, command templates, terminal launch / copy fallback, trust sources, backup / isolated recovery, favorites / recents, diagnostics, off-by-default update checks, local icons, the tool health check, per-tool working directories, off-by-default public project discovery, statically reviewed Homebrew install plans, the manually triggered local version environment report, and a local stdio MCP server that can only propose tasks for review or read minimal status.
 
-**暂不放行外部分发。** 这不是工程代码未完成，而是 Developer ID、Hardened Runtime、公证、Gatekeeper 冷启动和真实旧 store 升级验证尚未具备或尚未执行。iCloud 同步同样保留为真实的 Apple Developer/CloudKit/双设备外部闸门；不得因存在设计文档或本地禁用配置而宣称已实现。P2-B/P2-C 已实现的只是受控安装审查和只读环境报告；自动安装、npm/pip/Cargo 安装、第三方 tap/cask、升级、卸载、依赖求解与冲突裁决均不在当前产品承诺内。
+**External distribution is not cleared for now.** This is not because the engineering code is unfinished, but because Developer ID, Hardened Runtime, notarization, Gatekeeper cold start, and real old-store upgrade verification are not yet available or not yet run. iCloud sync likewise remains a real external gate of Apple Developer / CloudKit / two devices; it must not be described as implemented just because a design document or a local disabling configuration exists. What P2-B/P2-C have implemented is only controlled install review and the read-only environment report; automatic install, npm/pip/Cargo installs, third-party taps/casks, upgrade, uninstall, dependency solving, and conflict arbitration are all outside the current product commitment.
 
 ## References
 

@@ -2,23 +2,23 @@ import XCTest
 import Security
 @testable import TermiPad
 
-/// KeychainStore 契约测试（track-protode 阶段 6 测试补强）。
+/// KeychainStore contract tests (track-protode stage 6 test hardening).
 ///
-/// 不打真实 SecItem 调用：真实 keychain 测试在 CI 环境里 flaky（沙箱权限、
-/// 进程隔离、跨设备 state），且任何写操作都得清反而污染后续测试。
-/// 改为**契约测试**——锁住 baseQuery 形态，防止任何 commit 不小心把 service
-/// 改成共享 keychain 名（这会让 TermiPad 的 key 撞到其他应用或 user 自己的
-/// keychain 项，跨应用泄露）。
+/// No real SecItem calls: real keychain tests are flaky in CI (sandbox permissions,
+/// process isolation, cross-device state), and any write has to be cleaned up or it pollutes later tests.
+/// Instead these are **contract tests** — they lock down the shape of baseQuery so no commit accidentally changes the service
+/// to a shared keychain name (which would make TermiPad's key collide with other apps' or the user's own
+/// keychain items and leak across apps).
 final class KeychainStoreTests: XCTestCase {
-    /// 把 baseQuery 这个私有静态方法通过 Mirror 拆出来，断言必填字段。
-    /// Mirror 是只读反射，不会触发 OS keychain 状态变化。
+    /// Pull the private static method baseQuery apart via Mirror and assert the required fields.
+    /// Mirror is read-only reflection and triggers no change in the OS keychain state.
     private func baseQuery(account: String) -> [String: Any]? {
         let mirror = Mirror(reflecting: KeychainStore.self)
-        // baseQuery 是私有静态方法，Mirror 不直接给静态方法 — 用 Swift 5.9
-        // 引入的方式：直接构造一个 KeychainStore 类型 + 静态方法调用。
-        // KeychainStore 只有 static 成员，没有 instance；用 _ = KeychainStore()
-        // 不可行。退而求其次：测试中复制 baseQuery 同样的字段集合，断言 OS
-        // 接受这个形态。
+        // baseQuery is a private static method, and Mirror does not expose static methods directly — use the approach
+        // introduced in Swift 5.9: construct a KeychainStore type directly + call the static method.
+        // KeychainStore has only static members and no instance; _ = KeychainStore()
+        // is not possible. The fallback: replicate baseQuery's field set in the test and assert that the OS
+        // accepts this shape.
         return [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: "com.termipad.app",
@@ -28,7 +28,7 @@ final class KeychainStoreTests: XCTestCase {
     }
 
     func testBaseQueryContainsExactlyFourRequiredKeys() {
-        // 任何 baseQuery 修改都必须保持这 4 个 key，缺一不可。
+        // Any change to baseQuery must keep these 4 keys, every one of them.
         guard let q = baseQuery(account: "test") else { return XCTFail("nil") }
         XCTAssertEqual(q.count, 4)
         XCTAssertEqual(q[kSecClass as String] as? String, kSecClassGenericPassword as String)
@@ -39,35 +39,35 @@ final class KeychainStoreTests: XCTestCase {
     }
 
     func testBaseQueryServiceIsAlwaysAppBundleID() {
-        // service 必须是 com.termipad.app 而非 com.apple.* / 通配 / 空。
-        // 一旦变成共享 service，TermiPad 的 AI API key 会污染 user 的 iCloud
-        // keychain 或撞到其他应用。
+        // service must be com.termipad.app, not com.apple.* / a wildcard / empty.
+        // Once it becomes a shared service, TermiPad's AI API key would pollute the user's iCloud
+        // keychain or collide with other apps.
         let accounts = ["", "ai-api-key", "any/weird/account"]
         for account in accounts {
             guard let q = baseQuery(account: account) else { XCTFail("nil for \(account)"); return }
             XCTAssertEqual(q[kSecAttrService as String] as? String, "com.termipad.app",
-                           "account=\(account) 必须仍用 app bundle service")
+                           "account=\(account) must still use the app bundle service")
         }
     }
 
     func testBaseQueryAccessibleIsAfterFirstUnlock() {
-        // 升级到 AlwaysThisDeviceOnly / WhenUnlockedThisDeviceOnly 都会扩大
-        // 攻击面或影响锁屏后可用性。这个测试锁住当前安全选择。
+        // Upgrading to AlwaysThisDeviceOnly / WhenUnlockedThisDeviceOnly would either widen
+        // the attack surface or affect availability after locking. This test locks down the current security choice.
         guard let q = baseQuery(account: "x") else { return XCTFail("nil") }
         XCTAssertEqual(q[kSecAttrAccessible as String] as? String,
                        kSecAttrAccessibleAfterFirstUnlock as String)
     }
 
     func testStoreAndRemoveCallSecItemWithValidQueryShape() {
-        // 用 baseQuery 实际跑一次 SecItemCopyMatching：返回 -25300 (errSecItemNotFound)，
-        // 说明 baseQuery 形态被 OS 接受（不是 paramErr -50 / missing key -25300 之类的
-        // 参数错误）。如果未来有人误改 baseQuery 漏 key，这里会返 paramErr，测试就挂。
+        // Actually run SecItemCopyMatching once with baseQuery: it returns -25300 (errSecItemNotFound),
+        // which shows the OS accepts baseQuery's shape (not a parameter error such as paramErr -50 / missing key -25300
+        // and the like). If someone later edits baseQuery and drops a key, this returns paramErr and the test fails.
         let q = baseQuery(account: "never-inserted-by-this-test-account")!
         var result: CFTypeRef?
         let status = SecItemCopyMatching(q as CFDictionary, &result)
         let code = Int(status)
-        // errSecItemNotFound = -25300；errSecParam = -50；其他 key 缺失会返 param 类
+        // errSecItemNotFound = -25300; errSecParam = -50; other missing keys return param-class errors
         XCTAssertEqual(code, -25300,
-                       "baseQuery 形态应被 keychain 接受（返 notFound）；got=\(code) 若不是 -25300 说明参数错。")
+                       "baseQuery's shape should be accepted by the keychain (returns notFound); got=\(code); anything other than -25300 means a parameter error.")
     }
 }
