@@ -19,7 +19,7 @@ struct PreferencesView: View {
     @AppStorage("TermiPad.discoveryPreviewEnabled") private var discoveryPreviewEnabled = false
     @AppStorage(AIService.baseURLDefaultsKey) private var aiBaseURL = "https://api.openai.com/v1"
     @AppStorage(AIService.modelDefaultsKey) private var aiModel = "gpt-4o-mini"
-    @AppStorage("TermiPad.updateChecksEnabled") private var updateChecksEnabled = false
+    @AppStorage(UpdateCheckService.enabledDefaultsKey) private var updateChecksEnabled = false
     @StateObject private var pairingService = MobilePairingService()
     @ObservedObject private var tunnelService = TailnetTunnelService.shared
     @ObservedObject private var launchPrompt = MobileLaunchPromptCenter.shared

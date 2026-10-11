@@ -112,7 +112,7 @@ final class MobilePairingService: ObservableObject {
             guard octets.count == 4 else { continue }
             let isPrivate = octets[0] == 192 && octets[1] == 168
                 || octets[0] == 10
-                || (octets[0] == 172 && (12...31).contains(octets[1]))
+                || (octets[0] == 172 && (16...31).contains(octets[1]))
             if isPrivate {
                 address = ip
                 break
@@ -237,8 +237,10 @@ final class MobilePairingService: ObservableObject {
             state = .failed(error.localizedDescription)
             return
         }
+        // Enumerate the interfaces once; the TXT record and the instance name must carry the same address.
+        let lanAddress = MobilePairingService.lanIPv4Address()
         var txtDictionary = MobilePairingCrypto.bonjourTXTRecord(fingerprint: fingerprint)
-        if let lanAddress = MobilePairingService.lanIPv4Address() {
+        if let lanAddress {
             txtDictionary["a"] = lanAddress
             txtDictionary["p"] = String(MobilePairingService.listenerPort)
             Self.diagMac("TXT carries LAN address \(lanAddress):\(MobilePairingService.listenerPort)")
@@ -250,7 +252,7 @@ final class MobilePairingService: ObservableObject {
         // preparing. Encoding the address in the instance name is the only channel the phone can read by itself; the port is the fixed
         // listenerPort. The instance name only affects "how to connect"; identity is still decided by the MacHello fingerprint.
         let serviceName: String
-        if let lanAddress = MobilePairingService.lanIPv4Address() {
+        if let lanAddress {
             serviceName = "\(MobilePairingCrypto.bonjourServiceName)-\(lanAddress.replacingOccurrences(of: ".", with: "-"))"
             Self.diagMac("Instance name carries LAN address: \(serviceName)")
         } else {
@@ -730,6 +732,14 @@ final class MobilePairingService: ObservableObject {
                     MobileStreamResponse(status: .accepted, reason: nil, resumeOffset: 0),
                     on: connection, using: key,
                     keepConnectionOpen: true)
+                // Once this connection has ended, its sink, subscription, and interaction outlet must go too.
+                // Otherwise every later piece of output is still sealed and sent to a dead connection, and
+                // each stream the phone ever opened stays registered until the app quits.
+                let releaseStream: @Sendable () -> Void = {
+                    Task { @MainActor in
+                        TaskOutputStreamService.shared.removeSink(connectionID)
+                    }
+                }
                 TaskOutputStreamService.shared.registerSink(connectionID) { chunk in
                     guard let sealed = try? MobilePairingEnvelope.seal(chunk, using: key) else {
                         diagMac("Stream push: chunk encryption failed")
@@ -738,7 +748,11 @@ final class MobilePairingService: ObservableObject {
                     connection.send(
                         content: MobilePairingFrame.encode(sealed),
                         completion: .contentProcessed { error in
-                            if let error { diagMac("Stream push send failed: \(error.localizedDescription)") }
+                            if let error {
+                                diagMac("Stream push send failed: \(error.localizedDescription)")
+                                connection.cancel()
+                                releaseStream()
+                            }
                         })
                 }
                 _ = TaskOutputStreamService.shared.subscribe(
@@ -754,13 +768,16 @@ final class MobilePairingService: ObservableObject {
                         })
                 }
                 // M4-3 interaction requests use a separate frame type (the phone tells them apart by field names).
-                TaskOutputStreamService.shared.addInteractionHandler { [weak connection] targetConnectionID, interaction in
-                    guard targetConnectionID == connectionID, let connection else { return }
+                TaskOutputStreamService.shared.registerInteractionSink(connectionID) { [weak connection] interaction in
+                    guard let connection else { return }
                     guard let sealed = try? MobilePairingEnvelope.seal(interaction, using: key) else { return }
                     connection.send(
                         content: MobilePairingFrame.encode(sealed),
                         completion: .contentProcessed { _ in })
                 }
+                // Nothing else reads from a stream connection, so without this the Mac never learns that the
+                // phone left the detail page or dropped off the network.
+                Self.releaseStreamWhenConnectionEnds(connection, release: releaseStream)
             }
         case .respondInteraction:
             Task { @MainActor in
@@ -945,6 +962,22 @@ final class MobilePairingService: ObservableObject {
                 displayName: tool.mobileDisplayName ?? tool.name,
                 displayDescription: tool.mobileDescription,
                 iconSymbolName: tool.iconSymbol)
+        }
+    }
+
+    /// Waits for a long-lived stream connection to close or fail, then cancels it and runs `release`.
+    /// Bytes the phone sends on this connection are read and dropped, exactly as they were ignored before.
+    nonisolated private static func releaseStreamWhenConnectionEnds(
+        _ connection: NWConnection,
+        release: @escaping @Sendable () -> Void
+    ) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { _, _, isComplete, error in
+            if isComplete || error != nil {
+                connection.cancel()
+                release()
+                return
+            }
+            releaseStreamWhenConnectionEnds(connection, release: release)
         }
     }
 
