@@ -49,21 +49,38 @@ enum PairedDeviceStore {
     // MARK: - Paired device records
 
     static func list(store: MobileSecureKeyValueStore = KeychainMobileSecureStore()) -> [PairedDeviceRecord] {
+        let decoder = recordDecoder()
+        return indexedIDs(store: store).compactMap { id in
+            record(id: id, store: store, decoder: decoder)
+        }
+    }
+
+    /// The device IDs in the index item. A record only counts as stored while its ID is listed here.
+    private static func indexedIDs(store: MobileSecureKeyValueStore) -> [UUID] {
         guard let indexJSON = try? store.string(for: indexAccount),
               let indexData = indexJSON.data(using: .utf8),
               let ids = try? JSONDecoder().decode([UUID].self, from: indexData) else {
             return []
         }
+        return ids
+    }
+
+    private static func recordDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return ids.compactMap { id in
-            guard let recordJSON = try? store.string(for: deviceAccount(id)),
-                  let recordData = recordJSON.data(using: .utf8),
-                  let record = try? decoder.decode(PairedDeviceRecord.self, from: recordData) else {
-                return nil
-            }
-            return record
+        return decoder
+    }
+
+    private static func record(
+        id: UUID,
+        store: MobileSecureKeyValueStore,
+        decoder: JSONDecoder
+    ) -> PairedDeviceRecord? {
+        guard let recordJSON = try? store.string(for: deviceAccount(id)),
+              let recordData = recordJSON.data(using: .utf8) else {
+            return nil
         }
+        return try? decoder.decode(PairedDeviceRecord.self, from: recordData)
     }
 
     /// A revoked device (revokedAt non-nil) disappears from the active set immediately — this is the data plane of the §7 red line "every permission is revocable".
@@ -89,20 +106,28 @@ enum PairedDeviceStore {
         //     (2026-09-10 real device: 12 orphan items made the user enter the password a dozen times in a row);
         //     a revoked device can only come back by pairing again (the trust anchor is broken, so keeping the data is pointless);
         // (b) old records with the same fingerprint — the new record from re-pairing the same device replaces the old one.
-        for stale in list(store: store) {
-            if stale.revokedAt != nil || stale.publicKeyHash == record.publicKeyHash {
-                try? store.remove(account: deviceAccount(stale.id))
+        // The new index is built from this one pass instead of reading every Keychain item a second time
+        // (each read can raise an authorization prompt). It lists exactly what a second read would find:
+        // active records that were kept, plus an active record whose removal failed and which is therefore still stored.
+        var ids: [UUID] = []
+        for existing in list(store: store) {
+            if existing.revokedAt != nil || existing.publicKeyHash == record.publicKeyHash {
+                let wasRemoved = (try? store.remove(account: deviceAccount(existing.id))) != nil
+                if wasRemoved || existing.revokedAt != nil { continue }
             }
+            ids.append(existing.id)
         }
-        var ids = activeDevices(store: store).map(\.id)
         ids.append(record.id)
         try store.save(try encode(record), for: deviceAccount(record.id))
         try store.save(try encode(ids), for: indexAccount)
         return record
     }
 
+    /// Reads the index and the one requested record. Going through `list` would read every paired device's
+    /// Keychain item on each lookup, and this runs for every reconnect from the phone.
     static func find(id: UUID, store: MobileSecureKeyValueStore = KeychainMobileSecureStore()) -> PairedDeviceRecord? {
-        list(store: store).first { $0.id == id }
+        guard indexedIDs(store: store).contains(id) else { return nil }
+        return record(id: id, store: store, decoder: recordDecoder())
     }
 
     static func findActive(
