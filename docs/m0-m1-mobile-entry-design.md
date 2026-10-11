@@ -1,337 +1,337 @@
-# TermiPad M0 / M1 移动端入口设计
+# TermiPad M0 / M1 mobile entry design
 
-**来源：** 对齐 `docs/product-roadmap.md` §5 阶段 4 "M0/M1 — 原生 iPhone App 产品与同网配对" + `docs/t0-development-preparation-checklist.md` §6 第 1 行 "原生 iPhone 同网配对：真实 iPhone、真实 Mac、局域网、系统本地网络权限"。
+**Source:** Aligned with `docs/product-roadmap.md` §5 stage 4 "M0/M1 — native iPhone app product and same-network pairing" + row 1 of `docs/t0-development-preparation-checklist.md` §6, "native iPhone same-network pairing: a real iPhone, a real Mac, a LAN, the system local network permission".
 
-**状态：** 阶段 2 接手 commit 2.1（2026-08-29，zcode）。**纯设计文档**——无代码改动，无运行时代码修改。
+**Status:** Stage 2 takeover commit 2.1 (2026-08-29, zcode). **Design document only** — no code changes and no runtime code modified.
 
-**2026-09-06 更新（zcode）：** 用户确认用免费 Apple ID（personal team）支撑 M1 真机开发验证——G4 的"开发验证"前提已解锁；"长期安装/TestFlight/外部分发"仍需付费会员（见 §3.1、§6）。M1 实现分支 `feature/m1-local-network-pairing` 同日启动。§3.4 修订：Mac 端配对设备记录改为只存 Keychain（原 SwiftData 方案废弃），理由见该节。
+**2026-09-06 update (zcode):** The user confirmed using a free Apple ID (personal team) to support M1 real-device development verification — the "development verification" premise of G4 is unlocked; "long-term install / TestFlight / external distribution" still needs a paid membership (see §3.1, §6). The M1 implementation branch `feature/m1-local-network-pairing` started the same day. §3.4 revised: the Mac's paired device records are now stored only in the Keychain (the original SwiftData plan is dropped); see that section for the reasons.
 
-**作用范围：** M0 = TermiPad 内部为每个工具加 6 个用户控制字段（默认全关）的本地原型。**M0 完成后**才能考虑 M1 同网配对实现。**M0 不需要外部条件**（无 iPhone、无 Apple Developer 账户、无 Bonjour）；**M1 启动需要 G4 闸门**（真实 iPhone + 真实 Mac + 局域网 + 系统本地网络权限）。
+**Scope:** M0 = a local prototype inside TermiPad that adds 6 user-controlled fields (all off by default) to each tool. Only **after M0 is complete** can the M1 same-network pairing implementation be considered. **M0 needs no external conditions** (no iPhone, no Apple Developer account, no Bonjour); **starting M1 needs gate G4** (a real iPhone + a real Mac + a LAN + the system local network permission).
 
-**红线继承**：`product-roadmap.md` §7 "不可妥协的产品红线"——Mac 不开放公网终端、无任意远程 Shell、命令不可被 AI 改写、最小数据回传、每个权限可撤销、本地优先、不替代专业远程终端。本设计**全文不越线**。
+**Inherited red lines**: `product-roadmap.md` §7 "non-negotiable product red lines" — the Mac opens no public terminal, no arbitrary remote shell, commands cannot be rewritten by AI, minimal data return, every permission is revocable, local-first, not a replacement for professional remote terminals. **Nothing in this design crosses them.**
 
-## 1. M0 / M1 / M2 / M3 在 product-roadmap 的位置
+## 1. Where M0 / M1 / M2 / M3 sit in the product roadmap
 
-`product-roadmap.md` §5 阶段 4-7 给出完整路径。本文档只覆盖 M0 + M1：
+`product-roadmap.md` §5 stages 4-7 give the full path. This document covers only M0 + M1:
 
-| 阶段 | 名称 | 状态 | 启动条件 |
+| Stage | Name | Status | Start condition |
 |---|---|---|---|
-| 阶段 0-3 | Mendocino 核心 / P0 / P1 / P2 / T0 / T1 / T2 / 图标 | ✅ 完成 | — |
-| **阶段 4: M0/M1** | 原生 iPhone App + 同网配对 | ❌ 未开始 | M0：无；M1：G4（真机 + 局域网 + Apple 开发者账户）|
-| 阶段 5: M2 | 异地安全会话 | ❌ 未开始 | G5（双设备 + 会话服务 + 攻击面审计）|
-| 阶段 6: M3 | 远程允许窗口 | ❌ 未开始 | M2 稳定 + 真实使用反馈 |
-| 阶段 7 | 发行与生态（Developer ID / 公证 / Gatekeeper） | ❌ 未开始 | Apple 开发者账户 + 真实旧 store 升级 |
+| Stages 0-3 | Mendocino core / P0 / P1 / P2 / T0 / T1 / T2 / icons | ✅ Done | — |
+| **Stage 4: M0/M1** | Native iPhone app + same-network pairing | ❌ Not started | M0: none; M1: G4 (real device + LAN + Apple developer account) |
+| Stage 5: M2 | Remote secure session | ❌ Not started | G5 (two devices + session service + attack surface audit) |
+| Stage 6: M3 | Remote allow window | ❌ Not started | M2 stable + real usage feedback |
+| Stage 7 | Release and ecosystem (Developer ID / notarization / Gatekeeper) | ❌ Not started | Apple developer account + real old-store upgrade |
 
-**M0 完成的判定** = `feature/track-protocol-materials` 阶段 1 commit `414a417` 之后**新增**一个 `feature/m0-implementation` 分支（独立于 `m0-m1-design`），含 3-5 commit 实现 M0 字段 + 守卫 + 测试。M0 **不**等价于 M1 可启动——见 §6 G4 闸门。
+**M0 counts as complete** = after stage 1 commit `414a417` on `feature/track-protocol-materials`, a **new** `feature/m0-implementation` branch (separate from `m0-m1-design`) exists with 3-5 commits implementing the M0 fields + guards + tests. M0 being complete is **not** the same as M1 being startable — see gate G4 in §6.
 
-## 2. M0：Mac 本地移动入口原型
+## 2. M0: local mobile entry prototype on the Mac
 
-### 2.1 目标
+### 2.1 Goal
 
-在 TermiPad 的工具编辑面板为**每个工具**加 6 个用户控制字段（默认全关）。**完成 M0 后**：用户在 Mac 上能精确决定"哪个工具允许出现在手机端 / 是否允许手机发起启动 / 是否需要本地确认"。**完成 M0 不需要**任何外部条件（无 iPhone、无 Bot、无 HTTPS 域名、无 Apple 账户）。
+Add 6 user-controlled fields (all off by default) for **each tool** in TermiPad's tool edit panel. **After M0 is complete**: on the Mac the user can decide precisely "which tools may appear on the phone / whether the phone may request a launch / whether local confirmation is required". **Completing M0 needs no** external conditions (no iPhone, no Bot, no HTTPS domain, no Apple account).
 
-**M0 是所有移动端入口的共享地基**——无论后续选 iPhone 主线、Telegram 备线还是 PWA 验证层，6 字段策略层都复用。**M0 完成后** M1（iPhone）或 Telegram 专项 M1（静态 HTTPS 页面）可基于这层策略层启动。
+**M0 is the shared foundation of every mobile entry** — whether the later choice is the iPhone main line, the Telegram backup line, or the PWA validation layer, the 6-field policy layer is reused. **After M0 is complete**, M1 (iPhone) or the Telegram-specific M1 (static HTTPS page) can start on top of this policy layer.
 
-### 2.2 数据模型：在 `Sources/TerminalTool.swift` 加 6 字段
+### 2.2 Data model: add 6 fields to `Sources/TerminalTool.swift`
 
-依据 `docs/task-intent-data-dictionary.md` §6 的 `TerminalTool` 字段表，**新增 6 字段**：
+Based on the `TerminalTool` field table in `docs/task-intent-data-dictionary.md` §6, **add 6 fields**:
 
-| 字段 | 类型 | 默认 | 语义 |
+| Field | Type | Default | Semantics |
 |---|---|---|---|
-| `mobileDisplayName` | `String?` | `nil`（用本地 `name`） | 手机端显示名（短、与本地 `name` 可不同）|
-| `mobileDescription` | `String` | `""` | 用途说明，**严禁**含命令/路径/变量；客户端展示前服务端脱敏 |
-| `showInMobileEntry` | `Bool` | **`false`** | 是否进入手机目录的最小化列表 |
-| `allowMobileLaunchRequest` | `Bool` | **`false`** | 允许手机对**已批准图标**发起启动请求 |
-| `mobileLocalConfirmPolicy` | `enum MobileLocalConfirmPolicy` | `.everyTime` | 本地确认策略（见 §2.3）|
-| `revokeMobilePermissionAt` | `Date?` | `nil` | 立即撤销时间戳，点了"撤销"按钮写入 |
+| `mobileDisplayName` | `String?` | `nil` (use the local `name`) | Display name on the phone (short; may differ from the local `name`) |
+| `mobileDescription` | `String` | `""` | Purpose description; **must never** contain commands/paths/variables; sanitized on the server side before the client shows it |
+| `showInMobileEntry` | `Bool` | **`false`** | Whether it enters the minimal list of the phone catalog |
+| `allowMobileLaunchRequest` | `Bool` | **`false`** | Allows the phone to request launches for **approved icons** |
+| `mobileLocalConfirmPolicy` | `enum MobileLocalConfirmPolicy` | `.everyTime` | Local confirmation policy (see §2.3) |
+| `revokeMobilePermissionAt` | `Date?` | `nil` | Immediate revocation timestamp, written when the "Revoke" button is clicked |
 
-**与现有字段的关系**：6 字段**不**替代或修改 `name` / `executablePath` / `commandTemplate` / `variableValuesJSON` / `workingDirectoryPath` / `customIconFilename` / `iconURLString` / `metadataProvenance*` 等任何已有字段。**M0 是叠加层**。
+**Relationship to existing fields**: the 6 fields do **not** replace or modify `name` / `executablePath` / `commandTemplate` / `variableValuesJSON` / `workingDirectoryPath` / `customIconFilename` / `iconURLString` / `metadataProvenance*` or any other existing field. **M0 is an overlay.**
 
-**红线约束**（与 `docs/task-intent-data-dictionary.md` §6 一致）：
-- 6 字段**永不**进 JSON 备份（与 `workingDirectoryPath` / `customIconFilename` 一致——见 §2.5）
-- 6 字段**不**进诊断事件（除了专门加的 `taskProposalExpiringSoon` 这类审计事件——目前**不**记录 M0 字段读/写，因为字段本身是 UI 设置，不是 task 生命周期）
-- 6 字段**不**通过 T2 MCP 回传（`LocalMCPTaskState` 8 字段白名单固定，不增 M0 字段）
+**Red-line constraints** (consistent with `docs/task-intent-data-dictionary.md` §6):
+- The 6 fields **never** enter the JSON backup (same as `workingDirectoryPath` / `customIconFilename` — see §2.5)
+- The 6 fields do **not** enter diagnostic events (apart from specially added audit events like `taskProposalExpiringSoon` — reads/writes of M0 fields are currently **not** recorded, because the fields themselves are UI settings, not task lifecycle)
+- The 6 fields are **not** returned through T2 MCP (the 8-field allowlist of `LocalMCPTaskState` is fixed; no M0 fields are added)
 
-### 2.3 枚举 `MobileLocalConfirmPolicy`
+### 2.3 Enum `MobileLocalConfirmPolicy`
 
 ```swift
 enum MobileLocalConfirmPolicy: String, Codable, CaseIterable, Sendable {
-    /// 每次手机请求都要求 Mac 本机用户在工作台点击确认
+    /// Every phone request requires the local Mac user to click confirm in the workbench
     case everyTime
-    /// 同一会话内（≤5min）不重复确认；新会话或超时会话必须重确认
+    /// No repeated confirmation within the same session (≤5min); a new or timed-out session must be confirmed again
     case perSession
-    /// 仅 5min 内的会话，且任务风险为 .low；其他情况要求重确认
+    /// Only sessions within 5min and only when the task risk is .low; everything else requires confirming again
     case lowRiskSessionOnly
 }
 ```
 
-**为什么是 3 个 case**：原方案 §1 红线 "每个权限可撤销" 暗示确认策略不能 "永久允许"；`perSession` 与 `lowRiskSessionOnly` 都依赖会话超时 = 强制重确认，**没有** 永不过期选项。`everyTime` 是最严格默认。
+**Why 3 cases**: the red line "every permission is revocable" in §1 of the original plan implies the confirmation policy cannot be "allow forever"; `perSession` and `lowRiskSessionOnly` both rely on session timeout = forced re-confirmation, and there is **no** never-expire option. `everyTime` is the strictest default.
 
-### 2.4 工具编辑面板 UI：新增 "手机入口" Section
+### 2.4 Tool edit panel UI: new "Mobile Entry" section
 
-在 `Sources/LaunchpadView.swift` 的 `ToolEditView`（875-1118 行）追加 Section：
+Append a section to `ToolEditView` in `Sources/LaunchpadView.swift` (lines 875-1118):
 
 ```
-工具编辑
-├── 基本信息（已有）
-├── 启动命令（已有）
-├── 整理（已有）
-├── 工具状态（已有）
-├── 工作目录（已有）
-├── 自定义图标（已有）
-├── **手机入口**（M0 新增）
-│   ├── 手机显示名称 (TextField)
-│   ├── 手机说明 (TextField, vertical 2-4 line)
-│   ├── 在手机入口显示 (Toggle, default off)
-│   ├── 允许手机发起启动请求 (Toggle, default off, gated by 上一项)
-│   ├── 本地确认策略 (Picker: everyTime / perSession / lowRiskSessionOnly)
-│   └── [撤销手机权限] (Button, role: .destructive, sets revokeMobilePermissionAt = now)
-├── 图标选择（已有）
-└── 来源与可信度（已有）
+Edit Tool
+├── Basics (existing)
+├── Launch command (existing)
+├── Organize (existing)
+├── Tool Status (existing)
+├── Working Directory (existing)
+├── Custom Icon (existing)
+├── **Mobile Entry** (new in M0)
+│   ├── Mobile Display Name (TextField)
+│   ├── Mobile Description (TextField, vertical 2-4 line)
+│   ├── Show in Mobile Entry (Toggle, default off)
+│   ├── Allow Mobile Launch Requests (Toggle, default off, gated by the previous item)
+│   ├── Local Confirmation Policy (Picker: everyTime / perSession / lowRiskSessionOnly)
+│   └── [Revoke Mobile Permission] (Button, role: .destructive, sets revokeMobilePermissionAt = now)
+├── Icon selection (existing)
+└── Source & Trust (existing)
 ```
 
-**accessibility identifier**：`tool-mobile-entry-section` / `tool-mobile-show-in-entry` / `tool-mobile-allow-launch` / `tool-mobile-confirm-policy` / `tool-mobile-revoke`。
+**accessibility identifiers**: `tool-mobile-entry-section` / `tool-mobile-show-in-entry` / `tool-mobile-allow-launch` / `tool-mobile-confirm-policy` / `tool-mobile-revoke`.
 
-**撤销按钮**（`revokeMobilePermissionAt`）：**不是隐藏字段**——是 destructive 按钮，**点击立即**写 `Date()` 进 `revokeMobilePermissionAt`，**清零** `allowMobileLaunchRequest` 与 `showInMobileEntry`（双重保护：撤销时间戳 + 字段都关）。撤销后用户**可以**重新勾选（撤销**不**是永久黑名单，是"立即撤回当前会话状态"）。
+**Revoke button** (`revokeMobilePermissionAt`): **not a hidden field** — it is a destructive button that, **immediately on click**, writes `Date()` into `revokeMobilePermissionAt` and **clears** `allowMobileLaunchRequest` and `showInMobileEntry` (double protection: revocation timestamp + both fields off). After revoking, the user **can** check the options again (revocation is **not** a permanent blocklist; it is "withdraw the current session state immediately").
 
-### 2.5 备份与隐私（与 `docs/task-result-minimal-spec.md` §2 一致）
+### 2.5 Backup and privacy (consistent with `docs/task-result-minimal-spec.md` §2)
 
-6 字段**永不出 JSON 备份**。**`Sources/BackupService.swift` 类型签名已保证**——`TermiPadBackup.make(tools:candidates:...)` 只接受 `[TerminalTool]`，`TermiPadBackup.ToolRecord.init(tool:includeSavedVariableValues:)` 在 commit 1.5 后**不会**复制 6 字段。
+The 6 fields **never leave in a JSON backup**. **The type signatures in `Sources/BackupService.swift` already guarantee this** — `TermiPadBackup.make(tools:candidates:...)` only accepts `[TerminalTool]`, and after commit 1.5 `TermiPadBackup.ToolRecord.init(tool:includeSavedVariableValues:)` does **not** copy the 6 fields.
 
-**验证**（`Tests/TermiPadTests/BackupServiceTaskExclusionTests.swift` 已建立的模式）：M0 实现后新增 `BackupServiceMobileFieldExclusionTests.swift` 断言 JSON **不**含 6 字段名。
+**Verification** (the pattern established by `Tests/TermiPadTests/BackupServiceTaskExclusionTests.swift`): after M0 is implemented, add `BackupServiceMobileFieldExclusionTests.swift` asserting that the JSON does **not** contain the 6 field names.
 
-**verify-macos.sh 静态守卫**（commit 1.5 模式）：M0 实现后新增 `mobile_entry_code` 块，要求 `Sources/BackupService.swift` **不**含 `mobileDisplayName` / `mobileDescription` / `showInMobileEntry` / `allowMobileLaunchRequest` / `mobileLocalConfirmPolicy` / `revokeMobilePermissionAt` 任何字段名。
+**verify-macos.sh static guard** (the commit 1.5 pattern): after M0 is implemented, add a `mobile_entry_code` block requiring that `Sources/BackupService.swift` does **not** contain any of the field names `mobileDisplayName` / `mobileDescription` / `showInMobileEntry` / `allowMobileLaunchRequest` / `mobileLocalConfirmPolicy` / `revokeMobilePermissionAt`.
 
-### 2.6 诊断事件（与 `docs/task-result-minimal-spec.md` §4 一致）
+### 2.6 Diagnostic events (consistent with `docs/task-result-minimal-spec.md` §4)
 
-M0 **不**新增 `DiagnosticEventKind`。**为什么**：
-- 6 字段是 UI 设置，非 task 生命周期事件
-- 现有的 `taskExecutionResultRead` 也不含 M0 字段
-- 撤销按钮 click 是 UI 行为，不是 task 行为——记诊断会污染审计语义
+M0 adds **no** `DiagnosticEventKind`. **Why**:
+- The 6 fields are UI settings, not task lifecycle events
+- The existing `taskExecutionResultRead` does not contain M0 fields either
+- A click on the revoke button is UI behavior, not task behavior — recording it in diagnostics would pollute the audit semantics
 
-**唯一新增**：撤销按钮触发时**写 1 个新 `DiagnosticEventKind.mobilePermissionRevoked`**（commit 2.x 阶段如果进 M0 实现时可加）。**M0 设计阶段不预判**——留给实现 commit 决定。
+**The only addition**: when the revoke button fires, **write 1 new `DiagnosticEventKind.mobilePermissionRevoked`** (can be added at the commit 2.x stage if M0 implementation begins). **The M0 design stage does not prejudge this** — it is left to the implementation commit.
 
-### 2.7 M0 完成度门槛
+### 2.7 M0 completion bar
 
-| 验证项 | 形式 |
+| Verification item | Form |
 |---|---|
-| 6 字段持久化 | `MobileEntryTests.swift`：SwiftData round-trip |
-| 6 字段默认 false/nil/everyTime | `MobileEntryTests.swift` |
-| 6 字段不进 JSON 备份 | `BackupServiceMobileFieldExclusionTests.swift` |
-| `Sources/BackupService.swift` 静态守卫 | `verify-macos.sh` `mobile_entry_code` 块 |
-| UI Section 可见 + 撤销按钮 | `TermiPadUITests.swift` 新增场景 |
-| 全量 `verify-macos.sh` 绿 | baseline `.verification/<时间戳>/summary.md` |
+| The 6 fields persist | `MobileEntryTests.swift`: SwiftData round-trip |
+| The 6 fields default to false/nil/everyTime | `MobileEntryTests.swift` |
+| The 6 fields stay out of the JSON backup | `BackupServiceMobileFieldExclusionTests.swift` |
+| Static guard on `Sources/BackupService.swift` | `verify-macos.sh` `mobile_entry_code` block |
+| UI section visible + revoke button | New scenario in `TermiPadUITests.swift` |
+| Full `verify-macos.sh` green | baseline `.verification/<timestamp>/summary.md` |
 
-## 3. M1：本地网络配对
+## 3. M1: local network pairing
 
-### 3.1 启动条件（G4 闸门）
+### 3.1 Start condition (gate G4)
 
-`docs/t0-development-preparation-checklist.md` §6 第 1 行 + `docs/product-roadmap.md` §8 G4："原生 iPhone 同网配对在真实两设备上测试通过 — 未开始；受 Apple 设备/签名条件影响。"
+Row 1 of `docs/t0-development-preparation-checklist.md` §6 + G4 in `docs/product-roadmap.md` §8: "native iPhone same-network pairing tested successfully on two real devices — not started; affected by Apple device/signing conditions."
 
-| 闸门 | 含义 | 当前状态（2026-09-06）|
+| Gate | Meaning | Current status (2026-09-06) |
 |---|---|---|
-| 真机安装签名 | 免费 Apple ID（personal team）即可 Xcode 真机调试：每设备 ≤3 app、App ID/设备注册 7 天过期需重签、iPhone 需开启开发者模式；CloudKit/Developer ID/公证/TestFlight 仍是付费专属 | ✅ 解锁（用户已有免费账号；付费会员只在"长期安装/分发/iCloud"时才需要）|
-| 真实 iPhone | 物理 iPhone，iOS 16+，开发者模式已开启 | ⚠️ 用户提供 |
-| 真实 Mac | 当前开发机即可 | ✅ |
-| 局域网 | 同一 Wi-Fi、Bonjour 可发现 | ⚠️ 用户提供 |
+| Real-device install signing | A free Apple ID (personal team) is enough for Xcode real-device debugging: ≤3 apps per device, App ID / device registration expires after 7 days and needs re-signing, and the iPhone needs Developer Mode on; CloudKit / Developer ID / notarization / TestFlight remain paid-only | ✅ Unlocked (the user already has a free account; a paid membership is needed only for "long-term install / distribution / iCloud") |
+| Real iPhone | A physical iPhone, iOS 16+, Developer Mode on | ⚠️ Provided by the user |
+| Real Mac | The current development machine is enough | ✅ |
+| LAN | Same Wi-Fi, discoverable via Bonjour | ⚠️ Provided by the user |
 
-**M0 完成 ≠ M1 可启动**。M0 是 Mac 本地工作，**不**依赖 G4。**M1 设计可以现在写**（commit 2.1）。2026-09-06 起开发验证前提已具备——M1 实现分支 `feature/m1-local-network-pairing` 已启动；**双设备真机验收（G4 完成）仍需用户提供真实 iPhone + 局域网**，未实测前不得宣称 G4 通过。
+**M0 complete ≠ M1 startable**. M0 is local work on the Mac and does **not** depend on G4. **The M1 design can be written now** (commit 2.1). Since 2026-09-06 the development verification premise is in place — the M1 implementation branch `feature/m1-local-network-pairing` has started; **two-device real-device acceptance (G4 complete) still needs the user to provide a real iPhone + LAN**, and G4 must not be declared passed before it is actually tested.
 
-### 3.2 选型：Network framework + Bonjour + 本地 TLS
+### 3.2 Technology choice: Network framework + Bonjour + local TLS
 
-**为什么不是** WebSocket / NFS / iCloud / 第三方推送：
-- WebSocket：**需要服务器**——TermiPad 是不开放公网的本地 app
-- NFS：macOS 文件共享协议，**不是为了 RPC**
-- iCloud：依赖 Apple Developer 账户 + 真实多设备——**和 G4 同样阻塞**
-- 第三方推送（APNs/FCM）：**必须经过 Apple/Google 服务器**——违反红线
+**Why not** WebSocket / NFS / iCloud / third-party push:
+- WebSocket: **needs a server** — TermiPad is a local app that opens nothing to the public internet
+- NFS: a macOS file sharing protocol, **not meant for RPC**
+- iCloud: depends on an Apple Developer account + real multiple devices — **blocked the same way as G4**
+- Third-party push (APNs/FCM): **must go through Apple/Google servers** — violates the red lines
 
-**为什么是** Network framework + Bonjour + 本地 TLS：
-- Network framework 是 macOS 14+ 现代网络 API（替代 BSD sockets）
-- Bonjour（mDNS）**正是**为 LAN 设备发现设计——iPhone 和 Mac 同 Wi-Fi 互找不需要服务器
-- 本地 TLS 1.3 防止同 Wi-Fi 嗅探；自签证书双方首次互验（Mac 显示 fingerprint 让用户在 iPhone 输入）
+**Why** Network framework + Bonjour + local TLS:
+- Network framework is the modern networking API on macOS 14+ (replacing BSD sockets)
+- Bonjour (mDNS) is designed **exactly** for LAN device discovery — an iPhone and a Mac on the same Wi-Fi find each other without a server
+- Local TLS 1.3 prevents sniffing on the same Wi-Fi; self-signed certificates are verified by both sides on first use (the Mac shows the fingerprint for the user to enter on the iPhone)
 
-### 3.3 配对流程
+### 3.3 Pairing flow
 
 ```
-iPhone App (远期)                 Mac (TermiPad)
+iPhone App (future)               Mac (TermiPad)
        │                              │
-       │ 1. 打开 iPhone app, 输入 Mac LAN 主机名 (或扫码)
+       │ 1. Open the iPhone app, enter the Mac's LAN hostname (or scan a code)
        │ ─────────────────────────────────────────────►
        │                              │
-       │                          2. Bonjour 发现 iPhone
-       │                          3. iPhone 发起 TLS 1.3 握手
-       │ ◄─────────── TLS 握手 + 自签证书 ──────────
+       │                          2. Bonjour discovers the iPhone
+       │                          3. The iPhone starts the TLS 1.3 handshake
+       │ ◄─────────── TLS handshake + self-signed certificate ──────────
        │                              │
-       │ 4. iPhone 显示 Mac 提供的 fingerprint (e.g. "AB12:CD34:...")
-       │    用户在 iPhone 输入/确认 fingerprint
-       │ ──────── 已验证 fingerprint (SHA-256) ──────►
+       │ 4. The iPhone shows the fingerprint provided by the Mac (e.g. "AB12:CD34:...")
+       │    The user enters/confirms the fingerprint on the iPhone
+       │ ──────── verified fingerprint (SHA-256) ──────►
        │                              │
-       │                          5. 双方交换：
-       │                          - Mac: 推送公钥 + 短期 nonce
-       │                          - iPhone: 推送公钥 + 短期 nonce
+       │                          5. Both sides exchange:
+       │                          - Mac: pushes its public key + short-lived nonce
+       │                          - iPhone: pushes its public key + short-lived nonce
        │                              │
-       │ 6. 双方各保存对方公钥 + nonce + paired-device ID
+       │ 6. Each side stores the other's public key + nonce + paired-device ID
        │    (Keychain on iPhone, SwiftData + Keychain on Mac)
        │                              │
-       │ 7. 配对完成, iPhone 可以请求"列出工具" + "启动工具"
+       │ 7. Pairing complete; the iPhone can request "list tools" + "launch tool"
        │                              │
        ▼                              ▼
 ```
 
-**关键点**：
-- 配对**只发生一次**——后续通讯用双方公钥 + 短期会话密钥
-- **fingerprint 必须** 由用户在 iPhone 上**人工**确认——这是抗中间人攻击的关键
-- 配对后 iPhone 在 `PairedDevice` 列表里——可**在 Mac 工作台撤销**（**必须**有撤销路径，§7 红线"每个权限可撤销"）
+**Key points**:
+- Pairing **happens only once** — later communication uses both public keys + short-lived session keys
+- The **fingerprint must** be confirmed **by eye** by the user on the iPhone — this is the key to resisting man-in-the-middle attacks
+- After pairing the iPhone is in the `PairedDevice` list — it can be **revoked in the Mac workbench** (there **must** be a revocation path, §7 red line "every permission is revocable")
 
-### 3.3.1 会话复用协议（2026-09-06 增补，G4 #4-6 的前置）
+### 3.3.1 Session resume protocol (added 2026-09-06, prerequisite for G4 #4-6)
 
-配对码是一次性的、连接在配对后即断开——重连的已配对手机必须能被 Mac 认出，且无需用户再输码。
+The pairing code is one-off and the connection drops right after pairing — a reconnecting paired phone must be recognizable by the Mac without the user entering a code again.
 
-**手机端持久化**（配对完成时写入 iOS Keychain，复用 `KeychainStore` 同一 service 域）：
-- 自身 X25519 私钥（长期身份，替代首版"每次配对临时生成"）
-- Mac 公钥 + Mac 指纹（信任锚点 = 初次配对时人工比对过的那串）
-- `deviceID`（Mac ack 下发）
+**Persisted on the phone** (written to the iOS Keychain when pairing completes, reusing the same `KeychainStore` service domain):
+- Its own X25519 private key (long-term identity, replacing the first version's "generated temporarily for each pairing")
+- The Mac public key + Mac fingerprint (trust anchor = the string compared by eye at first pairing)
+- `deviceID` (issued in the Mac's ack)
 
-**复用握手**（区别于 §3.3 配对握手：Mac 仍先发 `MacHello`，手机按本地是否有凭据分流）：
-1. 手机连接后发 `PhoneResumeHello { protocolVersion, deviceID, phonePublicKey, phoneNonce }`（无 pairingCode 字段——Mac 按字段存在性区分 pairing/resume 两种 hello）
-2. Mac 验证：版本钉死；按 `deviceID` 查活跃设备；`SHA256(phonePublicKey) == record.publicKeyHash`——公钥被换即拒绝
-3. 双方各派生会话密钥：ECDH + HKDF-SHA256（salt = macNonce ‖ phoneNonce，info = `termipad-m1-resume-v1`，与配对派生不同 info 域）
-4. Mac 回**明文** `MacResumeHello { protocolVersion, macPublicKey, macNonce }`（公钥与 nonce 非机密）；手机验证 `SHA256(macPublicKey) == 存储的 Mac 指纹` 后才接受——**双向绑定缺一不可**
-5. 之后所有帧 AEAD 加密
+**Resume handshake** (unlike the §3.3 pairing handshake: the Mac still sends `MacHello` first, and the phone branches on whether it has local credentials):
+1. After connecting, the phone sends `PhoneResumeHello { protocolVersion, deviceID, phonePublicKey, phoneNonce }` (no pairingCode field — the Mac tells the pairing/resume hellos apart by which fields exist)
+2. The Mac verifies: pinned version; looks up the active device by `deviceID`; `SHA256(phonePublicKey) == record.publicKeyHash` — a changed public key is rejected
+3. Each side derives the session key: ECDH + HKDF-SHA256 (salt = macNonce ‖ phoneNonce, info = `termipad-m1-resume-v1`, a different info domain from the pairing derivation)
+4. The Mac replies with a **plaintext** `MacResumeHello { protocolVersion, macPublicKey, macNonce }` (public key and nonce are not secret); the phone accepts only after verifying `SHA256(macPublicKey) == the stored Mac fingerprint` — **both directions of the binding are required**
+5. All later frames are AEAD-encrypted
 
-**请求通道**（G4 #4-6）：每连接一请求一响应，响应即断开（无长连接、无服务端状态）：
-- `listTools` → `[MobileToolSummary]`（仅 `showInMobileEntry == true` 的工具，4 字段白名单不变）
-- `requestLaunch` → Mac 按 `mobileLocalConfirmPolicy` 本地确认后经既有终端启动路径执行
-- 白名单外操作一律拒绝并断开
+**Request channel** (G4 #4-6): one request and one response per connection, disconnecting after the response (no long-lived connection, no server-side state):
+- `listTools` → `[MobileToolSummary]` (only tools with `showInMobileEntry == true`; the 4-field allowlist is unchanged)
+- `requestLaunch` → after local confirmation per `mobileLocalConfirmPolicy`, the Mac runs it through the existing terminal launch path
+- Operations outside the allowlist are always rejected and disconnected
 
-### 3.3.2 requestLaunch 启动请求（2026-09-07 增补，G4 #5）
+### 3.3.2 requestLaunch launch request (added 2026-09-07, G4 #5)
 
-**手机侧**：工具卡点击 → 发 `requestLaunch { toolID }`（加密 resume 通道，与 listTools 同一握手）→ 收到三种结果之一：`accepted`（Mac 用户已确认并交给终端）/ `pendingLocalConfirm`（等待 Mac 用户在 Mac 上确认——手机显示"请在 Mac 上确认"）/ `rejected`（工具未开启 `allowMobileLaunchRequest`，或策略拒绝）。
+**Phone side**: tap a tool card → send `requestLaunch { toolID }` (encrypted resume channel, the same handshake as listTools) → receive one of three results: `accepted` (the Mac user confirmed and it was handed to the terminal) / `pendingLocalConfirm` (waiting for the Mac user to confirm on the Mac — the phone shows "please confirm on the Mac") / `rejected` (the tool does not have `allowMobileLaunchRequest` on, or the policy rejected it).
 
-**Mac 侧执行链**（顺序不可交换）：
-1. **资格预检**（MainActor 读 SwiftData）：`showInMobileEntry == true` **且** `allowMobileLaunchRequest == true` **且** `revokeMobilePermissionAt == nil`——任一不满足即 `rejected`，不弹任何确认框
-2. **本地确认**（按 `mobileLocalConfirmPolicy`）：
-   - `.everyTime`（默认）：每次都弹确认
-   - `.perSession` / `.lowRiskSessionOnly`：M1 阶段**一律降级为 everyTime**——会话缓存是后续优化，先收口到最严格
+**Mac-side execution chain** (the order cannot be swapped):
+1. **Eligibility pre-check** (the MainActor reads SwiftData): `showInMobileEntry == true` **and** `allowMobileLaunchRequest == true` **and** `revokeMobilePermissionAt == nil` — if any fails, `rejected`, with no confirmation prompt shown
+2. **Local confirmation** (per `mobileLocalConfirmPolicy`):
+   - `.everyTime` (default): prompt for confirmation every time
+   - `.perSession` / `.lowRiskSessionOnly`: in the M1 stage **always downgraded to everyTime** — session caching is a later optimization; converge on the strictest first
 
-**perSession/lowRisk 启用语义（2026-09-08 增补，M1.1 批次）**：G4 #5 全链通过后放开降级，真实行为如下——
-- **会话定义**：Mac 主进程内存中的一条白名单记录（`[toolID: Date]`），**不落盘、不进备份**。每次本机确认通过即写入；重启 Mac/重开配对监听即清空——确认缓存的生命周期绝不超出 Mac 进程生命周期。
-- **`.perSession`**：白名单命中且距上次确认 ≤5 分钟 → 免确认直启；否则走 everyTime 弹窗，确认后刷新时间戳。
-- **`.lowRiskSessionOnly`**：在 perSession 基础上叠加任务风险门——仅 `TemplateRisk` 判定为低风险（无模板变量、无 shell 元字符——资格预检第 4 条已保证无变量）的工具可免确认；其余一律 everyTime。
-- **超时撤销**：白名单超过 5 分钟未刷新即失效；Mac 端撤销工具手机权限（`revokeMobilePermissionAt != nil`）立即从白名单移除。
-- **诊断**：免确认直启记一次固定枚举审计事件 `mobileLaunchAutoConfirmed`（仅时间戳与终端目标，**无**工具名/设备名——`DiagnosticEventKind` 隐私纪律禁止存工具名），与 `launchSucceeded` 并读即知"哪些启动跳过了确认"（时间戳对齐）。
-- **红线不变**：免确认 ≠ 无人值守常开。Mac 必须开着配对监听（默认关闭）且在 5 分钟会话窗内；用户随时把策略切回 everyTime 或关监听即收回。
-3. **确认 UI**：macOS alert（工具名 + "来自已配对设备 <设备名> 的启动请求"），用户点"启动"才继续；alert 60 秒无响应视为拒绝（防无人值守 Mac 上请求悬挂）
-4. **执行**：确认后经既有 `TerminalLauncher` 交给用户所选终端——**不**新增执行路径，命令永远来自 Mac 已保存的 `commandTemplate`
-5. **响应**：启动交接完成即回 `accepted`；用户点拒绝或超时回 `rejected`
+**perSession/lowRisk enablement semantics (added 2026-09-08, M1.1 batch)**: after the full G4 #5 chain passed, the downgrade is lifted, and the real behavior is —
+- **Session definition**: an allowlist record in the Mac main process's memory (`[toolID: Date]`), **never written to disk or backups**. It is written on every successful local confirmation; restarting the Mac / reopening the pairing listener clears it — the lifetime of the confirmation cache never exceeds the Mac process's lifetime.
+- **`.perSession`**: allowlist hit and ≤5 minutes since the last confirmation → launch directly without confirmation; otherwise take the everyTime prompt, and refresh the timestamp after confirming.
+- **`.lowRiskSessionOnly`**: adds a task risk gate on top of perSession — only tools that `TemplateRisk` judges low-risk (no template variables, no shell metacharacters — item 4 of the eligibility pre-check already guarantees no variables) can skip confirmation; everything else is everyTime.
+- **Timeout revocation**: the allowlist entry expires if not refreshed for more than 5 minutes; revoking a tool's mobile permission on the Mac (`revokeMobilePermissionAt != nil`) removes it from the allowlist immediately.
+- **Diagnostics**: a direct launch without confirmation records one fixed-enum audit event `mobileLaunchAutoConfirmed` (timestamp and terminal target only, **no** tool name / device name — the `DiagnosticEventKind` privacy discipline forbids storing tool names); reading it together with `launchSucceeded` shows "which launches skipped confirmation" (aligned by timestamp).
+- **Red line unchanged**: no confirmation ≠ unattended and always on. The Mac must have the pairing listener on (off by default) and be within the 5-minute session window; the user can withdraw it at any time by switching the policy back to everyTime or turning the listener off.
+3. **Confirmation UI**: a macOS alert (tool name + "launch request from paired device <device name>"); it continues only when the user clicks "Launch"; no response to the alert within 60 seconds counts as a denial (prevents requests from hanging on an unattended Mac)
+4. **Execution**: after confirmation it is handed to the user's chosen terminal through the existing `TerminalLauncher` — **no** new execution path is added, and the command always comes from the `commandTemplate` saved on the Mac
+5. **Response**: return `accepted` as soon as the launch handoff completes; return `rejected` if the user clicks deny or it times out
 
-**红线**：手机端永不收到命令正文/路径/变量/终端输出——只有三种结果枚举。Mac 无人在场（alert 超时）= 拒绝，这是"Mac 始终是唯一执行权威"的直接体现。
+**Red line**: the phone never receives the command body / paths / variables / terminal output — only the three result enums. Nobody at the Mac (alert timeout) = denied, which is the direct expression of "the Mac is always the sole execution authority".
 
-**撤销语义**：Mac 撤销设备后，其 `PhoneResumeHello` 在第 2 步被拒（记录 revokedAt 非空即不在活跃集合）——撤销立即对复用生效。
+**Revocation semantics**: after the Mac revokes a device, its `PhoneResumeHello` is rejected at step 2 (a record with non-nil revokedAt is not in the active set) — revocation takes effect on resume immediately.
 
-### 3.4 M1 数据模型（2026-09-06 修订）
+### 3.4 M1 data model (revised 2026-09-06)
 
-`PairedDevice` **不再**建 SwiftData 实体——设备记录与配对身份**只存 Keychain**。理由：(a) Keychain 天然不进 JSON 备份，直接满足 §2.5 契约，免去新增备份排除守卫；(b) 公钥指纹与设备身份属于凭据域，与 API Key 同级；(c) 实现为 `Sources/PairedDeviceStore.swift`（`PairedDeviceRecord: Codable` + Keychain 索引账号），存储后端可注入，测试用内存实现不打真实 SecItem（与 `KeychainStoreTests` 纪律一致）。
+`PairedDevice` is **no longer** a SwiftData entity — device records and the pairing identity are **stored only in the Keychain**. Reasons: (a) the Keychain naturally stays out of JSON backups, directly satisfying the §2.5 contract without adding a new backup exclusion guard; (b) public-key fingerprints and device identity belong to the credential domain, on the same level as the API key; (c) it is implemented as `Sources/PairedDeviceStore.swift` (`PairedDeviceRecord: Codable` + a Keychain index account), with an injectable storage backend, so tests use an in-memory implementation and never hit the real SecItem (consistent with the `KeychainStoreTests` discipline).
 
 ```swift
 struct PairedDeviceRecord: Codable, Sendable, Equatable {
     let id: UUID
-    let displayName: String           // iPhone 配对时填的
-    let publicKeyHash: String         // 配对时 iPhone 公钥的 SHA-256 指纹
+    let displayName: String           // entered on the iPhone at pairing
+    let publicKeyHash: String         // SHA-256 fingerprint of the iPhone public key at pairing
     let pairedAt: Date
     var lastConnectedAt: Date?
-    var revokedAt: Date?              // 撤销时间戳
+    var revokedAt: Date?              // revocation timestamp
 }
 
 enum PairedDeviceOperation: String, Codable {
-    case listTools                // 列出 showInMobileEntry=true 的工具
-    case requestLaunch            // 对 allowMobileLaunchRequest=true 发起启动
-    case listScopes               // 列出 task scope (TaskProjectScope.displayName + availability)
-    case listFixedTasks           // 列出 FixedTaskCatalog.definitions
-    case requestTaskProposal      // 发起 task proposal (需本地确认)
-    case getTaskStatus            // 读 task 状态
-    case cancelTask               // 取消未启动 task
-    case heartbeat                // 30s 一次
+    case listTools                // list tools with showInMobileEntry=true
+    case requestLaunch            // request a launch for allowMobileLaunchRequest=true
+    case listScopes               // list task scopes (TaskProjectScope.displayName + availability)
+    case listFixedTasks           // list FixedTaskCatalog.definitions
+    case requestTaskProposal      // submit a task proposal (needs local confirmation)
+    case getTaskStatus            // read task status
+    case cancelTask               // cancel a task that has not started
+    case heartbeat                // once every 30s
 }
 ```
 
-**8 个 case 是 M1 引入的操作白名单——任何 iPhone 请求必须 match 这个 enum，否则拒绝**。这与 `Sources/TaskMCPBridge.swift` 的 `LocalMCPBridgeOperation` 受限 case 设计一致。
+**The 8 cases are the operation allowlist introduced by M1 — every iPhone request must match this enum, otherwise it is rejected**. This is consistent with the restricted case design of `LocalMCPBridgeOperation` in `Sources/TaskMCPBridge.swift`.
 
-### 3.5 验证 M1
+### 3.5 Verifying M1
 
-M1 的验证**不能**在 Mac 端单边完成——必须有真机 iPhone：
+M1 verification **cannot** be completed on the Mac side alone — a real iPhone is required:
 
-| 验证项 | 形式 | 闸门 |
+| Verification item | Form | Gate |
 |---|---|---|
-| Bonjour 发现 | 同一 LAN iPhone + Mac 互发现 | G4（真机）|
-| TLS 握手 | fingerprint 互验 | G4 |
-| 配对成功 | `PairedDevice` 持久化 | G4 |
-| 撤销路径 | 用户在 Mac 工作台撤销 → iPhone 立即无响应 | G4 |
-| 启动请求 | iPhone 点图标 → Mac 工作台弹确认 → 用户确认 → `TerminalLauncher.launch` | G4 + `mobileLocalConfirmPolicy` |
+| Bonjour discovery | iPhone + Mac on the same LAN discover each other | G4 (real device) |
+| TLS handshake | mutual fingerprint verification | G4 |
+| Pairing succeeds | `PairedDevice` is persisted | G4 |
+| Revocation path | The user revokes in the Mac workbench → the iPhone gets no response immediately | G4 |
+| Launch request | Tap an icon on the iPhone → the Mac workbench prompts for confirmation → the user confirms → `TerminalLauncher.launch` | G4 + `mobileLocalConfirmPolicy` |
 
-**M1 实施必须在 G4 闸门具备后**——`docs/post-takeover-plan.md`（commit 2.2）会显式列出 G4 状态。双设备验收的操作步骤与证据要求见 `docs/m1-g4-verification-guide.md`。
+**M1 must be implemented only after gate G4 is in place** — `docs/post-takeover-plan.md` (commit 2.2) lists the G4 status explicitly. The steps and evidence requirements for two-device acceptance are in `docs/m1-g4-verification-guide.md`.
 
-## 4. M0 vs M1 实现路径
+## 4. M0 vs M1 implementation paths
 
-| 阶段 | 工作 | 分支 | 预计 commit | 阻塞 |
+| Stage | Work | Branch | Expected commits | Blocker |
 |---|---|---|---|---|
-| M0 设计 | 本文 (commit 2.1) | `feature/m0-m1-design` | 1 | 无 |
-| M0 实现 | 数据模型 + 枚举 + 工具编辑 UI + 备份守卫 + 单测 + UI 测试 | `feature/m0-mobile-entry-prototype` | 3-5 | 无（**不依赖 G4**）|
-| M1 设计 | 选型 (Network/Bonjour/TLS) + 配对流程 + 数据模型 + 验证方案 | `feature/m0-m1-design`（本文档 §3）| 1 | 无 |
-| M1 实现 | 配对核心 + 监听器 + PairedDeviceStore + iPhone app | `feature/m1-local-network-pairing`（2026-09-06 启动）| 5-10 | 开发验证无阻塞（免费 personal team 签名）；双设备实测待 iPhone + 局域网 |
-| M2 设计 + 实现 | 出站长连接 + 会话模型 | `feature/m2-remote-secure-session` | 10+ | **G5 闸门** |
+| M0 design | This document (commit 2.1) | `feature/m0-m1-design` | 1 | None |
+| M0 implementation | Data model + enum + tool edit UI + backup guard + unit tests + UI tests | `feature/m0-mobile-entry-prototype` | 3-5 | None (**does not depend on G4**) |
+| M1 design | Technology choice (Network/Bonjour/TLS) + pairing flow + data model + verification plan | `feature/m0-m1-design` (§3 of this document) | 1 | None |
+| M1 implementation | Pairing core + listener + PairedDeviceStore + iPhone app | `feature/m1-local-network-pairing` (started 2026-09-06) | 5-10 | Development verification is unblocked (free personal team signing); two-device testing awaits an iPhone + LAN |
+| M2 design + implementation | Outbound long-lived connection + session model | `feature/m2-remote-secure-session` | 10+ | **Gate G5** |
 
-## 5. 与原方案 §4 已补强材料的关系
+## 5. Relationship to the hardened materials of §4 in the original plan
 
-M0 启动依赖**已完成的**阶段 1 全部 commit：
+Starting M0 depends on **all completed** stage 1 commits:
 
-| 阶段 1 commit | M0 依赖 |
+| Stage 1 commit | What M0 depends on |
 |---|---|
-| §4.1 数据字典 (`docs/task-intent-data-dictionary.md`) | 6 字段作为 §6 "TerminalTool 字段表" 的扩展，文档同步更新 |
-| §4.4 最小结果规范 (`docs/task-result-minimal-spec.md`) | M0 6 字段不进入 T2 MCP 回传白名单；新增守卫保证 |
-| §4.5 迁移与备份决定 (commit `6b931c4`) | M0 6 字段不进入 JSON 备份——新守卫的扩展基线 |
+| §4.1 data dictionary (`docs/task-intent-data-dictionary.md`) | The 6 fields extend the §6 "TerminalTool field table"; the document is updated in step |
+| §4.4 minimal result spec (`docs/task-result-minimal-spec.md`) | The 6 M0 fields do not enter the T2 MCP return allowlist; a new guard ensures it |
+| §4.5 migration and backup decision (commit `6b931c4`) | The 6 M0 fields do not enter the JSON backup — the baseline the new guard extends |
 
-**M0 实现 commit 应**：
-1. 在 `Sources/TerminalTool.swift` 加 6 字段
-2. 在 `docs/task-intent-data-dictionary.md` §6 "TerminalTool 字段表" 加 6 行
-3. 在 `docs/task-result-minimal-spec.md` §4 审计 event 表加 1 行（撤销按钮 event）
-4. 在 `scripts/verify-macos.sh` 新增 `mobile_entry_code` 块
-5. 新增 `Tests/TermiPadTests/MobileEntryTests.swift` + `BackupServiceMobileFieldExclusionTests.swift`
-6. 新增 1 个 UI 场景（打开工具编辑面板 + 看到手机入口 section）
+**The M0 implementation commits should**:
+1. Add the 6 fields to `Sources/TerminalTool.swift`
+2. Add 6 rows to the "TerminalTool field table" in `docs/task-intent-data-dictionary.md` §6
+3. Add 1 row (the revoke button event) to the audit event table in `docs/task-result-minimal-spec.md` §4
+4. Add the `mobile_entry_code` block to `scripts/verify-macos.sh`
+5. Add `Tests/TermiPadTests/MobileEntryTests.swift` + `BackupServiceMobileFieldExclusionTests.swift`
+6. Add 1 UI scenario (open the tool edit panel + see the Mobile Entry section)
 
-## 6. G4 闸门现状（2026-09-06 更新）
+## 6. Status of gate G4 (updated 2026-09-06)
 
-**开发验证前提已具备；双设备实测未开始——G4 仍未通过。**
+**The development verification premise is in place; two-device testing has not started — G4 has still not passed.**
 
-| G4 组成 | 状态 |
+| G4 component | Status |
 |---|---|
-| 真机安装签名 | ✅ 免费 Apple ID（personal team）：Xcode 真机调试可用，限额 3 app/设备、App ID/设备注册 7 天过期、10 App ID/周、3 台设备；iPhone 需开启开发者模式 |
-| 真实 iPhone | ⚠️ 待用户提供 |
-| 局域网 | ⚠️ 待用户提供 |
-| 双设备 Bonjour/TLS/配对/撤销实测 | ❌ 未开始——完成前不得宣称 G4 通过 |
+| Real-device install signing | ✅ Free Apple ID (personal team): Xcode real-device debugging works, with limits of 3 apps/device, App ID / device registration expiring after 7 days, 10 App IDs/week, and 3 devices; the iPhone needs Developer Mode on |
+| Real iPhone | ⚠️ To be provided by the user |
+| LAN | ⚠️ To be provided by the user |
+| Two-device Bonjour/TLS/pairing/revocation testing | ❌ Not started — G4 must not be declared passed before it is done |
 
-**免费账号的边界**：只支撑开发验证。手机端 app 每 7 天必须回 Mac 重签一次，不能当长期工具用；TestFlight、长期安装、Developer ID 外部分发、iCloud 仍是付费会员专属。
+**Limits of the free account**: it only supports development verification. The phone app must be re-signed from the Mac every 7 days and cannot be used as a long-term tool; TestFlight, long-term install, Developer ID external distribution, and iCloud remain paid-membership-only.
 
-**M1 启动决策树（已执行）**：
-- ✅ 开发验证前提具备 → `feature/m1-local-network-pairing` 分支已启动，按 §3.2–§3.4 实现
-- ⚠️ 双设备实测 → 等 iPhone + 局域网，按 §3.5 执行；结果记入 `docs/post-takeover-plan.md` 与 `product-roadmap.md` §8
+**M1 start decision tree (executed)**:
+- ✅ Development verification premise in place → the `feature/m1-local-network-pairing` branch has started, implementing §3.2–§3.4
+- ⚠️ Two-device testing → wait for an iPhone + LAN and run §3.5; record the results in `docs/post-takeover-plan.md` and `product-roadmap.md` §8
 
-## 7. 红线再次确认
+## 7. Red lines confirmed again
 
-任何 M0/M1 实现**必须**满足 `docs/product-roadmap.md` §7：
+Every M0/M1 implementation **must** satisfy `docs/product-roadmap.md` §7:
 
-| 红线 | M0/M1 实现如何满足 |
+| Red line | How the M0/M1 implementation satisfies it |
 |---|---|
-| Mac 不开放公网终端 | M1 用 Bonjour 局域网发现，**不**监听公网端口 |
-| 无任意远程 Shell | PairedDeviceOperation enum 5 个 case 固定白名单 |
-| 命令不可被 AI 改写 | iPhone 只能从 `showInMobileEntry=true` 的工具发起启动，命令是 Mac 已保存的 `commandTemplate` |
-| 最小数据回传 | iPhone 收到的 `listTools` 响应**不**含命令/路径/变量——只含 `id` / `mobileDisplayName` / `mobileDescription` / 图标标识 |
-| 每个权限可撤销 | `PairedDevice.revokedAt` + `TerminalTool.revokeMobilePermissionAt` 双重撤销 |
-| 本地优先 | 所有数据存 Mac SwiftData，6 字段不外发 |
-| 不替代专业远程终端 | iPhone 只能"启动"已有工具，**不**能输入任意命令 |
+| The Mac opens no public terminal | M1 uses Bonjour LAN discovery and does **not** listen on a public port |
+| No arbitrary remote shell | The PairedDeviceOperation enum is a fixed allowlist of 5 cases |
+| Commands cannot be rewritten by AI | The iPhone can only request launches of tools with `showInMobileEntry=true`, and the command is the `commandTemplate` saved on the Mac |
+| Minimal data return | The `listTools` response the iPhone receives contains **no** commands/paths/variables — only `id` / `mobileDisplayName` / `mobileDescription` / an icon identifier |
+| Every permission is revocable | Double revocation via `PairedDevice.revokedAt` + `TerminalTool.revokeMobilePermissionAt` |
+| Local-first | All data is stored in the Mac's SwiftData; the 6 fields are never sent out |
+| Not a replacement for professional remote terminals | The iPhone can only "launch" existing tools and **cannot** enter arbitrary commands |
 
-## 8. 维护规则
+## 8. Maintenance rules
 
-- 任何 M0 实现 commit 必须**同步更新** §5 列出的 5 份材料
-- 任何 M1 启动 commit 必须先在 `docs/post-takeover-plan.md`（commit 2.2）确认 G4 闸门状态
-- 任何后续发现 G4 闸门不具备的 commit，**先**在本文 §6 更新，**后**写代码
+- Any M0 implementation commit must **update in step** the 5 materials listed in §5
+- Any commit starting M1 must first confirm the status of gate G4 in `docs/post-takeover-plan.md` (commit 2.2)
+- Any later commit that finds gate G4 is not in place must update §6 of this document **first** and write code **afterwards**

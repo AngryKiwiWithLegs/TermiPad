@@ -1,12 +1,12 @@
 import Foundation
 
-/// GitHub 服务：仅在官方映射或高置信名称匹配时补充仓库与 README。
-/// 低置信搜索结果不会自动写入工具，避免把无关仓库的命令或品牌信息带入本地工具库。
+/// GitHub service: adds repository and README information only for an official mapping or a high-confidence name match.
+/// Low-confidence search results are never written to a tool automatically, so commands or branding from unrelated repositories cannot enter the local library.
 enum GitHubService {
     private static let baseURL = "https://api.github.com"
     private static let minimumAutomaticMatchScore = 80
 
-    /// 常见 CLI 的官方仓库映射。仅用于名称本身存在公认别名的工具；其余名称仍走保守匹配。
+    /// Official repository mapping for common CLIs. Used only for tools whose names have well-known aliases; all other names still go through conservative matching.
     private static let officialRepositoryByToolName: [String: String] = [
         "aider": "Aider-AI/aider",
         "bat": "sharkdp/bat",
@@ -36,7 +36,7 @@ enum GitHubService {
         let matchConfidence: Int
     }
 
-    /// 根据工具名称定位仓库。优先使用官方映射；通用搜索仅接受名称分数足够高的非归档仓库。
+    /// Locate the repository by tool name. The official mapping takes priority; general search only accepts non-archived repositories with a high enough name score.
     static func findRepository(for toolName: String) async throws -> RepositoryInfo? {
         let normalizedToolName = normalizeToolName(toolName)
         guard !normalizedToolName.isEmpty else { return nil }
@@ -78,7 +78,7 @@ enum GitHubService {
         )
     }
 
-    /// 供单元测试验证的保守匹配规则。只有仓库名直接等于工具名或明显以工具名为前缀时才允许自动补充。
+    /// Conservative matching rule verified by unit tests. Automatic enrichment is allowed only when the repository name equals the tool name or clearly starts with it.
     static func matchScore(toolName: String, repository: GitHubRepoItem) -> Int {
         guard !repository.isArchived else { return Int.min }
         let normalizedToolName = normalizeToolName(toolName)

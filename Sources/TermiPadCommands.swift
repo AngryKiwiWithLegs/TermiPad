@@ -1,10 +1,10 @@
 import SwiftUI
 
 struct TermiPadMenuCommands: Commands {
-    @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.simplifiedChinese.rawValue
+    @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.defaultLanguage.rawValue
 
     private var language: AppLanguage {
-        AppLanguage(rawValue: languageRawValue) ?? .simplifiedChinese
+        AppLanguage(rawValue: languageRawValue) ?? .defaultLanguage
     }
 
     var body: some Commands {
@@ -40,10 +40,10 @@ struct TermiPadMenuCommands: Commands {
 }
 
 struct TermiPadMenuBarExtra: Scene {
-    @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.simplifiedChinese.rawValue
+    @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.defaultLanguage.rawValue
 
     private var language: AppLanguage {
-        AppLanguage(rawValue: languageRawValue) ?? .simplifiedChinese
+        AppLanguage(rawValue: languageRawValue) ?? .defaultLanguage
     }
 
     var body: some Scene {

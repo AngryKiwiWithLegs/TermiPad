@@ -1,11 +1,19 @@
 import SwiftUI
 
-/// 应用内语言：不依赖系统语言切换，修改后立即刷新当前界面。
+/// In-app language: switches independently of the system language and refreshes the current UI immediately after a change.
 enum AppLanguage: String, CaseIterable, Identifiable {
     case simplifiedChinese = "zh-Hans"
     case english = "en"
 
     var id: String { rawValue }
+
+    /// Language used until the user picks one in Settings.
+    static let defaultLanguage: AppLanguage = .english
+
+    /// The language currently selected in Settings, for code paths outside SwiftUI views.
+    static var current: AppLanguage {
+        AppLanguage(rawValue: UserDefaults.standard.string(forKey: "TermiPad.language") ?? "") ?? defaultLanguage
+    }
 
     var displayName: String {
         switch self {
@@ -22,7 +30,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     }
 }
 
-/// 遵循 macOS 的三档外观选择。
+/// Follows macOS's three appearance options.
 enum AppAppearance: String, CaseIterable, Identifiable {
     case system
     case light
@@ -58,13 +66,13 @@ enum AppAppearance: String, CaseIterable, Identifiable {
     }
 }
 
-/// 将常用界面词汇集中管理。领域数据（工具名、命令、README 说明）保持原样，不被翻译。
+/// Central place for common UI vocabulary. Domain data (tool names, commands, README text) is left as is and never translated.
 enum AppCopy {
     static func text(_ key: String, language: AppLanguage) -> String {
         let chinese: [String: String] = [
             "allTools": "所有工具", "inbox": "候选收件箱", "favorites": "收藏", "recent": "最近使用", "hidden": "已隐藏", "categories": "分类", "toolLibrary": "工具库", "settings": "设置",
             "discover": "发现工具", "discovering": "正在发现", "addTool": "手动添加", "searchTools": "搜索工具", "searchCandidates": "筛选候选工具", "toolsMenu": "工具", "openLibrary": "打开工具库", "showFavorites": "显示收藏", "showRecent": "显示最近使用", "discoverySection": "发现预览", "discoveryPreview": "项目发现预览", "enableDiscoveryPreview": "启用发现预览", "refreshDiscovery": "手动刷新", "discoveryDisabledDescription": "默认关闭。启用后，TermiPad 仍只会在您点击“手动刷新”时读取 GitHub 的公开仓库元数据。", "discoveryEmptyDescription": "尚无本地发现缓存。手动刷新会读取固定的公开 CLI 仓库查询；不会上传工具、命令、路径或 API Key。", "discoveryPreviewHint": "按公开仓库字段进行本地可解释排序，不是 GitHub 官方热门榜，也不是安全评级。", "discoveryNoInstallHint": "此预览只供浏览；不会安装软件、生成命令或将项目加入工具库。", "discoveryResults": "公开项目候选", "discoveryIncomplete": "GitHub 标记本轮搜索结果可能不完整；请不要将当前排序视为完整榜单。", "discoveryRefreshed": "发现缓存已手动更新。", "discoveryCacheCurrent": "GitHub 返回未修改结果；正在使用当前本地缓存。", "discoveryFailed": "无法刷新项目发现。请检查网络后稍后手动重试。", "discoveryNoSummary": "仓库未提供公开简介。", "discoveryNoLicense": "未提供许可信息", "openRepository": "打开仓库", "clearDiscoveryCache": "清除本地发现缓存", "discoverySettingsHint": "默认关闭。启用只允许您在“项目发现预览”中手动刷新公开 GitHub 元数据；不会自动联网，缓存也不会进入工具库、备份或诊断包。", "installAndEnvironment": "安装审查与环境报告", "environmentReport": "只读环境报告", "environmentReportHint": "仅在您点击检查时，TermiPad 才会对固定的本机包管理器路径运行 `--version`。不会使用 shell、联网、安装、升级、卸载或保存路径/结果。", "checkEnvironment": "检查本机环境", "environmentReportResults": "当前环境", "installReview": "受控安装审查", "installReviewHint": "只展示随应用发布、已审核的 Homebrew core formula 计划。网络项目、README 和 AI 均不能生成或修改安装命令。", "reviewedInstallPlans": "已审核安装计划", "reviewInstallPlan": "查看安装计划", "installResultNotCollected": "即使您选择把计划交给终端，TermiPad 也不会在应用内执行安装、等待结果或自动将任何内容加入工具库。安装后请自行扫描并在候选收件箱确认。", "installChannel": "安装渠道", "expectedExecutables": "预期 CLI", "catalogRevision": "目录审核修订", "catalogAuditedAt": "审核日期", "installCommandPreview": "完整命令预览", "installReviewAcknowledgement": "我已审查完整命令、渠道、仓库与影响说明", "installExplicitConsent": "只有在此窗口中明确选择“复制”或“发送到终端”后，固定命令才会离开 TermiPad。请先检查命令、渠道和仓库。", "installRequiresHomebrewCheck": "如要发送到终端，请先手动运行本页的环境检查，并确认已在受控路径中检测到 Homebrew。", "copyInstallPlan": "复制安装计划", "sendInstallPlan": "发送到 %@", "installHandoffFailed": "无法将安装计划交给所选终端。请改用“仅复制命令”或检查终端权限。",
-            // M0 移动端入口：详见 docs/m0-m1-mobile-entry-design.md §2.4
+            // M0 mobile entry: see docs/m0-m1-mobile-entry-design.md §2.4
             "mobileEntrySection": "手机入口", "mobileEntryHint": "每个字段默认关闭。仅在确认要在手机端使用此工具时才打开。",
             "mobileEntryDisplayName": "手机显示名", "mobileEntryDisplayNameHint": "可选；用手机显示的短标签，覆盖本地工具名。",
             "mobileEntryDescription": "手机说明", "mobileEntryDescriptionHint": "一行用途说明。绝不含命令、路径、变量值。",
@@ -74,7 +82,7 @@ enum AppCopy {
             "mobileEntryConfirmPolicyPerSession": "5 分钟会话内确认一次",
             "mobileEntryConfirmPolicyLowRiskSessionOnly": "按会话确认，仅限低风险任务",
             "mobileEntryRevoke": "撤销手机权限", "mobileEntryRevokeConfirm": "确认撤销此工具的手机权限？手机端将不再能看到或启动它。", "mobileEntryRevokedNotice": "已撤销手机权限。",
-            // i18n sweep 1: 3 处 M0-与 4.x-期间 新加的硬编码英文
+            // i18n sweep 1: 3 hard-coded English strings added during M0 and 4.x
             "discoverStarCount": "★ %@",
             "sidebarTaskWorkbench": "本地任务工作台",
             "onboardingGetStarted": "开始使用",
@@ -100,7 +108,7 @@ enum AppCopy {
             "variableSecurityHint": "参数会以 shell 安全转义方式写入本次命令，并保存在本机以便下次使用。",
             "editVariableHint": "可使用 `{{variable_name}}` 创建首次启动填写项。",
             "warpCopied": "已打开 Warp，并将命令复制到剪贴板。", "copied": "完整命令已复制到剪贴板。", "terminalLaunched": "已在 Terminal 中执行命令。", "itermLaunched": "已在 iTerm 中输入命令。",
-            // M1 同网配对（docs/m0-m1-mobile-entry-design.md §3.3-§3.4 + §6 G4）
+            // M1 local network pairing (docs/m0-m1-mobile-entry-design.md §3.3-§3.4 + §6 G4)
             "mobileCompanion": "手机伴侣（M1）", "mobileCompanionHint": "默认关闭。启用后，TermiPad 会在本机监听来自手机端 app 的同网配对请求；不开放公网端口，不向手机返回命令、路径或变量值。",
             "mobileCompanionEnable": "启用同网配对", "mobileCompanionDisable": "停止配对",
             "mobileCompanionPairingCode": "配对码", "mobileCompanionFingerprint": "本机指纹（与手机端人工比对）",
@@ -108,14 +116,14 @@ enum AppCopy {
             "mobileCompanionListening": "正在配对模式", "mobileCompanionOff": "未启动", "mobileCompanionFailed": "配对服务错误：%@",
             "mobileLaunchPromptTitle": "手机启动请求", "mobileLaunchPromptBody": "已配对设备请求启动工具「%@」。仅在你本机确认后才会交给终端。",
             "mobileLaunchPromptAccept": "启动", "mobileLaunchPromptDeny": "拒绝",
-            // M2a 异地隧道（docs/m2-secure-remote-session-design.md）
+            // M2a remote tunnel (docs/m2-secure-remote-session-design.md)
             "mobileTunnel": "异地访问（M2a，需要 Tailscale）",
             "mobileTunnelHint": "默认关闭。开启后 TermiPad 在你的私有 Tailscale 网络（tailnet）内暴露启动通道，手机在外网也能发起启动请求；公网不可达，命令与输出永不下发。需要 Mac 与 iPhone 都安装并登录 Tailscale。",
             "mobileTunnelOff": "已关闭——手机仅在同一个 Wi-Fi 内可用。",
             "mobileTunnelDetecting": "正在检测 Tailscale…",
             "mobileTunnelReady": "已就绪：%@（仅你的 tailnet 内可访问）",
             "mobileTunnelFailed": "启动失败：%@",
-            // M2b 输出档位（docs/m2b-remote-task-console-design.md §5.4）
+            // M2b output visibility (docs/m2b-remote-task-console-design.md §5.4)
             "remoteOutputVisibility": "任务输出档位（M2b）",
             "remoteOutputVisibilityMinimal": "最小（仅状态与退出码）",
             "remoteOutputVisibilityRestricted": "受限（末尾 32 行，已脱敏）",
@@ -124,7 +132,7 @@ enum AppCopy {
         ]
         let english: [String: String] = [
             "allTools": "All Tools", "inbox": "Review Inbox", "favorites": "Favorites", "recent": "Recent", "hidden": "Hidden", "categories": "Categories", "toolLibrary": "Library", "settings": "Settings",
-            // M0 移动端入口：详见 docs/m0-m1-mobile-entry-design.md §2.4
+            // M0 mobile entry: see docs/m0-m1-mobile-entry-design.md §2.4
             "mobileEntrySection": "Mobile Entry", "mobileEntryHint": "Each field is off by default. Turn them on only when you intend to use a mobile client for this tool. Removing a field is safe; revoking permission takes effect immediately.",
             "mobileEntryDisplayName": "Mobile Display Name", "mobileEntryDisplayNameHint": "Optional short label shown on the phone instead of the local tool name.",
             "mobileEntryDescription": "Mobile Description", "mobileEntryDescriptionHint": "One-line purpose. Never include commands, paths, or variable values.",
@@ -134,7 +142,7 @@ enum AppCopy {
             "mobileEntryConfirmPolicyPerSession": "Confirm once per 5-minute session",
             "mobileEntryConfirmPolicyLowRiskSessionOnly": "Confirm per session, only for low-risk tasks",
             "mobileEntryRevoke": "Revoke Mobile Permission", "mobileEntryRevokeConfirm": "Revoke mobile permission for this tool? Phone clients will no longer be able to see or launch it.", "mobileEntryRevokedNotice": "Mobile permission revoked.",
-            // i18n sweep 1: 3 处 M0-与 4.x-期间 新加的硬编码英文
+            // i18n sweep 1: 3 hard-coded English strings added during M0 and 4.x
             "discoverStarCount": "★ %@",
             "sidebarTaskWorkbench": "Local Task Workbench",
             "onboardingGetStarted": "Get Started",
@@ -161,7 +169,7 @@ enum AppCopy {
             "variableSecurityHint": "Values are shell-escaped for this command and stored on this Mac for next time.",
             "editVariableHint": "Use `{{variable_name}}` to create a first-launch input.",
             "warpCopied": "Warp was opened and the command was copied to the clipboard.", "copied": "The completed command was copied to the clipboard.", "terminalLaunched": "The command was sent to Terminal.", "itermLaunched": "The command was entered in iTerm.",
-            // M1 同网配对（docs/m0-m1-mobile-entry-design.md §3.3-§3.4 + §6 G4）
+            // M1 local network pairing (docs/m0-m1-mobile-entry-design.md §3.3-§3.4 + §6 G4)
             "mobileCompanion": "Mobile Companion (M1)", "mobileCompanionHint": "Off by default. When enabled, TermiPad listens on the local network for pairing requests from the phone-side app. It does not open public ports and never returns commands, paths, or variable values to the phone.",
             "mobileCompanionEnable": "Enable Local Network Pairing", "mobileCompanionDisable": "Stop Pairing",
             "mobileCompanionPairingCode": "Pairing code", "mobileCompanionFingerprint": "Local fingerprint (verify with phone)",

@@ -1,8 +1,8 @@
 import Foundation
 
-/// T2 仅实现同一台 Mac 上的 JSON-RPC stdio 子集。它不打开 store、不执行任务；所有状态操作必须经由已运行的 TermiPad 主应用桥接。
+/// T2 implements only a JSON-RPC stdio subset on the same Mac. It opens no store and runs no tasks; every state operation must be bridged through the already-running TermiPad main app.
 final class TermiPadMCPStdIORuntime {
-    /// 仅接受已逐项核验过的 stdio MCP 协议版本；拒绝任何未知版本，避免以宽松协商掩盖协议差异。
+    /// Accepts only stdio MCP protocol versions that were verified item by item; rejects any unknown version so that lenient negotiation cannot hide protocol differences.
     private static let supportedProtocolVersions: Set<String> = ["2025-03-26", "2025-11-25"]
     private let bridge: LocalMCPBridgeTransport
     private var didInitialize = false

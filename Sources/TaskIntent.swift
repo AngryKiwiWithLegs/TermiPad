@@ -1,18 +1,18 @@
 import Foundation
 import SwiftData
 
-/// T0 只允许随应用发布的固定任务类型。它们不是手机、MCP 或 AI 传入的 Shell 命令。
+/// T0 only allows the fixed task types shipped with the app. They are not shell commands passed in by a phone, MCP, or AI.
 ///
-/// 新增 case 必须同时在 `FixedTaskCatalog.definitions` 加入对应条目；
-/// `TaskIntentPolicyTests.testTaskCatalogContainsOnlyFixedLocalDefinitions` 会自动
-/// 校验两边的 case 集合严格相等。
+/// A new case must also get a matching entry in `FixedTaskCatalog.definitions`;
+/// `TaskIntentPolicyTests.testTaskCatalogContainsOnlyFixedLocalDefinitions` automatically
+/// checks that the two case sets are strictly equal.
 enum TaskKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case swiftPackageTests
     case swiftBuild
     case swiftPackageCheck
     case macOSVerification
     case xcodegenGeneration
-    /// M4-3 交互点演示：脚本提问 → 手机选择卡 → stdin 写回。
+    /// M4-3 interaction point demo: the script asks → choice card on the phone → written back via stdin.
     case interactionDemo
 
     var id: String { rawValue }
@@ -39,7 +39,7 @@ enum TaskIntentState: String, Codable, CaseIterable, Sendable {
     case cancelled
 }
 
-/// T1 只保存执行生命周期和退出码；绝不保存、展示或回传终端输出。
+/// T1 stores only the execution lifecycle and exit code; it never stores, shows, or returns terminal output.
 enum TaskExecutionState: String, Codable, CaseIterable, Sendable {
     case notStarted
     case running
@@ -72,7 +72,7 @@ enum TaskRejectionReason: String, Codable, CaseIterable, Sendable {
     case taskCancelled
 }
 
-/// 明确绑定到用户本机选择项目目录的本地范围。路径不会进入备份、诊断或任何外部协议。
+/// A local scope explicitly bound to the project directory the user chose on this Mac. The path never enters backups, diagnostics, or any external protocol.
 @Model
 final class TaskProjectScope {
     var id: UUID
@@ -97,7 +97,7 @@ final class TaskProjectScope {
     }
 }
 
-/// 用户在 Mac 本机主动开启的短期审阅窗口。T0 不创建远程窗口，也不执行任务。
+/// A short-lived review window the user opens deliberately on the Mac. T0 creates no remote windows and runs no tasks.
 @Model
 final class TaskReviewWindow {
     var id: UUID
@@ -131,7 +131,7 @@ final class TaskReviewWindow {
     }
 }
 
-/// 一次性任务只持有固定任务类型和本地范围引用；命令正文始终由本地静态目录解释。
+/// A one-off task holds only a fixed task type and a local scope reference; the command body is always interpreted by the local static catalog.
 @Model
 final class TaskIntent {
     var id: UUID
@@ -206,7 +206,7 @@ final class TaskIntent {
     }
 }
 
-/// 只读固定目录。T0 不接受并不保存任意命令、参数、环境变量或网络地址。
+/// Read-only fixed catalog. T0 neither accepts nor stores arbitrary commands, arguments, environment variables, or network addresses.
 struct FixedTaskDefinition: Equatable, Identifiable {
     let kind: TaskKind
     let commandPreview: String
@@ -217,10 +217,10 @@ struct FixedTaskDefinition: Equatable, Identifiable {
     let purposeChinese: String
     let purposeEnglish: String
     let risk: TaskRiskLevel
-    /// M4-3 交互点（docs/m4-interactive-session-design.md §2.2）：任务声明
-    /// 的结构化提问——stdout 匹配 triggerPattern 时推送 prompt+options 给
-    /// 手机，选中项经 stdin 写回。全部字面量（目录级，非运行时生成）；
-    /// 声明了交互点的任务 T1 才开放 stdin 管道，其余维持空输入。
+    /// M4-3 interaction points (docs/m4-interactive-session-design.md §2.2): structured questions declared
+    /// by the task — when stdout matches triggerPattern, prompt+options are pushed to
+    /// the phone and the selection is written back via stdin. All literals (catalog-level, not generated at runtime);
+    /// T1 opens a stdin pipe only for tasks that declare interaction points; the rest keep empty input.
     var interactionPoints: [TaskInteractionPoint]? = nil
 
     var id: TaskKind { kind }
@@ -233,17 +233,17 @@ struct FixedTaskDefinition: Equatable, Identifiable {
     }
 }
 
-/// 交互点定义：任务声明的"何时问、怎么问、有哪些选项"。
+/// Interaction point definition: the task's declaration of "when to ask, how to ask, and which options there are".
 struct TaskInteractionPoint: Equatable {
-    /// stdout 匹配此模式（正则字面量）即触发交互。
+    /// An interaction is triggered when stdout matches this pattern (a regex literal).
     let triggerPattern: String
-    /// 推送给手机的提问文案。
+    /// The question copy pushed to the phone.
     let prompt: String
-    /// 固定选项（手机渲染为按钮；选中项的 label 经 stdin 写回）。
+    /// Fixed options (rendered as buttons on the phone; the selected label is written back via stdin).
     let options: [String]
 }
 
-/// 仅允许固定绝对路径候选或项目范围内固定相对可执行文件，禁止 Shell 和 PATH 搜索。
+/// Only fixed absolute-path candidates or fixed relative executables inside the project scope are allowed; shells and PATH searches are forbidden.
 enum FixedTaskExecutable: Equatable {
     case absoluteCandidates([String])
     case projectRelative(String)
@@ -308,7 +308,7 @@ enum FixedTaskCatalog {
             interactionPoints: [
                 TaskInteractionPoint(
                     triggerPattern: "INTERACT_CONTINUE[?]",
-                    prompt: "演示脚本暂停等待你的决定：",
+                    prompt: "The demo script is paused, waiting for your decision:",
                     options: ["yes", "no"])
             ]
         ),

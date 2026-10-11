@@ -1,43 +1,43 @@
-# T2：本机受限 MCP 协作协议依据
+# T2: protocol basis for local restricted MCP collaboration
 
-**状态：** 研究完成；T2 同机 `stdio` 服务端已实现并于 2026-08-26 通过真实 macOS 集中验证（归档 `20260826-212137`）。当前仍未配置任何 Manus 自定义 MCP 连接器；该选择符合 T2 的本机、无密钥、无网络边界。
+**Status:** Research complete; the T2 same-machine `stdio` server is implemented and passed consolidated real macOS verification on 2026-08-26 (archive `20260826-212137`). No Manus custom MCP connector is configured yet; that choice fits T2's local, secret-free, network-free boundary.
 
-## 当前会话与产品边界
+## Current session and product boundary
 
-当前 Manus 会话没有可用的自定义 MCP 连接器；检查结果为零个用户自定义连接器。T2 不创建、启用或修改连接器，也不让当前会话直接访问用户 Mac。TermiPad 的第一版 MCP 只设计为用户在**同一台 Mac**上主动配置的 `stdio` 服务端。
+The current Manus session has no usable custom MCP connector; the check found zero user-defined connectors. T2 does not create, enable, or modify connectors, nor does it let the current session access the user's Mac directly. TermiPad's first MCP version is designed only as a `stdio` server the user configures deliberately on the **same Mac**.
 
-## 官方协议结论
+## Conclusions from the official protocol
 
-| 协议事实 | T2 设计含义 |
+| Protocol fact | What it means for the T2 design |
 |---|---|
-| MCP 初始化必须先于正常操作，并由客户端发送 `initialize`，成功后发送 `notifications/initialized`。 | 服务端在初始化完成前拒绝工具调用；仅协商 `tools` 能力。 |
-| `stdio` 关闭由客户端关闭子进程输入并等待进程退出；所有请求都应有超时。 | T2 使用按行 JSON-RPC stdio，客户端断开时退出；不维持后台或网络会话。 |
-| 工具需声明 JSON Schema；服务端必须验证输入、实施访问控制、限速并净化输出。 | 所有工具 `additionalProperties: false`；仅接受 UUID/固定枚举；结果只返回状态与固定说明。 |
-| MCP 强烈建议敏感调用保持人类可拒绝。 | `propose_task` 只能创建 T0 审阅状态，永不自动批准或执行；`cancel_task` 只取消本机任务。 |
-| 官方 Swift SDK 当前为 Tier 3。 | 第一版优先实现一个小型、可测试的协议子集，不将未验证 SDK 行为放入 TermiPad 主执行链。 |
+| MCP initialization must precede normal operation: the client sends `initialize`, then `notifications/initialized` on success. | The server rejects tool calls until initialization is complete; only the `tools` capability is negotiated. |
+| `stdio` shutdown is the client closing the child's input and waiting for the process to exit; every request should have a timeout. | T2 uses line-based JSON-RPC stdio and exits when the client disconnects; it keeps no background or network session. |
+| Tools must declare a JSON Schema; the server must validate input, enforce access control, rate-limit, and sanitize output. | All tools use `additionalProperties: false`; only UUIDs / fixed enums are accepted; results return only states and fixed descriptions. |
+| MCP strongly recommends that sensitive calls stay rejectable by a human. | `propose_task` can only create the T0 review state and never approves or runs automatically; `cancel_task` only cancels local tasks. |
+| The official Swift SDK is currently Tier 3. | The first version prefers a small, testable protocol subset and keeps unverified SDK behavior out of TermiPad's main execution chain. |
 
-## 本机桥接结论
+## Conclusions on the local bridge
 
-`stdio` MCP 服务端作为 MCP 客户端的子进程，不能可靠地与正在运行的 SwiftUI 应用直接竞争同一份 SwiftData store。T2 的桥接优先采用应用进程持有的命名 `CFMessagePort`：stdio 进程只处理 JSON-RPC 与严格 schema，再通过本机端口向已运行的应用请求受限操作。Apple 将 `CFMessagePort` 定义为可在同一台机器的线程或进程间传输任意数据的通信通道；它不是 HTTP、WebSocket 或公网监听。[5]
+As a child process of the MCP client, the `stdio` MCP server cannot reliably compete directly with the running SwiftUI app for the same SwiftData store. T2's bridge prefers a named `CFMessagePort` held by the app process: the stdio process only handles JSON-RPC and strict schemas, then asks the running app for restricted operations through the local port. Apple defines `CFMessagePort` as a communication channel that can transfer arbitrary data between threads or processes on the same machine; it is not HTTP, WebSocket, or a public listener.[5]
 
-本机端口名不是认证凭据。TermiPad 仍默认关闭 MCP，并在 app 内显式开启；MCP 客户端提交的 `clientInfo` 只用于兼容性信息，绝不作为身份或授权证明。第一版仅面向同一登录用户的本机使用；跨用户、sandbox 场景、远程连接与高权限 helper 都不属于 T2。
+The local port name is not an authentication credential. TermiPad still keeps MCP off by default and turns it on explicitly inside the app; the `clientInfo` an MCP client submits is used only as compatibility information and never as proof of identity or authorization. The first version is only for local use by the same logged-in user; cross-user use, sandbox scenarios, remote connections, and privileged helpers are all outside T2.
 
-| 进程 | 责任 | 禁止事项 |
+| Process | Responsibility | Forbidden |
 |---|---|---|
-| MCP stdio 可执行文件 | JSON-RPC 生命周期、schema 校验、最小化协议结果 | 不开数据库、不执行任务、不接网络、不打印非协议 stdout。 |
-| 应用内 `CFMessagePort` | 对本地模型和 T0/T1 策略的单一受限桥接 | 不暴露给网络、不接受命令/路径/变量、不回传完整输出。 |
-| TermiPad 主应用 | 用户可见的本机许可、任务审阅和策略管理 | 不把 MCP 客户端信息视为认证凭据。 |
+| MCP stdio executable | JSON-RPC lifecycle, schema validation, minimized protocol results | Opens no database, runs no tasks, uses no network, prints no non-protocol stdout. |
+| In-app `CFMessagePort` | The single restricted bridge to the local models and T0/T1 policy | Not exposed to the network, accepts no commands/paths/variables, returns no full output. |
+| TermiPad main app | User-visible local permission, task review, and policy management | Does not treat MCP client information as an authentication credential. |
 
-## T2 明确不实现
+## What T2 explicitly does not implement
 
-- 不提供 `execute(command, cwd, env)`、终端、PTY、文件浏览、资源读取、prompt、sampling 或完整输出工具。
-- 不提供 HTTP、Streamable HTTP、WebSocket、监听端口、外部网络、token 或手机桥接。
-- 不把 stdio 日志写入 stdout；stdout 只能输出 JSON-RPC 协议消息。
+- No `execute(command, cwd, env)`, terminal, PTY, file browsing, resource reads, prompt, sampling, or full output tools.
+- No HTTP, Streamable HTTP, WebSocket, listening port, external network, token, or phone bridge.
+- No stdio logs written to stdout; stdout may only carry JSON-RPC protocol messages.
 
-## 参考资料
+## References
 
-[1]: https://modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle "Model Context Protocol：Lifecycle"
-[2]: https://modelcontextprotocol.io/specification/2026-07-28/server/tools "Model Context Protocol：Tools"
-[3]: https://modelcontextprotocol.io/docs/2026-07-28/develop/build-server "Model Context Protocol：Build an MCP server"
-[4]: https://modelcontextprotocol.io/docs/2026-07-28/sdk "Model Context Protocol：SDKs"
-[5]: https://developer.apple.com/documentation/corefoundation/cfmessageport "Apple：CFMessagePort"
+[1]: https://modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle "Model Context Protocol: Lifecycle"
+[2]: https://modelcontextprotocol.io/specification/2026-07-28/server/tools "Model Context Protocol: Tools"
+[3]: https://modelcontextprotocol.io/docs/2026-07-28/develop/build-server "Model Context Protocol: Build an MCP server"
+[4]: https://modelcontextprotocol.io/docs/2026-07-28/sdk "Model Context Protocol: SDKs"
+[5]: https://developer.apple.com/documentation/corefoundation/cfmessageport "Apple: CFMessagePort"

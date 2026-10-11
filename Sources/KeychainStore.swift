@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-/// 极简的 macOS Keychain 封装。仅用于敏感凭据；普通偏好继续保存在 UserDefaults。
+/// A minimal macOS Keychain wrapper. Used only for sensitive credentials; ordinary preferences stay in UserDefaults.
 enum KeychainStore {
     private static let service = "com.termipad.app"
 
@@ -28,12 +28,12 @@ enum KeychainStore {
 
     static func save(_ value: String, for account: String) throws {
         let data = Data(value.utf8)
-        // 删旧建新（upsert + 属性迁移）：匹配/删除按主键（class+service+
-        // account）不带 accessible——它是 item 属性而非主键，参与匹配会让
-        // 旧版属性不同的 item"看不见"（2026-09-10 真机实测：iOS 属性从
-        // AfterFirstUnlock 迁移 WhenUnlockedThisDeviceOnly 后，update 报
-        // NotFound、add 撞旧 item 报 -25299，配对保存必败）。重建时携带
-        // 当前平台的 accessible——旧 item 的过时属性一次迁移到位。
+        // Delete the old item and create a new one (upsert + attribute migration): match/delete by primary key (class+service+
+        // account) without accessible — it is an item attribute, not part of the primary key, and including it in the match makes
+        // items with different legacy attributes "invisible" (2026-09-10 real-device test: after the iOS attribute migrated from
+        // AfterFirstUnlock to WhenUnlockedThisDeviceOnly, update reported
+        // NotFound and add collided with the old item with -25299, so saving the pairing always failed). The rebuilt item carries
+        // the current platform's accessible value — the old item's outdated attribute is migrated in one step.
         SecItemDelete(itemMatchQuery(account: account) as CFDictionary)
         var item = baseQuery(account: account)
         item[kSecValueData as String] = data
@@ -44,14 +44,14 @@ enum KeychainStore {
     }
 
     static func remove(account: String) throws {
-        // 删除同样按主键匹配（不带 accessible）——旧属性 item 也能删。
+        // Deletion also matches by primary key (without accessible) — items with legacy attributes can be deleted too.
         let status = SecItemDelete(itemMatchQuery(account: account) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainStoreError.operationFailed(status)
         }
     }
 
-    /// item 主键匹配（class + service + account）——update/delete/迁移用。
+    /// Item primary-key match (class + service + account) — used by update/delete/migration.
     private static func itemMatchQuery(account: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
@@ -65,9 +65,9 @@ enum KeychainStore {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            // M2b 防线 1（设计 §4）：iOS 端配对凭据只在解锁状态下可读且
-            // 不随备份迁移到新设备（偷手机者刷机/换机拿不到凭据）；Mac 端
-            // 维持 AfterFirstUnlock（桌面无生物识别解锁约束的场景）。
+            // M2b defense line 1 (design §4): on iOS the pairing credentials are readable only while unlocked and
+            // do not migrate to a new device with backups (a phone thief who wipes or swaps the device cannot get them); the Mac
+            // keeps AfterFirstUnlock (desktop scenarios without a biometric-unlock constraint).
             kSecAttrAccessible as String: {
                 #if os(iOS)
                 kSecAttrAccessibleWhenUnlockedThisDeviceOnly
@@ -86,9 +86,9 @@ enum KeychainStoreError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .invalidStoredValue:
-            return "Keychain 中的凭据无法读取。"
+            return "The credential in the Keychain could not be read."
         case .operationFailed(let status):
-            return "Keychain 操作失败（状态码：\(status)）。"
+            return "Keychain operation failed (status code: \(status))."
         }
     }
 }

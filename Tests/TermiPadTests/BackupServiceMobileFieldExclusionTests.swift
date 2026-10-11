@@ -2,12 +2,12 @@ import XCTest
 import Foundation
 @testable import TermiPad
 
-/// M0 移动端入口字段不进 JSON 备份（track-protocol stage 4.3）。
+/// M0 mobile entry fields stay out of the JSON backup (track-protocol stage 4.3).
 ///
-/// 对应 docs/m0-m1-mobile-entry-design.md §2.5 "6 字段永不出 JSON 备份"。
-/// 镜像 commit 6b931c4 BackupServiceTaskExclusionTests 的模式——类型系统已保证
-/// (`TermiPadBackup.make(tools:candidates:...)` 签名只接 TerminalTool 列表，
-/// `ToolRecord.init` 显式字段赋值)，本测试把这条事实固化成可执行断言。
+/// Corresponds to docs/m0-m1-mobile-entry-design.md §2.5 "the 6 fields never leave in a JSON backup".
+/// Mirrors the pattern of BackupServiceTaskExclusionTests from commit 6b931c4 — the type system already guarantees it
+/// (the `TermiPadBackup.make(tools:candidates:...)` signature only takes a list of TerminalTool, and
+/// `ToolRecord.init` assigns fields explicitly); this test turns that fact into an executable assertion.
 final class BackupServiceMobileFieldExclusionTests: XCTestCase {
     func testEmptyBackupDoesNotMentionMobileEntryFields() throws {
         let backup = TermiPadBackup.make(
@@ -18,26 +18,26 @@ final class BackupServiceMobileFieldExclusionTests: XCTestCase {
         let data = try BackupService.encode(backup)
         let json = try XCTUnwrap(String(data: data, encoding: .utf8))
 
-        // docs/m0-m1-mobile-entry-design.md §2.2 — 6 字段名
-        XCTAssertFalse(json.contains("mobileDisplayName"), "JSON 备份中不能含 mobileDisplayName。")
-        XCTAssertFalse(json.contains("mobileDescription"), "JSON 备份中不能含 mobileDescription。")
-        XCTAssertFalse(json.contains("showInMobileEntry"), "JSON 备份中不能含 showInMobileEntry。")
-        XCTAssertFalse(json.contains("allowMobileLaunchRequest"), "JSON 备份中不能含 allowMobileLaunchRequest。")
-        XCTAssertFalse(json.contains("mobileLocalConfirmPolicy"), "JSON 备份中不能含 mobileLocalConfirmPolicy。")
-        XCTAssertFalse(json.contains("revokeMobilePermissionAt"), "JSON 备份中不能含 revokeMobilePermissionAt。")
-        // 枚举名 (MobileLocalConfirmPolicy) 本身也不该出现
-        XCTAssertFalse(json.contains("MobileLocalConfirmPolicy"), "JSON 备份中不能含 MobileLocalConfirmPolicy 枚举名。")
+        // docs/m0-m1-mobile-entry-design.md §2.2 — the 6 field names
+        XCTAssertFalse(json.contains("mobileDisplayName"), "The JSON backup must not contain mobileDisplayName.")
+        XCTAssertFalse(json.contains("mobileDescription"), "The JSON backup must not contain mobileDescription.")
+        XCTAssertFalse(json.contains("showInMobileEntry"), "The JSON backup must not contain showInMobileEntry.")
+        XCTAssertFalse(json.contains("allowMobileLaunchRequest"), "The JSON backup must not contain allowMobileLaunchRequest.")
+        XCTAssertFalse(json.contains("mobileLocalConfirmPolicy"), "The JSON backup must not contain mobileLocalConfirmPolicy.")
+        XCTAssertFalse(json.contains("revokeMobilePermissionAt"), "The JSON backup must not contain revokeMobilePermissionAt.")
+        // The enum name itself (MobileLocalConfirmPolicy) should not appear either
+        XCTAssertFalse(json.contains("MobileLocalConfirmPolicy"), "The JSON backup must not contain the MobileLocalConfirmPolicy enum name.")
     }
 
     func testPopulatedMobileToolStillDoesNotMentionMobileFields() throws {
-        // 最坏情况：用户开了所有 mobile 字段，导出
+        // Worst case: the user turned on every mobile field, then exported
         let tool = TerminalTool(
             name: "mobile-cli",
             executablePath: "/usr/local/bin/mobile-cli",
             commandTemplate: "mobile-cli --sync"
         )
-        tool.mobileDisplayName = "项目同步"
-        tool.mobileDescription = "运行 git pull --rebase"
+        tool.mobileDisplayName = "Project Sync"
+        tool.mobileDescription = "Run git pull --rebase"
         tool.showInMobileEntry = true
         tool.allowMobileLaunchRequest = true
         tool.mobileLocalConfirmPolicy = .perSession
@@ -51,20 +51,20 @@ final class BackupServiceMobileFieldExclusionTests: XCTestCase {
         let data = try BackupService.encode(backup)
         let json = try XCTUnwrap(String(data: data, encoding: .utf8))
 
-        // 6 字段名不应出现
+        // The 6 field names should not appear
         XCTAssertFalse(json.contains("mobileDisplayName"))
         XCTAssertFalse(json.contains("mobileDescription"))
         XCTAssertFalse(json.contains("showInMobileEntry"))
         XCTAssertFalse(json.contains("allowMobileLaunchRequest"))
         XCTAssertFalse(json.contains("mobileLocalConfirmPolicy"))
         XCTAssertFalse(json.contains("revokeMobilePermissionAt"))
-        // 中文 mobile 字段值也不应出现
-        XCTAssertFalse(json.contains("项目同步"), "手机显示名中文值不出现在备份。")
-        XCTAssertFalse(json.contains("git pull"), "手机说明中的命令相关文字不出现在备份。")
+        // The mobile field values should not appear either
+        XCTAssertFalse(json.contains("Project Sync"), "The mobile display name value must not appear in the backup.")
+        XCTAssertFalse(json.contains("git pull"), "Command-related text from the mobile description must not appear in the backup.")
     }
 
     func testRoundTripDoesNotIntroduceMobileFields() throws {
-        // encode → decode → re-encode 不应凭空冒出 mobile 字段
+        // encode → decode → re-encode should not make mobile fields appear out of nowhere
         let original = TermiPadBackup.make(
             tools: [],
             candidates: [],

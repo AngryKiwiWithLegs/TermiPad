@@ -1,14 +1,14 @@
 import XCTest
 @testable import TermiPad
 
-/// M2b 防线契约测试（docs/m2b-remote-task-console-design.md §4）：
-/// 防线 2（30 天凭据时效的边界值）与防线 3（写操作限速窗口）。
+/// M2b defense line contract tests (docs/m2b-remote-task-console-design.md §4):
+/// defense line 2 (boundary values of the 30-day credential lifetime) and defense line 3 (rate-limit window for write operations).
 final class MobileTheftDefenseTests: XCTestCase {
 
-    // MARK: - 防线 2：配对凭据 30 天时效
+    // MARK: - Defense line 2: 30-day lifetime of pairing credentials
 
     func testPairingCredentialLifetimeIsThirtyDays() {
-        // 常量锁：改动时效必须连带改设计文档（§4 防线 2）。
+        // Constant lock: changing the lifetime must change the design doc too (§4 defense line 2).
         XCTAssertEqual(
             MobilePairingService.pairingCredentialLifetime,
             30 * 24 * 3600,
@@ -16,8 +16,8 @@ final class MobileTheftDefenseTests: XCTestCase {
     }
 
     func testThirtyOneDayOldPairingIsRejected() throws {
-        // 31 天前的配对 → 超龄，resume 必须拒绝（校验语义由
-        // handleResumeHello 的 guard 承载；这里锁"阈值判断"的输入关系）。
+        // Paired 31 days ago → too old, resume must be rejected (the validation semantics are carried by the
+        // guard in handleResumeHello; this locks down the input relationship of the "threshold check").
         let pairedAt = Date().addingTimeInterval(-31 * 24 * 3600)
         XCTAssertGreaterThan(
             Date().timeIntervalSince(pairedAt),
@@ -25,14 +25,14 @@ final class MobileTheftDefenseTests: XCTestCase {
     }
 
     func testTwentyNineDayOldPairingStillValid() throws {
-        // 29 天前的配对 → 未超龄，resume 应放行并续命。
+        // Paired 29 days ago → not too old, resume should be allowed and renewed.
         let pairedAt = Date().addingTimeInterval(-29 * 24 * 3600)
         XCTAssertLessThan(
             Date().timeIntervalSince(pairedAt),
             MobilePairingService.pairingCredentialLifetime)
     }
 
-    // MARK: - 防线 3：写操作限速
+    // MARK: - Defense line 3: write rate limiting
 
     func testRateLimiterAllowsUpToTenPerMinuteThenRejects() {
         let limiter = MobilePairingService.WriteRateLimiter(window: 60, maxCount: 10)
@@ -40,11 +40,11 @@ final class MobileTheftDefenseTests: XCTestCase {
         for index in 0..<10 {
             XCTAssertTrue(
                 limiter.allow(now: base.addingTimeInterval(TimeInterval(index))),
-                "第 \(index + 1) 次写操作在 10 次限额内应放行")
+                "Write operation \(index + 1) should be allowed within the limit of 10")
         }
         XCTAssertFalse(
             limiter.allow(now: base.addingTimeInterval(10)),
-            "第 11 次（60 秒窗口内）必须拒绝——丢手机攻击者无法高频试探")
+            "The 11th (within the 60-second window) must be rejected — an attacker with a lost phone cannot probe at high frequency")
     }
 
     func testRateLimiterWindowSlides() {
@@ -53,7 +53,7 @@ final class MobileTheftDefenseTests: XCTestCase {
         for index in 0..<10 {
             XCTAssertTrue(limiter.allow(now: base.addingTimeInterval(TimeInterval(index))))
         }
-        // 窗口滑过 61 秒：最早一批过期，额度恢复。
+        // The window slides past 61 seconds: the earliest batch expires and the quota is restored.
         XCTAssertTrue(limiter.allow(now: base.addingTimeInterval(61)))
     }
 
@@ -68,17 +68,17 @@ final class MobileTheftDefenseTests: XCTestCase {
         XCTAssertTrue(limiter.allow(now: base))
     }
 
-    // MARK: - 续命节流闸（防线 2 配套：每天最多写一次 Keychain）
+    // MARK: - Renewal throttle gate (companion to defense line 2: at most one Keychain write per day)
 
     func testRenewalGateAllowsOncePerDayPerDevice() {
         let gate = MobilePairingService.RenewalGate()
         let device = UUID()
         let base = Date()
         XCTAssertTrue(gate.shouldRenew(deviceID: device, lastRenewedAt: nil, now: base))
-        // 同天再连（3 秒轮询场景）——不放行，不写 Keychain。
+        // Connecting again the same day (3-second polling scenario) — not allowed, no Keychain write.
         XCTAssertFalse(gate.shouldRenew(deviceID: device, lastRenewedAt: base, now: base.addingTimeInterval(3)))
         XCTAssertFalse(gate.shouldRenew(deviceID: device, lastRenewedAt: base, now: base.addingTimeInterval(3600)))
-        // 24 小时后——放行。
+        // After 24 hours — allowed.
         XCTAssertTrue(gate.shouldRenew(deviceID: device, lastRenewedAt: base, now: base.addingTimeInterval(24 * 3600 + 1)))
     }
 
@@ -86,7 +86,7 @@ final class MobileTheftDefenseTests: XCTestCase {
         let gate = MobilePairingService.RenewalGate()
         let base = Date()
         XCTAssertTrue(gate.shouldRenew(deviceID: UUID(), lastRenewedAt: nil, now: base))
-        // 另一台设备不受影响。
+        // Another device is unaffected.
         XCTAssertTrue(gate.shouldRenew(deviceID: UUID(), lastRenewedAt: nil, now: base))
     }
 }

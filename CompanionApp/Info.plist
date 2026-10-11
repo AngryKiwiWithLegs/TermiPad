@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>TermiPad 伴侣</string>
+	<string>TermiPad Companion</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -27,9 +27,9 @@
 		<string>_termipad-m1._tcp</string>
 	</array>
 	<key>NSFaceIDUsageDescription</key>
-	<string>TermiPad 伴侣使用面容 ID 保护你的配对凭据与远程操作入口。</string>
+	<string>TermiPad Companion uses Face ID to protect your pairing credentials and remote actions.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>TermiPad 伴侣仅在同 Wi-Fi 局域网内发现并配对你的 Mac；不连接公网。</string>
+	<string>TermiPad Companion discovers and pairs with your Mac only on the same Wi-Fi local network; it never connects to the public internet.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

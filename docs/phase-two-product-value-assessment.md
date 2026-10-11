@@ -1,79 +1,79 @@
-# TermiPad 二期产品价值评估
+# TermiPad phase-two product value assessment
 
-**状态：** 产品路线判断；不构成 Telegram、PWA、iPhone App 或远程执行的开发授权。
+**Status:** Product roadmap judgment; it does not authorize development of Telegram, a PWA, an iPhone app, or remote execution.
 
-## 结论
+## Conclusion
 
-TermiPad 的产品核心不是“远程控制终端”，而是**把用户已经主动安装、已理解且愿意交互的 CLI，变成一个可靠、可辨认、可审计的 macOS 图标化启动器。**因此，二期最应投入的不是再增加入口，而是让本地工具目录的辨识、组织、恢复和启动确定性继续提升。
+TermiPad's product core is not "remote control of a terminal", but **turning the CLIs the user has deliberately installed, understands, and wants to interact with into a reliable, recognizable, auditable icon launcher on macOS.** So what phase two should invest in most is not adding more entry points, but further improving the recognizability, organization, recovery, and launch determinism of the local tool catalog.
 
-已完成的 P2-A（只读 GitHub 发现）、P2-B（受控 Homebrew 安装审查）和 P2-C（只读环境报告）是原始设计中的安全受控扩展；它们已经构成“原定义 P2”的完整闭环。手机协同、Telegram、Mini App 与 PWA 是新的独立探索线，不应被误认为完成 P2 的必要条件，也不应悄然并入稳定的 `TermiPad Mendocino`。
+The completed P2-A (read-only GitHub discovery), P2-B (controlled Homebrew install review), and P2-C (read-only environment report) are the safe, controlled extensions of the original design; they already form the complete loop of "P2 as originally defined". Phone collaboration, Telegram, the Mini App, and the PWA are new, separate exploration lines; they should not be mistaken for prerequisites of completing P2, nor slip quietly into the stable `TermiPad Mendocino`.
 
-## 评估标准
+## Assessment criteria
 
-本评估采用五个维度：是否直接强化核心定位；用户是否会高频使用；是否维持可理解的安全模型；是否引入持续运维与外部依赖；以及是否能在没有外部账户、服务器或发布资格的情况下交付价值。
+This assessment uses five dimensions: whether it directly strengthens the core positioning; whether users would use it frequently; whether it keeps an understandable security model; whether it introduces ongoing operations and external dependencies; and whether it can deliver value without external accounts, servers, or release qualifications.
 
-| 候选能力 | 核心定位契合度 | 预期频率 | 安全/运维负担 | 二期判断 |
+| Candidate capability | Fit with the core positioning | Expected frequency | Security / operations burden | Phase-two judgment |
 |---|---:|---:|---:|---|
-| 本地图标库、选择器和防碰撞分配 | 很高 | 很高 | 低 | **必要，优先实现** |
-| 本地工具目录整理、搜索、收藏/最近使用完善 | 很高 | 很高 | 低 | **必要，持续完善** |
-| 现有受控发现、安装审查、环境报告的可读性与审计打磨 | 高 | 中 | 低至中 | **值得，按真实使用反馈迭代** |
-| 同网原生手机只读目录与本地配对 | 中 | 条件性中 | 高 | **有意义，但后置为独立预览** |
-| PWA 静态图标面板 | 中 | 低至中 | 中 | **适合作为体验原型，不是主产品能力** |
-| Telegram Mini App 图标面板 | 中 | 条件性中 | 高 | **仅当 Telegram 已是固定个人入口时再做** |
-| 纯 Telegram Bot 文字按钮 | 低 | 条件性低 | 中 | **不建议作为图标产品主路径** |
-| 异地受限启动/云端中继 | 条件性高 | 条件性低 | 很高 | **现在不纳入路线** |
+| Local icon library, picker, and collision-free assignment | Very high | Very high | Low | **Necessary, implement first** |
+| Improving local tool catalog organization, search, favorites / recents | Very high | Very high | Low | **Necessary, keep improving** |
+| Polishing the readability and auditability of the existing controlled discovery, install review, and environment report | High | Medium | Low to medium | **Worthwhile, iterate on real usage feedback** |
+| Same-network native read-only phone catalog and local pairing | Medium | Conditionally medium | High | **Meaningful, but deferred as a separate preview** |
+| PWA static icon panel | Medium | Low to medium | Medium | **Suitable as an experience prototype, not a main product capability** |
+| Telegram Mini App icon panel | Medium | Conditionally medium | High | **Only when Telegram is already a fixed personal entry point** |
+| Pure Telegram Bot text buttons | Low | Conditionally low | Medium | **Not recommended as the main path of an icon product** |
+| Remote restricted launching / cloud relay | Conditionally high | Conditionally low | Very high | **Not on the roadmap now** |
 
-## 必要的二期投入
+## Necessary phase-two investments
 
-### 1. 图标系统不是装饰，而是核心能力
+### 1. The icon system is a core capability, not decoration
 
-TermiPad 与普通 Launcher 的差异就在于“用户能否一眼认出工具、相信它对应什么、并在工具库增大后仍然保持稳定”。现有固定 SF Symbol、稳定哈希回退和本地 PNG 优先策略已经建立了正确基础；二期应补齐更丰富的本地图标库、稳定持久化分配、确定性冲突处理、手动选择与受控 PNG 优先级。
+What sets TermiPad apart from an ordinary launcher is exactly "whether the user can recognize a tool at a glance, trust what it corresponds to, and still have it stay stable as the library grows". The existing fixed SF Symbols, stable hash fallback, and local-PNG-first strategy have laid the right foundation; phase two should add a richer local icon library, stable persisted assignment, deterministic conflict handling, manual selection, and controlled PNG priority.
 
-这项投入既改善每天都在使用的网格，也不改变命令、网络与权限边界。它的价值是**提高识别速度、降低误启动概率、增强用户对工具库的所有权感**，而不是单纯提高界面美观度。
+This investment improves the grid that is used every day and does not change the command, network, or permission boundaries. Its value is **faster recognition, a lower chance of launching the wrong thing, and a stronger sense of ownership over the library**, not merely a prettier UI.
 
-### 2. 本地工作流的可信度与可恢复性
+### 2. Trustworthiness and recoverability of the local workflow
 
-候选收件箱、工具健康、终端交接、备份隔离恢复、收藏/最近使用和每工具工作目录，决定了产品是否可在日常工作中长期被信任。二期应以真实使用反馈为准，优先处理“我为什么找不到这个工具”“为什么当前不能启动”“怎样安全恢复原配置”等高频问题，而不是追求更多自动化。
+The review inbox, tool health, terminal handoff, isolated backup recovery, favorites / recents, and per-tool working directories decide whether the product can be trusted in daily work over the long term. Phase two should follow real usage feedback and first handle frequent questions such as "why can't I find this tool", "why can't it launch right now", and "how do I safely restore the original configuration", rather than pursuing more automation.
 
-P2 的三项受控扩展应保持保守：GitHub 发现默认关闭、Homebrew 只产生明确审查计划、环境报告只读。它们的价值在于帮用户理解和核验现有工作流，不能演变为自动安装、自动更新或供应链控制面板。
+The three controlled extensions of P2 should stay conservative: GitHub discovery is off by default, Homebrew only produces explicit review plans, and the environment report is read-only. Their value lies in helping users understand and verify existing workflows; they must not evolve into automatic install, automatic update, or a supply-chain control panel.
 
-## 有价值但必须后置的能力
+## Valuable capabilities that must be deferred
 
-### 本地手机伴侣
+### Local phone companion
 
-它对“离开 Mac 后需要查看自己工具目录、确认当前 Mac 状态，或偶尔发起已授权工具交接”的用户有真实价值。但价值首先来自**同网可见性与已配对设备**，不是来自异地控制。正确的首个里程碑是 R0：在 Mac 本地实现可签名、可过期、可撤销、可拒绝的 `LaunchIntent` 策略层；这一步不打开网络，也不要求 iPhone App。
+It has real value for users who "after leaving the Mac need to view their tool catalog, confirm the Mac's current state, or occasionally start a handoff of an authorized tool". But the value comes first from **same-network visibility and paired devices**, not from remote control. The right first milestone is R0: implement a signable, expiring, revocable, rejectable `LaunchIntent` policy layer locally on the Mac; this step opens no network and needs no iPhone app.
 
-只有 R0 的伪造、过期、重放、撤销、越权工具与变量注入拒绝测试完整通过，并且用户确认同网手机入口是高频需求，才值得进入 R1 的本地配对与只读目录。它应是独立预览，不替代本地 macOS 产品。
+Only when R0's rejection tests for forgery, expiry, replay, revocation, unauthorized tools, and variable injection all pass, and the user confirms that a same-network phone entry is a frequent need, is it worth entering R1's local pairing and read-only catalog. It should be a separate preview and not replace the local macOS product.
 
-### PWA 静态图标面板
+### PWA static icon panel
 
-PWA 对验证手机端布局、主屏快捷方式和图标网格有价值，也不需要 Apple Developer 账号；但它不是安全身份体系，也不能天然安全地访问 Mac。它最合适的定位是**M1 体验原型或未来的只读私人目录**，而不是产品的第二个核心客户端。
+A PWA is valuable for validating the phone layout, home-screen shortcuts, and the icon grid, and needs no Apple Developer account; but it is not a secure identity system and cannot inherently access the Mac safely. Its most fitting role is **an M1 experience prototype or a future read-only private catalog**, not the product's second core client.
 
-## 目前不应投入的能力
+## Capabilities that should not be invested in now
 
-### Telegram Bot 与 Mini App 作为主产品入口
+### Telegram Bot and Mini App as the main product entry
 
-Telegram Mini App 的确能解决“在 Telegram 内显示真正图标网格”的问题，但它解决的是界面承载，不是核心工作流。它要求 Bot 身份、token 管理、固定 HTTPS origin、服务器端 `initData` 验证、短期会话服务、网页供应链约束和持续运维。普通 Bot 文字按钮又会稀释 TermiPad 的图标化差异。
+A Telegram Mini App does solve "showing a real icon grid inside Telegram", but what it solves is where the UI lives, not the core workflow. It requires a Bot identity, token management, a fixed HTTPS origin, server-side `initData` validation, a short-session service, web supply-chain constraints, and ongoing operations. Ordinary Bot text buttons, in turn, dilute TermiPad's icon-based distinctiveness.
 
-因此，它可以保留为个人私有实验：在 Telegram 已是用户每天使用的入口时，作为受限图标目录值得尝试；但它不应是对所有 TermiPad 用户的默认路线，更不应为了“可以异地控制”而提前引入账户、中继、Webhook 或公网服务。
+So it can be kept as a private personal experiment: when Telegram is already an entry point the user uses every day, it is worth trying as a restricted icon catalog; but it should not be the default route for all TermiPad users, and still less should accounts, relays, webhooks, or public services be introduced early just so that "remote control is possible".
 
-### 异地远程执行与云端中继
+### Remote execution from elsewhere and cloud relays
 
-这项能力会把产品从本地启动器推向远程设备管理产品。即使只允许固定工具，也会引入在线状态、设备身份、撤销、重放、延迟、推送、账户恢复、服务可用性、滥用防护和安全响应责任。它在有足够真实使用需求前，风险与维护成本明显大于当前产品价值。
+This capability would push the product from a local launcher toward a remote device management product. Even with only fixed tools allowed, it introduces online state, device identity, revocation, replay, latency, push, account recovery, service availability, abuse protection, and security response responsibilities. Until there is enough real usage demand, its risk and maintenance cost clearly outweigh its value to the current product.
 
-> 对 TermiPad 而言，最好的“远程功能”不是让任何地方都能执行终端，而是让用户始终清楚：什么能被请求、谁在请求、Mac 是否在线、以及 Mac 为什么接受或拒绝。
+> For TermiPad, the best "remote feature" is not letting a terminal run from anywhere, but keeping the user always clear about: what can be requested, who is requesting, whether the Mac is online, and why the Mac accepts or rejects.
 
-## 建议的分层路线
+## Suggested tiered roadmap
 
-| 层级 | 目标 | 建议范围 |
+| Tier | Goal | Suggested scope |
 |---|---|---|
-| **二期核心** | 让本地启动器在工具增多后仍快速、可辨认、可恢复 | 图标库、冲突分配、手动图标管理、目录组织与高频启动路径打磨 |
-| **二期安全打磨** | 让用户理解可选扩展而不失去控制 | 基于真实反馈完善 P2-A/P2-B/P2-C 的说明、审计与拒绝路径 |
-| **独立实验线** | 验证手机图标体验是否真的改变工作流 | R0 本地策略层；然后仅同网只读目录或 M1 静态 PWA 预览 |
-| **明确后置** | 避免产品被外部平台和远程执行复杂性带偏 | Telegram 接入、真实远程请求、长期远程窗口、异地中继与云端账户 |
+| **Phase-two core** | Keep the local launcher fast, recognizable, and recoverable as tools multiply | Icon library, conflict assignment, manual icon management, catalog organization, and polishing the frequent launch paths |
+| **Phase-two security polish** | Let users understand the optional extensions without losing control | Improve the explanations, auditing, and rejection paths of P2-A/P2-B/P2-C based on real feedback |
+| **Separate experiment line** | Validate whether the phone icon experience really changes the workflow | The R0 local policy layer; then only a same-network read-only catalog or an M1 static PWA preview |
+| **Explicitly deferred** | Keep the product from being pulled off course by external platforms and the complexity of remote execution | Telegram integration, real remote requests, long remote windows, remote relays, and cloud accounts |
 
-## 当前建议
+## Current recommendation
 
-如果二期只能选择一条主线，应选择**本地图标系统与工具目录管理**。它与 TermiPad 的命名、核心体验和已完成架构完全一致，安全代价最低、使用频率最高，也不依赖 Apple 账户、Telegram、域名或长期服务器。
+If phase two can pick only one main line, it should be the **local icon system and tool catalog management**. It is fully consistent with TermiPad's name, core experience, and completed architecture, has the lowest security cost and the highest usage frequency, and does not depend on an Apple account, Telegram, a domain, or a long-running server.
 
-手机伴侣应保留为“在本地策略层通过后才继续”的预览项目；Telegram Mini App 则应进一步降为“只有在用户明确确认自己会长期以 Telegram 打开工具目录时才继续”的可选接口。这样，二期既有清楚、可交付的产品价值，也不会被远程控制的想象空间绑架。
+The phone companion should stay a preview project that "continues only after the local policy layer passes"; the Telegram Mini App should be demoted further to an optional interface that "continues only when the user explicitly confirms they will open the tool catalog through Telegram over the long term". This way phase two has clear, deliverable product value and is not held hostage by the imagined possibilities of remote control.

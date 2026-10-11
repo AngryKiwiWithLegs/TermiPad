@@ -1,7 +1,7 @@
-// iPhone 伴侣 app 入口（docs/m0-m1-mobile-entry-design.md §3.2-§3.3 + §3.3.1）。
-// 两条握手路径：
-//   配对（pairing）— 首次连接，输 Mac 屏上 6 位配对码 + 人工比对指纹
-//   复用（resume）— 已配对手机重连，持久化身份 + 双向公钥指纹绑定，免码
+// iPhone companion app entry point (docs/m0-m1-mobile-entry-design.md §3.2-§3.3 + §3.3.1).
+// Two handshake paths:
+//   pairing — first connection: enter the 6-digit pairing code shown on the Mac + compare fingerprints by eye
+//   resume — an already-paired phone reconnects: persisted identity + two-way public-key fingerprint binding, no code
 import SwiftUI
 import Network
 import CryptoKit
@@ -16,8 +16,8 @@ struct TermiPadCompanionApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(client)
-                // M2b 防线 1（设计 §4）：切回前台过 Face ID/设备密码。
-                // 锁定时盖住全部界面——偷手机的人过不了生物识别。
+                // M2b defense line 1 (design §4): Face ID / device passcode when returning to the foreground.
+                // While locked, the whole UI is covered — a phone thief cannot get past biometrics.
                 .fullScreenCover(isPresented: $appLock.isLocked) {
                     CompanionLockView(appLock: appLock)
                 }
@@ -25,33 +25,33 @@ struct TermiPadCompanionApp: App {
     }
 }
 
-/// M2b 防线 1：app 前台锁。默认开启（用户可在锁屏页暂时跳过一次会话内
-/// 不再锁——设备级安全由 iOS 系统锁兜底；配对凭据本身已
-/// WhenUnlockedThisDeviceOnly）。
+/// M2b defense line 1: app foreground lock. On by default (on the lock screen the user can skip it once,
+/// after which it stays unlocked for the session — device-level security falls back to the iOS system lock; the pairing credentials are already
+/// WhenUnlockedThisDeviceOnly).
 @MainActor
 final class CompanionAppLock: ObservableObject {
     @Published var isLocked = true
-    /// 认证失败提示（锁屏页展示；nil 无提示）。
+    /// Authentication failure notice (shown on the lock screen; nil means no notice).
     @Published var authNotice: String?
 
     func requestUnlock() {
         let context = LAContext()
         var error: NSError?
-        // 设备密码兜底：无 Face ID/Touch ID 的设备回落 passcode。
+        // Device passcode fallback: devices without Face ID / Touch ID fall back to the passcode.
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
-            // 无任何生物/密码保护的设备（理论罕见）——不锁死用户。
+            // Devices with no biometric or passcode protection at all (rare in theory) — do not lock the user out.
             isLocked = false
             return
         }
         context.evaluatePolicy(
             .deviceOwnerAuthentication,
-            localizedReason: "验证通过后即可查看 Mac 任务状态并发送操作"
+            localizedReason: "Once verified, you can view Mac task status and send actions"
         ) { [weak self] success, authError in
             Task { @MainActor in
                 if !success, let laError = authError as? LAError,
                    laError.code == .biometryLockout {
-                    // Face ID 连续失败被系统锁定——只能输密码解锁（系统强制）。
-                    self?.authNotice = "面容 ID 已被锁定，请输入设备密码解锁。"
+                    // Face ID was locked by the system after repeated failures — only the passcode can unlock it (enforced by the system).
+                    self?.authNotice = "Face ID is locked. Enter your device passcode to unlock."
                 }
                 self?.isLocked = !success
             }
@@ -59,7 +59,7 @@ final class CompanionAppLock: ObservableObject {
     }
 }
 
-/// 锁屏盖层：全屏遮罩 + 解锁按钮（点击触发 Face ID）。
+/// Lock screen overlay: full-screen cover + unlock button (tapping triggers Face ID).
 struct CompanionLockView: View {
     @ObservedObject var appLock: CompanionAppLock
 
@@ -70,17 +70,17 @@ struct CompanionLockView: View {
                 Image(systemName: "lock.shield")
                     .font(.largeTitle)
                     .foregroundStyle(.secondary)
-                Text("TermiPad 伴侣已锁定")
+                Text("TermiPad Companion is locked")
                     .font(.headline)
-                Button("解锁") {
+                Button("Unlock") {
                     appLock.requestUnlock()
                 }
                 .buttonStyle(.borderedProminent)
                 .accessibilityIdentifier("companion-applock-unlock")
             }
         }
-        // 不在 onAppear 自动触发 Face ID——系统认证弹窗与盖层同帧竞争，
-        // 会被盖层挡住（2026-09-24 用户实测）。用户点「解锁」再拉起。
+        // Do not trigger Face ID automatically in onAppear — the system auth prompt races the overlay in the same frame
+        // and gets hidden behind it (observed by the user on 2026-09-24). The user taps "Unlock" to bring it up.
     }
 }
 
@@ -92,9 +92,9 @@ struct DiscoveredMac: Equatable {
 final class CompanionPairingClient: ObservableObject {
     enum Phase: Equatable {
         case idle
-        case noCredentials                // 首次使用——需要配对
-        case paired(credentials: CompanionPairingCredentials)  // 已有凭据，可走 resume
-        case browsing                     // NWBrowser 搜索中
+        case noCredentials                // first use — pairing required
+        case paired(credentials: CompanionPairingCredentials)  // credentials exist, resume is possible
+        case browsing                     // NWBrowser is searching
         case connecting(DiscoveredMac)
         case verifyFingerprint(DiscoveredMac, fingerprint: String, isResume: Bool)
         case awaitingAck(isResume: Bool)
@@ -108,9 +108,9 @@ final class CompanionPairingClient: ObservableObject {
     @Published private(set) var phase: Phase = .idle
     @Published var pairingCodeInput = ""
     @Published var deviceName = "iPhone"
-    /// M2b-1 任务会话页数据（docs/m2b-remote-task-console-design.md §6）：
-    /// 非空即渲染会话页——数据驱动而非 phase 驱动，避免轮询期间
-    /// browsing/connecting 状态导致视图闪动。仅内存，不落盘（防线 1）。
+    /// M2b-1 task session page data (docs/m2b-remote-task-console-design.md §6):
+    /// render the session page whenever it is non-empty — data-driven rather than phase-driven, so that during polling
+    /// the browsing/connecting states do not make the view flicker. In memory only, never written to disk (defense line 1).
     @Published private(set) var consoleEntries: [MobileSessionEntry] = []
 
     private var browser: NWBrowser?
@@ -121,24 +121,24 @@ final class CompanionPairingClient: ObservableObject {
     private var pendingPhoneNonce: Data?
     private var pendingSessionKey: SymmetricKey?
     private var capturedServiceName: String?
-    /// 非 nil 时 resume 后发 requestLaunch（而非 listTools）。
+    /// When non-nil, send requestLaunch after resume (instead of listTools).
     private var pendingLaunchRequest: (toolID: UUID, name: String)?
-    /// M2b-1：非 nil 时 resume 后发 getTaskStatus（会话轮询请求）。
+    /// M2b-1: when non-nil, send getTaskStatus after resume (session polling request).
     private var pendingConsoleRequest = false
-    // M2b-1 会话轮询状态（设计 §6：3 秒间隔、串行——上一轮响应（或超时）
-    // 之后才排下一轮，请求永不重叠；仅 app 前台时活跃）。
+    // M2b-1 session polling state (design §6: 3-second interval, serial — the next round is scheduled only after the previous
+    // response (or timeout), so requests never overlap; active only while the app is in the foreground).
     private var consolePollWorkItem: DispatchWorkItem?
     private var consolePollingActive = false
-    /// 手动"返回"或页面隐藏后置位；进入会话页重新拉起。
+    /// Set after a manual "back" or when the page is hidden; restarted on entering the session page.
     private var consoleDismissed = false
-    // M2a 连接编排状态（LAN 优先 / tailnet 兜底 / 明确超时文案）。
+    // M2a connection orchestration state (LAN first / tailnet fallback / explicit timeout copy).
     private var tailnetFallbackWorkItem: DispatchWorkItem?
     private var browseTimeoutWorkItem: DispatchWorkItem?
     private var lanConnectStarted = false
     private var tailnetAttemptInFlight = false
-    /// 隧道路径的伪服务名——connect() 据此选无接口约束的参数（tailnet 流量走
-    /// Tailscale 的 utun 接口，M1 的 .wifi 约束会把它挡死）。ContentView 亦用它
-    /// 区分连接中的文案。
+    /// Pseudo service name for the tunnel path — connect() uses it to choose parameters without an interface constraint (tailnet traffic goes through
+    /// Tailscale's utun interface, which M1's .wifi constraint would block). ContentView also uses it
+    /// to pick the "connecting" copy.
     static let tailnetServiceName = "TermiPad-tailnet"
     private let queue = DispatchQueue(label: "com.termipad.companion.network", qos: .userInitiated)
 
@@ -150,24 +150,24 @@ final class CompanionPairingClient: ObservableObject {
         }
     }
 
-    // MARK: - 公开动作
+    // MARK: - Public actions
 
     func startBrowsing() {
         stopAll()
         startBrowsingInternal()
     }
 
-    // MARK: - M2b-1 任务会话（docs/m2b-remote-task-console-design.md §6）
+    // MARK: - M2b-1 task sessions (docs/m2b-remote-task-console-design.md §6)
 
-    /// 进入会话页：立即拉一轮，成功后按 3 秒节奏轮询。数据到达即
-    /// consoleEntries 非空——会话页据此自渲染。
+    /// Enter the session page: fetch one round immediately, then poll every 3 seconds on success. Once data arrives,
+    /// consoleEntries is non-empty — the session page renders itself from that.
     func openTaskConsole() {
         consoleDismissed = false
         guard !consolePollingActive else { return }
         startConsolePollCycle()
     }
 
-    /// 离开会话页：停轮询（连接由"一连接一请求"模型自然关闭）。
+    /// Leave the session page: stop polling (the connection closes naturally under the "one connection, one request" model).
     func closeTaskConsole() {
         consoleDismissed = true
         consolePollWorkItem?.cancel()
@@ -179,7 +179,7 @@ final class CompanionPairingClient: ObservableObject {
         guard let credentials = currentCredentials,
               let endpoint = credentials.tailnetEndpoint, !endpoint.isEmpty
                 || phaseIsConnectedOrBrowsing else {
-            // 没有端点且不在近场——走既有浏览流程兜底。
+            // No endpoint and not in near-field range — fall back to the existing browse flow.
             consolePollingActive = false
             startBrowsing()
             return
@@ -191,14 +191,14 @@ final class CompanionPairingClient: ObservableObject {
         guard consolePollingActive, !consoleDismissed else { return }
         let serviceName = Self.tailnetServiceName
         let directAddress = currentCredentials?.tailnetEndpoint
-        // 连接编排复用既有路径：resume 握手 → getTaskStatus 一问一答。
-        // 会话轮询请求在 resume 完成后发出（pendingConsoleRequest）。
+        // Connection orchestration reuses the existing path: resume handshake → getTaskStatus request/response.
+        // The session polling request is sent after resume completes (pendingConsoleRequest).
         pendingConsoleRequest = true
         connect(to: serviceName, directAddress: directAddress)
-        Self.diag("会话轮询：连接 Mac（\(directAddress ?? "LAN")）")
+        Self.diag("Session polling: connecting to Mac (\(directAddress ?? "LAN"))")
     }
 
-    /// 上一轮响应/失败后调用：排 3 秒后的下一轮（串行，永不重叠）。
+    /// Called after the previous round's response/failure: schedule the next round 3 seconds later (serial, never overlapping).
     private func scheduleNextConsolePoll() {
         guard consolePollingActive, !consoleDismissed else { return }
         consolePollWorkItem?.cancel()
@@ -222,11 +222,11 @@ final class CompanionPairingClient: ObservableObject {
         browser.browseResultsChangedHandler = { [weak self] results, _ in
             Self.diag("browse results=\(results.count) metadata=\(results.first?.metadata)")
             guard let self else { return }
-            // 竞态守卫（2026-09-10）：指纹确认与等待 ack 阶段忽略新 browse
-            // 结果——重连会覆盖 pendingMacHello/pendingIdentity/pendingNonce，
-            // 用户随后提交的配对将混用两轮连接的密钥材料（真机实测：Mac 端
-            // 「配对接受」与手机端解密失败同秒出现，即此竞态）。phase 是
-            // MainActor 隔离属性——闭包在 queue 上跑，经主线程读。
+            // Race guard (2026-09-10): ignore new browse results during the fingerprint-confirmation and awaiting-ack phases
+            // — a reconnect would overwrite pendingMacHello/pendingIdentity/pendingNonce,
+            // and the pairing the user then submits would mix key material from two connection rounds (real-device test: the Mac's
+            // "pairing accepted" and the phone's decryption failure appeared in the same second — that is this race). phase is
+            // a MainActor-isolated property — the closure runs on the queue and reads it via the main thread.
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if case .verifyFingerprint = self.phase { return }
@@ -248,30 +248,30 @@ final class CompanionPairingClient: ObservableObject {
         self.browser = browser
         Self.diag("browsing started for \(MobilePairingCrypto.bonjourServiceType)")
         phase = .browsing
-        // M2a：LAN 优先、tailnet 兜底、超时给明确文案——不无限转圈。
+        // M2a: LAN first, tailnet fallback, explicit copy on timeout — no endless spinner.
         lanConnectStarted = false
         tailnetAttemptInFlight = false
         scheduleTailnetFallbackIfNeeded()
         scheduleBrowseTimeout()
     }
 
-    /// browse 结果的主线程处理（2026-09-10 从闭包抽出——闭包在 queue 上跑，
-    /// phase 检查必须回 MainActor）。iOS 26 的 browse 结果不带 TXT（metadata
-    /// 恒为 .none）；.service 端点解析会卡 preparing。Mac 端把 LAN 地址编码进
-    /// 实例名（TermiPad-192-168-2-81），这里直接从名字还原 IP 直连。
+    /// Main-thread handling of browse results (extracted from the closure on 2026-09-10 — the closure runs on the queue,
+    /// and the phase check must hop back to the MainActor). On iOS 26 browse results carry no TXT (metadata
+    /// is always .none); resolving the .service endpoint gets stuck in preparing. The Mac encodes its LAN address in
+    /// the instance name (TermiPad-192-168-2-81), so here we recover the IP from the name and connect directly.
     private func handleBrowseResults(_ results: Set<NWBrowser.Result>) {
         guard let first = results.first,
               case .service(let name, _, _, _) = first.endpoint else { return }
         guard let directAddress = Self.directAddress(fromServiceName: name) else {
-            Self.diag("实例名无 LAN 地址（\(name)）——等待 Mac 端重新开启配对广播")
+            Self.diag("Instance name has no LAN address (\(name)) — waiting for the Mac to restart its pairing advertisement")
             return
         }
-        Self.diag("从实例名还原直连地址 \(directAddress)")
+        Self.diag("Recovered direct address \(directAddress) from the instance name")
         connect(to: name, directAddress: directAddress)
     }
 
-    /// M2a 连接编排（docs/m2-secure-remote-session-design.md §3）：
-    /// 浏览 6 秒仍一无所获且凭据里有异地端点 → 放弃 LAN 浏览改走 tailnet 直连。
+    /// M2a connection orchestration (docs/m2-secure-remote-session-design.md §3):
+    /// if 6 seconds of browsing find nothing and the credentials hold a remote endpoint → give up LAN browsing and connect directly over the tailnet.
     private func scheduleTailnetFallbackIfNeeded() {
         tailnetFallbackWorkItem?.cancel()
         guard let endpoint = currentCredentials?.tailnetEndpoint, !endpoint.isEmpty else { return }
@@ -283,12 +283,12 @@ final class CompanionPairingClient: ObservableObject {
     }
 
     private func fallbackToTailnet(endpoint: String) {
-        // 唯一前置条件：LAN 尚未连上（lanConnectStarted 仅在 LAN TCP ready
-        // 时置真）且 tailnet 不在途。不按 phase 判——.waiting 触发的立即转
-        // 路径此刻 phase 已是 .connecting，按 browsing 判会永远挡掉拨号
-        // （2026-09-09 实测：日志触发两次但一次都没拨出去）。
+        // Only precondition: the LAN is not connected yet (lanConnectStarted is set only when the LAN TCP connection is ready)
+        // and no tailnet attempt is in flight. Do not decide by phase — for the immediate switch triggered by .waiting,
+        // phase is already .connecting at this point, so checking for browsing would block the dial forever
+        // (observed 2026-09-09: the log fired twice but no dial ever went out).
         guard !lanConnectStarted, !tailnetAttemptInFlight else { return }
-        Self.diag("LAN 不可用，改走异地 tailnet \(endpoint)")
+        Self.diag("LAN unavailable, switching to the remote tailnet \(endpoint)")
         tailnetFallbackWorkItem?.cancel()
         tailnetFallbackWorkItem = nil
         browseTimeoutWorkItem?.cancel()
@@ -299,7 +299,7 @@ final class CompanionPairingClient: ObservableObject {
         connect(to: Self.tailnetServiceName, directAddress: endpoint)
     }
 
-    /// 浏览 10 秒仍停在 .browsing（且 tailnet 兜底未在途）→ 明确失败文案。
+    /// Still in .browsing after 10 seconds (and no tailnet fallback in flight) → explicit failure copy.
     private func scheduleBrowseTimeout() {
         browseTimeoutWorkItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -308,8 +308,8 @@ final class CompanionPairingClient: ObservableObject {
                 let hasTailnet = !(self.currentCredentials?.tailnetEndpoint ?? "").isEmpty
                 self.stopAll()
                 self.phase = .failed(hasTailnet
-                    ? "同一 Wi-Fi 内未发现 Mac，异地 tailnet 通道也未连通。确认 Mac 已开机、TermiPad 正在运行、两端 Tailscale 在线。"
-                    : "同一 Wi-Fi 内未发现 Mac，且异地通道未开启。确认两端在同一 Wi-Fi、Mac 端配对已开启；在外网使用需在 Mac 端『设置 → 手机伴侣 → 异地访问』打开开关（需要 Tailscale）。")
+                    ? "No Mac found on the same Wi-Fi, and the remote tailnet channel did not connect either. Make sure the Mac is on, TermiPad is running, and Tailscale is online on both devices."
+                    : "No Mac found on the same Wi-Fi, and remote access is not enabled. Make sure both devices are on the same Wi-Fi and pairing is enabled on the Mac; to use it away from home, turn on “Settings → Mobile Companion → Remote Access” on the Mac (requires Tailscale).")
             }
         }
         browseTimeoutWorkItem = work
@@ -321,14 +321,14 @@ final class CompanionPairingClient: ObservableObject {
         refreshFromKeychain()
     }
 
-    /// 已配对用户点“刷新工具目录”——走复用握手。
+    /// A paired user tapped "Refresh Tool Catalog" — use the resume handshake.
     func resumeAndFetchTools() {
         guard case .paired(let credentials) = phase else {
             startBrowsing()
             return
         }
         guard let identity = CompanionPairingStore.loadIdentity() else {
-            // 凭据损坏：清除，回到首次配对。
+            // Credentials are corrupted: clear them and go back to first-time pairing.
             CompanionPairingStore.clear()
             phase = .noCredentials
             return
@@ -336,7 +336,7 @@ final class CompanionPairingClient: ObservableObject {
         startBrowsing()
     }
 
-    /// 首次配对用户点“开始搜索”——走配对握手。
+    /// A first-time user tapped "Start Searching" — use the pairing handshake.
     func confirmFingerprintAndPair() {
         guard case .verifyFingerprint(_, _, isResume: false) = phase,
               let macHello = pendingMacHello,
@@ -344,12 +344,12 @@ final class CompanionPairingClient: ObservableObject {
         let code = pairingCodeInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard code.utf8.count == MobilePairingCrypto.pairingCodeDigitCount,
               code.allSatisfy(\.isNumber) else {
-            phase = .failed("配对码必须是 6 位数字。")
+            phase = .failed("The pairing code must be 6 digits.")
             return
         }
         let name = deviceName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            phase = .failed("设备名不能为空。")
+            phase = .failed("The device name cannot be empty.")
             return
         }
         let phoneNonce = MobilePairingCrypto.generateNonce()
@@ -365,14 +365,14 @@ final class CompanionPairingClient: ObservableObject {
             let frame = MobilePairingFrame.encode(try JSONEncoder().encode(hello))
             phase = .awaitingAck(isResume: false)
             guard let connection else {
-                phase = .failed("连接已断开。")
+                phase = .failed("The connection was lost.")
                 return
             }
             connection.send(content: frame, completion: .contentProcessed { [weak self] error in
                 Task { @MainActor in
                     guard let self else { return }
                     if error != nil {
-                        self.phase = .failed("发送配对请求失败。")
+                        self.phase = .failed("Failed to send the pairing request.")
                         self.stopConnection()
                         return
                     }
@@ -387,9 +387,9 @@ final class CompanionPairingClient: ObservableObject {
         }
     }
 
-    /// 手机点工具卡发起启动请求（§3.3.2）——走 resume 通道。
-    /// 注意顺序：startBrowsing 内部的 stopAll 会清 pendingLaunchRequest，
-    /// 所以标志必须在 stopAll 之后（返回的闭包里）重新写入。
+    /// The phone taps a tool card to send a launch request (§3.3.2) — via the resume channel.
+    /// Mind the order: stopAll inside startBrowsing clears pendingLaunchRequest,
+    /// so the flag must be written again after stopAll (in the returned closure).
     func requestLaunch(_ summary: MobileToolSummary) {
         let launch = (toolID: summary.id, name: summary.displayName)
         stopAll()
@@ -397,20 +397,20 @@ final class CompanionPairingClient: ObservableObject {
         startBrowsingInternal()
     }
 
-    // MARK: - M2b-3 新任务提交（docs/m2b-remote-task-console-design.md §6）
+    // MARK: - M2b-3 new task submission (docs/m2b-remote-task-console-design.md §6)
 
-    /// 目录数据（listScopes / listFixedTasks 结果）——仅内存。
+    /// Catalog data (listScopes / listFixedTasks results) — in memory only.
     @Published private(set) var consoleScopes: [MobileScopeSummary] = []
     @Published private(set) var consoleFixedTasks: [MobileFixedTaskSummary] = []
-    /// 目录拉取进行中（UI 显示进度条——2026-09-10 用户反馈"长时间无响应"
-    /// 无任何视觉反馈）。
+    /// Catalog fetch in progress (the UI shows a progress bar — 2026-09-10 user feedback: "no response for a long time"
+    /// with no visual feedback at all).
     @Published private(set) var isFetchingCatalog = false
-    /// 非 nil 时 resume 后发 requestTaskProposal（kind + scopeID）。
+    /// When non-nil, send requestTaskProposal (kind + scopeID) after resume.
     private var pendingTaskProposal: (kind: String, scopeID: UUID, title: String)?
 
-    /// 打开"新任务"页：拉 scopes + fixedTasks 两轮目录。
-    /// 走 LAN 优先 → tailnet 兜底的完整编排（2026-09-10 用户反馈：直接
-    /// 连 tailnet 伪服务名在同 Wi-Fi 下可能不通且无兜底——长时间无响应）。
+    /// Open the "New Task" page: fetch the catalog in two rounds, scopes + fixedTasks.
+    /// Uses the full LAN-first → tailnet-fallback orchestration (2026-09-10 user feedback: connecting directly
+    /// to the tailnet pseudo service name may fail on the same Wi-Fi with no fallback — no response for a long time).
     func openNewTaskForm() {
         stopAll()
         pendingCatalogRequests = 2
@@ -418,29 +418,29 @@ final class CompanionPairingClient: ObservableObject {
         startBrowsingInternal()
     }
 
-    /// 目录轮次：listScopes 回来后接着拉 listFixedTasks（一连接一请求）。
+    /// Catalog rounds: after listScopes returns, fetch listFixedTasks next (one connection, one request).
     private var pendingCatalogRequests = 0
 
-    /// 发起任务提交（新任务页的提交按钮）。
+    /// Submit a task (the submit button on the New Task page).
     func submitTaskProposal(kind: String, scopeID: UUID, title: String) {
         stopAll()
         pendingTaskProposal = (kind, scopeID, title)
         startBrowsingInternal()
     }
 
-    /// 任务提交回执 → 会话页直接看状态（轮询里能看到该任务）。
+    /// Task submission receipt → check status directly on the session page (the task shows up in polling).
     @Published private(set) var lastTaskProposalResult: MobileTaskProposalResponse?
 
-    /// 目录拉取第二轮（listFixedTasks）的再连接入口——新一轮走完整浏览
-    /// 编排（LAN 优先 → tailnet 兜底），不直连 tailnet（同 Wi-Fi 下 utun
-    /// 可能不可达且无兜底——2026-09-10 用户实测"长时间无响应"）。
+    /// Reconnect entry point for the second catalog round (listFixedTasks) — the new round goes through the full browse
+    /// orchestration (LAN first → tailnet fallback) and does not connect straight to the tailnet (on the same Wi-Fi utun
+    /// may be unreachable with no fallback — 2026-09-10 user test: "no response for a long time").
     private func fetchNextCatalogRound() {
         guard pendingCatalogRequests > 0 else { return }
         startBrowsingInternal()
     }
 
-    /// 目录拉取的"本轮要发什么"：pendingCatalogRequests==2 → listScopes
-    /// （首轮），==1 → listFixedTasks（第二轮）。与轮次计数同源，不会串轮。
+    /// "What to send this round" for the catalog fetch: pendingCatalogRequests==2 → listScopes
+    /// (first round), ==1 → listFixedTasks (second round). Derived from the same round counter, so rounds cannot get crossed.
     private var pendingCatalogOperation: PairedDeviceOperation? {
         switch pendingCatalogRequests {
         case 2: return .listScopes
@@ -449,63 +449,63 @@ final class CompanionPairingClient: ObservableObject {
         }
     }
 
-    /// M2c：手机发起的任务取消（会话页 running 条目的停止按钮）。
+    /// M2c: task cancellation from the phone (the stop button on a running entry in the session page).
     private var pendingCancelTask: (taskIntentID: UUID, title: String)?
     private var pendingStreamRequest = false
     private var pendingStreamClose = false
     private var pendingStreamCloseTaskID: UUID?
 
-    /// M4-3 提交互选择：走一次短连接（流长连接保持不断——Mac 端
-    /// respondInteraction 是独立一问一答）。
+    /// M4-3 submit an interaction choice: uses one short-lived connection (the long-lived stream connection stays up — on the Mac,
+    /// respondInteraction is a separate request/response).
     func submitInteractionSelection(_ selection: String) {
         guard let taskID = streamingTaskID else { return }
         pendingInteraction = nil
         pendingInteractionResponse = (taskID, selection)
-        // 流长连接保留；响应走 startBrowsing 的新连接。
+        // The long-lived stream connection is kept; the response goes over startBrowsing's new connection.
         startBrowsingInternal()
     }
 
-    // MARK: M4 交互会话流（docs/m4-interactive-session-design.md §6）
+    // MARK: M4 interactive session stream (docs/m4-interactive-session-design.md §6)
 
-    /// 流式输出缓冲（仅内存；窗口关闭/退订即清）。
+    /// Streamed output buffer (in memory only; cleared when the window closes or on unsubscribe).
     @Published private(set) var streamText: String = ""
-    /// 流状态（任务结束推送时更新 UI）。
+    /// Stream state (updates the UI when the task-finished push arrives).
     @Published private(set) var streamState: String?
-    /// 流连接中（详情页顶部细进度条）。
+    /// Stream connecting (thin progress bar at the top of the detail page).
     @Published private(set) var isStreaming = false
-    /// 当前流任务（详情页上下文）。
+    /// Current stream task (detail page context).
     private(set) var streamingTaskID: UUID?
-    /// 已消费字节数（重连续传）。
+    /// Bytes consumed so far (for resuming after a reconnect).
     private var streamConsumedOffset = 0
-    /// 流长连接引用（区别于一问一答的 connection——退订/锁屏时显式关）。
+    /// Reference to the long-lived stream connection (distinct from the request/response connection — closed explicitly on unsubscribe / screen lock).
     private var streamConnection: NWConnection?
-    /// 流接收缓冲（帧解码粘包处理）。
+    /// Stream receive buffer (handles coalesced frames during decoding).
     private var streamReceiveBuffer = Data()
-    /// M4-3 待响应交互点（详情页渲染选择卡）。
+    /// M4-3 pending interaction point (the detail page renders a choice card).
     @Published private(set) var pendingInteraction: MobileStreamInteraction?
-    /// 交互响应发送标志。
+    /// Interaction response sent flag.
     private var pendingInteractionResponse: (taskID: UUID, selection: String)?
 
-    /// 发起任务取消：走 resume 通道（一连接一请求一响应）。
+    /// Start a task cancellation: via the resume channel (one connection, one request, one response).
     func cancelTask(taskIntentID: UUID, title: String) {
         stopAll()
         pendingCancelTask = (taskIntentID, title)
         startBrowsingInternal()
     }
 
-    // MARK: M4 流订阅（会话详情页进出时调用）
+    // MARK: M4 stream subscription (called on entering/leaving the session detail page)
 
-    /// 进入详情页：订阅任务输出流（前置 = 每日远程窗口开启）。
+    /// Enter the detail page: subscribe to the task output stream (precondition = the daily remote window is open).
     func openStream(taskID: UUID) {
-        // 注意：**不用 stopAll**——它会清 pendingIdentity，而 resume 流程
-        // 需要它；曾被清后 handleMacResumeHello(nil) 误判"凭据已被撤销"
-        // 把钥匙串凭据也清了（2026-09-19 真机：详情页订阅全断的根源）。
-        // 这里只需要停浏览器/连接，保留身份状态。
+        // Note: **do not use stopAll** — it clears pendingIdentity, which the resume flow
+        // needs; once it was cleared, handleMacResumeHello(nil) wrongly concluded "credentials were revoked"
+        // and wiped the keychain credentials too (2026-09-19 real device: the root cause of every detail-page subscription dropping).
+        // Here we only need to stop the browser/connection and keep the identity state.
         browser?.cancel()
         browser = nil
         stopConnection()
-        // 旧流长连接也取消——否则它的自动重连和新订阅竞态
-        // （2026-09-22 实测：两次订阅接受交替出现）。
+        // Cancel the old long-lived stream connection too — otherwise its auto-reconnect races the new subscription
+        // (observed 2026-09-22: two subscription acceptances alternated).
         streamConnection?.cancel()
         streamConnection = nil
         streamReceiveBuffer.removeAll()
@@ -518,14 +518,14 @@ final class CompanionPairingClient: ObservableObject {
         startBrowsingInternal()
     }
 
-    /// 离开详情页：退订并清缓冲。
+    /// Leave the detail page: unsubscribe and clear the buffer.
     func closeStream() {
         guard let taskID = streamingTaskID else { return }
         streamingTaskID = nil
         isStreaming = false
         streamText = ""
         streamState = nil
-        // 退订走一次短连接（若流连接已死）。
+        // Unsubscribe over one short-lived connection (if the stream connection is already dead).
         if streamConnection == nil {
             pendingStreamClose = true
             pendingStreamCloseTaskID = taskID
@@ -535,22 +535,22 @@ final class CompanionPairingClient: ObservableObject {
         }
     }
 
-    /// 解除配对——清空 Keychain，回到首次配对。
+    /// Unpair — clear the Keychain and go back to first-time pairing.
     func unpair() {
         CompanionPairingStore.clear()
         stopAll()
         phase = .noCredentials
     }
 
-    // MARK: - 连接与握手
+    // MARK: - Connection and handshake
 
     private func connect(to serviceName: String, directAddress: String?) {
         let endpoint: NWEndpoint
         if let directAddress,
            let separatorIndex = directAddress.lastIndex(of: ":"),
            let port = UInt16(directAddress[directAddress.index(after: separatorIndex)...]) {
-            // TXT 直连路径：IP:port 已由 Mac 通告，跳过 .service 解析
-            // （iOS 26 下该解析会无限卡 preparing）。
+            // TXT direct path: the IP:port was advertised by the Mac, so skip .service resolution
+            // (on iOS 26 that resolution gets stuck in preparing forever).
             let host = NWEndpoint.Host(String(directAddress[..<separatorIndex]))
             endpoint = NWEndpoint.hostPort(host: host, port: NWEndpoint.Port(rawValue: port)!)
             Self.diag("direct connect via TXT \(directAddress)")
@@ -564,27 +564,27 @@ final class CompanionPairingClient: ObservableObject {
         }
         let connection: NWConnection
         if serviceName == Self.tailnetServiceName {
-            // 异地 tailnet 路径：无接口约束——流量由 Tailscale 的 utun 接口承载，
-            // .wifi 约束（M1 防仿冒用）会挡掉它。
+            // Remote tailnet path: no interface constraint — traffic is carried by Tailscale's utun interface,
+            // which the .wifi constraint (used by M1 against spoofing) would block.
             connection = NWConnection(to: endpoint, using: Self.tunnelParameters())
         } else {
-            // 注意：不在这里置 lanConnectStarted——"LAN 已连上"的语义只在
-            // TCP 真正 ready 时成立（见 .ready 分支）。拨号即置位的话，
-            // .waiting(ENETDOWN) 的死连接也会把标志拉真，后续 ENETDOWN
-            // 立即转 tailnet 被 fallbackToTailnet 的 guard 挡死（2026-09-10
-            // 蜂窝实测：fallback 日志触发但「改走异地 tailnet」永不出现）。
+            // Note: do not set lanConnectStarted here — "LAN is connected" only holds once
+            // TCP is actually ready (see the .ready branch). If dialing set the flag,
+            // a dead .waiting(ENETDOWN) connection would also turn it true, and the later ENETDOWN
+            // immediate switch to the tailnet would be blocked by the guard in fallbackToTailnet (2026-09-10
+            // cellular test: the fallback log fired but "switching to the remote tailnet" never appeared).
             connection = NWConnection(to: endpoint, using: Self.wifiParameters())
         }
         Self.diag("connecting to \(serviceName)")
-        // 10 秒仍停在 preparing 即视为失败——路由不可达/接口不匹配，不让用户无限转圈。
+        // Still in preparing after 10 seconds counts as a failure — route unreachable / interface mismatch; do not leave the user with an endless spinner.
         let timeoutWorkItem = DispatchWorkItem { [weak self] in
             Task { @MainActor in
                 guard let self, case .connecting = self.phase else { return }
                 Self.diag("connection timeout in preparing")
                 self.stopConnection()
                 self.phase = .failed(serviceName == Self.tailnetServiceName
-                    ? "异地连接超时：确认 Mac 已开机、TermiPad 正在运行、两端 Tailscale 在线。"
-                    : "连接超时：Mac 不可达。确认两端在同一 Wi-Fi，且 Mac 端配对已开启。")
+                    ? "Remote connection timed out: make sure the Mac is on, TermiPad is running, and Tailscale is online on both devices."
+                    : "Connection timed out: the Mac is unreachable. Make sure both devices are on the same Wi-Fi and pairing is enabled on the Mac.")
             }
         }
         queue.asyncAfter(deadline: .now() + 10, execute: timeoutWorkItem)
@@ -597,8 +597,8 @@ final class CompanionPairingClient: ObservableObject {
                 case .ready:
                     self.phase = .connecting(DiscoveredMac(serviceName: serviceName))
                     self.capturedServiceName = serviceName
-                    // "LAN 已连上"在这里才成立：TCP 真正 ready（.waiting 的
-                    // 死连接到此根本走不到）。tailnet 伪服务名不算 LAN。
+                    // "LAN is connected" only holds here: TCP is actually ready (a dead .waiting
+                    // connection never gets this far). The tailnet pseudo service name does not count as LAN.
                     if serviceName != Self.tailnetServiceName {
                         self.lanConnectStarted = true
                     }
@@ -609,17 +609,17 @@ final class CompanionPairingClient: ObservableObject {
                     self.stopConnection()
                     self.phase = .failed(error.localizedDescription)
                 case .waiting(let error):
-                    // POSIX 50（Network is down）= 当前接口无网（如关 Wi-Fi 后
-                    // 蜂窝未接管/VPN 未活跃）。LAN 已死——立即转 tailnet 兜底，
-                    // 不再等 6 秒定时器。lanConnectStarted 一并清掉：这条死
-                    // 连接从未 ready，不算"LAN 已连上"（2026-09-10 蜂窝实测：
-                    // 残留标志把 fallbackToTailnet 的 guard 挡死）。
+                    // POSIX 50 (Network is down) = the current interface has no network (e.g. after turning Wi-Fi off, before
+                    // cellular takes over / the VPN becomes active). The LAN is dead — switch to the tailnet fallback immediately
+                    // instead of waiting for the 6-second timer. Clear lanConnectStarted as well: this dead
+                    // connection was never ready, so it does not count as "LAN is connected" (2026-09-10 cellular test:
+                    // the leftover flag blocked the guard in fallbackToTailnet).
                     if Self.isNetworkDown(error) {
                         self.lanConnectStarted = false
                     }
                     if !self.tailnetAttemptInFlight, Self.isNetworkDown(error),
                        let endpoint = self.currentCredentials?.tailnetEndpoint, !endpoint.isEmpty {
-                        Self.diag("LAN 接口无网（\(error.localizedDescription)），立即转异地 tailnet")
+                        Self.diag("LAN interface has no network (\(error.localizedDescription)), switching to the remote tailnet immediately")
                         self.stopConnection()
                         self.fallbackToTailnet(endpoint: endpoint)
                     }
@@ -634,27 +634,27 @@ final class CompanionPairingClient: ObservableObject {
 
     private func handleMacHello(_ data: Data?) {
         guard let data else {
-            phase = .failed("未收到 Mac 握手消息。")
+            phase = .failed("No handshake message received from the Mac.")
             stopConnection()
             return
         }
         do {
             let macHello = try JSONDecoder().decode(MobilePairingHandshake.MacHello.self, from: data)
             guard macHello.protocolVersion == MobilePairingHandshake.currentProtocolVersion else {
-                phase = .failed("Mac 端协议版本不兼容。")
+                phase = .failed("The Mac's protocol version is incompatible.")
                 stopConnection()
                 return
             }
             pendingMacHello = macHello
-            // 凭据判断必须查 Keychain 而非 phase——connect() 在 ready 时已把
-            // phase 改成 .connecting，查 phase 会让 resume 路径永远不触发，
-            // 每次都跳回首次配对界面（真机实测踩过的坑）。
+            // Whether credentials exist must be checked in the Keychain, not via phase — connect() has already set
+            // phase to .connecting on ready, so checking phase would mean the resume path never triggers
+            // and every attempt bounces back to the first-time pairing screen (a pitfall hit on a real device).
             if let credentials = CompanionPairingStore.loadCredentials() {
-                // 已配对：走 resume 路径，验证 Mac 公钥指纹 == 初次配对锚点。
+                // Already paired: take the resume path and verify the Mac public-key fingerprint == the anchor from first pairing.
                 let currentFingerprint = macHello.fingerprint
-                Self.diag("有凭据；Mac指纹\(currentFingerprint == credentials.macFingerprint ? "匹配" : "不匹配")")
+                Self.diag("Credentials found; Mac fingerprint \(currentFingerprint == credentials.macFingerprint ? "matches" : "does not match")")
                 if currentFingerprint == credentials.macFingerprint {
-                    // 信任锚点一致——自动发 resume hello（无需用户确认指纹，因为上次人工核对过）。
+                    // Trust anchor matches — send the resume hello automatically (no fingerprint confirmation needed, since it was checked by eye last time).
                     pendingIdentity = CompanionPairingStore.loadIdentity()
                     guard let identity = pendingIdentity else {
                         CompanionPairingStore.clear()
@@ -674,19 +674,19 @@ final class CompanionPairingClient: ObservableObject {
                         Task { @MainActor in
                             guard let self else { return }
                             if error != nil {
-                                self.phase = .failed("发送复用请求失败。")
+                                self.phase = .failed("Failed to send the resume request.")
                                 self.stopConnection()
                                 return
                             }
-                            // resume 路径下 Mac 发明文 MacResumeHello——重置收一帧。
+                            // On the resume path the Mac sends a plaintext MacResumeHello — reset and receive one frame.
                             self.receiveOneMessage { data in
                                 Task { @MainActor in self.handleMacResumeHello(data) }
                             }
                         }
                     })
                 } else {
-                    // 同一网内另一台 TermiPad 假装成我们配对过的 Mac——按安全策略回到配对流程，
-                    // 让用户人工比对指纹确认是新 Mac。
+                    // Another TermiPad on the same network is pretending to be the Mac we paired with — per the security policy, go back to the pairing flow
+                    // and have the user compare fingerprints by eye to confirm it is a new Mac.
                     pendingIdentity = MobilePairingIdentity.generate()
                     phase = .verifyFingerprint(
                         DiscoveredMac(serviceName: capturedServiceName ?? "TermiPad"),
@@ -694,8 +694,8 @@ final class CompanionPairingClient: ObservableObject {
                         isResume: false)
                 }
             } else {
-                // 首次配对路径：用户必须人工确认指纹。
-                Self.diag("无凭据——首次配对路径")
+                // First-time pairing path: the user must confirm the fingerprint by eye.
+                Self.diag("No credentials — first-time pairing path")
                 pendingIdentity = MobilePairingIdentity.generate()
                 phase = .verifyFingerprint(
                     DiscoveredMac(serviceName: capturedServiceName ?? "TermiPad"),
@@ -703,30 +703,30 @@ final class CompanionPairingClient: ObservableObject {
                     isResume: false)
             }
         } catch {
-            phase = .failed("Mac 握手消息无法解析。")
+            phase = .failed("The Mac's handshake message could not be parsed.")
             stopConnection()
         }
     }
 
     private func handlePairingAck(_ data: Data?) {
-        Self.diag("收到配对 ack：\(data?.count ?? 0) 字节")
-        // 竞态守卫：输码期间浏览回调可能重开连接覆盖 pending 状态——旧连接
-        // 的 ack 到达时 pendingMacHello 已不是它的 MacHello（nonce 不匹配
-        // → 派生密钥不同 → 解密必然失败，2026-09-10 真机实例）。待确认的
-        // ack 只属于发起它的那次连接：awaitingAck 阶段收到新 browse 结果
-        // 直接忽略（下面 browse handler 同步拦截）。
+        Self.diag("Received pairing ack: \(data?.count ?? 0) bytes")
+        // Race guard: while the code is being entered, a browse callback may reopen the connection and overwrite the pending state — when the old connection's
+        // ack arrives, pendingMacHello is no longer its MacHello (nonce mismatch
+        // → a different derived key → decryption must fail; real-device case on 2026-09-10). A pending
+        // ack belongs only to the connection that started it: new browse results received during awaitingAck
+        // are simply ignored (the browse handler below intercepts them synchronously).
         guard let data,
               let macHello = pendingMacHello,
               let identity = pendingIdentity,
               let code = pendingPairingCode,
               let phoneNonce = pendingPhoneNonce else {
-            phase = .failed("未收到配对结果。")
+            phase = .failed("No pairing result received.")
             stopConnection()
             return
         }
         do {
-            // 与 Mac 同一公式推导会话密钥；ack 是密文——解不开即说明对端不是持有
-            // 该私钥的 Mac 或配对码不一致。
+            // Derive the session key with the same formula as the Mac; the ack is ciphertext — failing to decrypt it means the peer is not the Mac holding
+            // that private key, or the pairing codes differ.
             let key = try identity.sessionKey(
                 peerPublicKeyData: macHello.macPublicKey,
                 pairingCode: code,
@@ -734,33 +734,33 @@ final class CompanionPairingClient: ObservableObject {
                 phoneNonce: phoneNonce)
             let ack = try MobilePairingEnvelope.openAck(data, using: key)
             guard ack.accepted else {
-                phase = .failed("Mac 拒绝了本次配对。")
+                phase = .failed("The Mac rejected this pairing.")
                 stopConnection()
                 return
             }
-            // 持久化凭据——deviceID 来自 Mac 下发。
+            // Persist the credentials — the deviceID is issued by the Mac.
             let credentials = CompanionPairingCredentials(
                 deviceID: ack.deviceID,
                 macPublicKey: macHello.macPublicKey,
                 macFingerprint: macHello.fingerprint,
                 deviceName: deviceName)
             try CompanionPairingStore.save(identity: identity, credentials: credentials)
-            Self.diag("配对完成，凭据已存（deviceID=\(ack.deviceID)）")
+            Self.diag("Pairing complete, credentials saved (deviceID=\(ack.deviceID))")
             stopConnection()
             phase = .paired(credentials: credentials)
         } catch {
-            // 2026-09-10 真机排查：Mac 端「配对接受」与手机端解密失败同秒发生
-            // ——两端派生了不同会话密钥。打出派生输入摘要与两端比对（nonce/
-            // 公钥均为公开材料，安全）。诊断期间临时打 pairingCode 是核对传输
-            // 一致性的最小手段（同网人工比对场景下码本就屏显）。
+            // 2026-09-10 real-device investigation: the Mac's "pairing accepted" and the phone's decryption failure happened in the same second
+            // — the two sides derived different session keys. Log a digest of the derivation inputs to compare both sides (nonce /
+            // public key are public material, so this is safe). Temporarily logging pairingCode during diagnosis is the minimal way to check
+            // transport consistency (in the same-network visual-comparison scenario the code is shown on screen anyway).
             func hexPrefix(_ data: Data, _ count: Int) -> String {
                 data.prefix(count).map { String(format: "%02x", $0) }.joined()
             }
             let phonePubHex = ((try? identity.publicKeyData()) ?? Data()).prefix(6)
                 .map { String(format: "%02x", $0) }.joined()
-            Self.diag("ack 校验失败：\(error.localizedDescription)")
-            Self.diag("派生输入摘要：macPub=\(hexPrefix(macHello.macPublicKey, 6)) macNonce=\(hexPrefix(macHello.macNonce, 4)) phoneNonce=\(hexPrefix(phoneNonce, 4)) code=\(code) phonePub=\(phonePubHex)")
-            phase = .failed("配对结果校验失败：Mac 身份或配对码不一致。")
+            Self.diag("ack verification failed: \(error.localizedDescription)")
+            Self.diag("Derivation input digest: macPub=\(hexPrefix(macHello.macPublicKey, 6)) macNonce=\(hexPrefix(macHello.macNonce, 4)) phoneNonce=\(hexPrefix(phoneNonce, 4)) code=\(code) phonePub=\(phonePubHex)")
+            phase = .failed("Pairing result verification failed: the Mac identity or the pairing code does not match.")
             stopConnection()
         }
     }
@@ -770,20 +770,20 @@ final class CompanionPairingClient: ObservableObject {
               let credentials = currentCredentials,
               let identity = pendingIdentity,
               let phoneNonce = pendingPhoneNonce else {
-            // Mac 端静默断连的原因多样：撤销/时效/瞬时抖动/限速。不清凭据
-            // （2026-09-19 真机：openStream 竞态下误判导致凭据被清、订阅
-            // 全断）。给明确文案让用户重试；真撤销时下次操作仍会被拒，
-            // 届时 Mac 端诊断日志可查。
-            Self.diag("resume 未收到 MacResumeHello——连接被 Mac 断开（原因不明）")
+            // The Mac can drop the connection silently for many reasons: revocation / expiry / transient jitter / rate limiting. Do not clear the credentials
+            // (2026-09-19 real device: a misjudgment under the openStream race wiped the credentials and dropped every
+            // subscription). Show explicit copy so the user can retry; if it really was revoked, the next action is still rejected,
+            // and the Mac's diagnostic log can be checked then.
+            Self.diag("resume received no MacResumeHello — the connection was closed by the Mac (reason unknown)")
             stopConnection()
-            phase = .failed("Mac 断开了连接，请重试。若反复出现，请在 Mac 上确认配对状态。")
+            phase = .failed("The Mac closed the connection. Please try again. If this keeps happening, check the pairing status on the Mac.")
             return
         }
         do {
             let macResume = try JSONDecoder().decode(MobilePairingHandshake.MacResumeHello.self, from: data)
-            // 二次校验：Mac 端发回的公钥必须 = 我们存的那个（防 MITM 在 resume 阶段换人）。
+            // Second check: the public key the Mac sends back must equal the one we stored (stops a MITM from swapping the peer during resume).
             guard macResume.macPublicKey == credentials.macPublicKey else {
-                phase = .failed("Mac 公钥与初次配对不一致。")
+                phase = .failed("The Mac's public key does not match the one from first pairing.")
                 CompanionPairingStore.clear()
                 stopConnection()
                 return
@@ -793,63 +793,63 @@ final class CompanionPairingClient: ObservableObject {
                 macNonce: macResume.macNonce,
                 phoneNonce: phoneNonce)
             pendingSessionKey = key
-            // M2a：持久化 Mac 下发的异地端点（同网引导异地，出门零操作）。
-            // nil 也写回——Mac 端关闭异地访问时清掉手机侧的旧端点。
+            // M2a: persist the remote endpoint issued by the Mac (bootstrapped on the same network, zero steps when away).
+            // Write nil back too — when the Mac turns remote access off, this clears the phone's old endpoint.
             if macResume.tailnetEndpoint != credentials.tailnetEndpoint {
                 var updated = credentials
                 updated.tailnetEndpoint = macResume.tailnetEndpoint
                 try? CompanionPairingStore.save(identity: identity, credentials: updated)
-                Self.diag("异地端点已更新：\(macResume.tailnetEndpoint ?? "off")")
+                Self.diag("Remote endpoint updated: \(macResume.tailnetEndpoint ?? "off")")
             }
-            // 立刻发请求——一连接一请求一响应。优先级：requestLaunch >
-            // getTaskStatus（会话轮询）> listTools。
-            // 先构造请求、取连接，最后才切 phase：currentDiscoveredMac 只在
-            // .connecting/.awaitingAck 有值，提前切 .requestingLaunch 会让
-            // 发送块被整体跳过（帧发不出去）。
+            // Send the request right away — one connection, one request, one response. Priority: requestLaunch >
+            // getTaskStatus (session polling) > listTools.
+            // Build the request and grab the connection first, and only then switch phase: currentDiscoveredMac only has a value in
+            // .connecting/.awaitingAck, so switching to .requestingLaunch early would cause
+            // the whole send block to be skipped (the frame would never go out).
             let request: MobilePairingRequest
             if let launch = pendingLaunchRequest {
-                Self.diag("MacResumeHello 校验通过，发 requestLaunch tool=\(launch.name)")
+                Self.diag("MacResumeHello verified, sending requestLaunch tool=\(launch.name)")
                 request = MobilePairingRequest(operation: .requestLaunch, requestID: UUID(), toolID: launch.toolID)
             } else if let proposal = pendingTaskProposal {
-                Self.diag("MacResumeHello 校验通过，发 requestTaskProposal kind=\(proposal.kind)")
+                Self.diag("MacResumeHello verified, sending requestTaskProposal kind=\(proposal.kind)")
                 request = MobilePairingRequest(
                     operation: .requestTaskProposal, requestID: UUID(), toolID: nil,
                     taskKind: proposal.kind, projectScopeID: proposal.scopeID)
             } else if let catalog = pendingCatalogOperation {
-                Self.diag("MacResumeHello 校验通过，发 \(catalog.rawValue)（目录拉取，剩 \(pendingCatalogRequests) 轮）")
+                Self.diag("MacResumeHello verified, sending \(catalog.rawValue) (catalog fetch, \(pendingCatalogRequests) round(s) left)")
                 request = MobilePairingRequest(operation: catalog, requestID: UUID(), toolID: nil)
             } else if let cancel = pendingCancelTask {
-                Self.diag("MacResumeHello 校验通过，发 cancelTask task=\(cancel.taskIntentID)")
+                Self.diag("MacResumeHello verified, sending cancelTask task=\(cancel.taskIntentID)")
                 request = MobilePairingRequest(
                     operation: .cancelTask, requestID: UUID(), toolID: nil,
                     taskIntentID: cancel.taskIntentID)
             } else if let response = pendingInteractionResponse {
-                Self.diag("MacResumeHello 校验通过，发 respondInteraction 选=\(response.selection)")
+                Self.diag("MacResumeHello verified, sending respondInteraction selection=\(response.selection)")
                 request = MobilePairingRequest(
                     operation: .respondInteraction, requestID: UUID(), toolID: nil,
                     taskIntentID: response.taskID,
                     interactionSelection: response.selection)
             } else if pendingStreamRequest, let streamTask = streamingTaskID {
-                Self.diag("MacResumeHello 校验通过，发 openTaskStream task=\(streamTask) offset=\(streamConsumedOffset)")
+                Self.diag("MacResumeHello verified, sending openTaskStream task=\(streamTask) offset=\(streamConsumedOffset)")
                 request = MobilePairingRequest(
                     operation: .openTaskStream, requestID: UUID(), toolID: nil,
                     taskIntentID: streamTask,
                     streamResumeOffset: streamConsumedOffset > 0 ? streamConsumedOffset : nil)
             } else if pendingStreamClose, let closeTask = pendingStreamCloseTaskID {
-                Self.diag("MacResumeHello 校验通过，发 closeTaskStream task=\(closeTask)")
+                Self.diag("MacResumeHello verified, sending closeTaskStream task=\(closeTask)")
                 request = MobilePairingRequest(
                     operation: .closeTaskStream, requestID: UUID(), toolID: nil,
                     taskIntentID: closeTask)
             } else if pendingConsoleRequest {
-                Self.diag("MacResumeHello 校验通过，发 getTaskStatus（会话轮询）")
+                Self.diag("MacResumeHello verified, sending getTaskStatus (session polling)")
                 request = MobilePairingRequest(operation: .getTaskStatus, requestID: UUID(), toolID: nil)
             } else {
-                Self.diag("MacResumeHello 校验通过，发 listTools")
+                Self.diag("MacResumeHello verified, sending listTools")
                 request = MobilePairingRequest(operation: .listTools, requestID: UUID(), toolID: nil)
             }
             guard let connection, let mac = currentDiscoveredMac else {
-                Self.diag("发送时连接已不在——请求被丢弃")
-                phase = .failed("连接已断开，请重试。")
+                Self.diag("The connection was gone at send time — request dropped")
+                phase = .failed("The connection was lost. Please try again.")
                 stopConnection()
                 return
             }
@@ -857,12 +857,12 @@ final class CompanionPairingClient: ObservableObject {
             if let launch = pendingLaunchRequest {
                 phase = .requestingLaunch(launch.name)
             } else if pendingInteractionResponse != nil || pendingStreamRequest || pendingStreamClose {
-                // 流请求：详情页由 isStreaming/streamText 数据驱动，
-                // phase 保持列表态避免闪动。
+                // Stream requests: the detail page is driven by the isStreaming/streamText data,
+                // so phase stays in the list state to avoid flicker.
                 phase = .listingTools(mac)
             } else if pendingConsoleRequest {
-                // 会话轮询期间 phase 保持在连接/列表态——会话页由
-                // consoleEntries 数据驱动，轮询不产生 phase 闪动。
+                // During session polling phase stays in the connecting/list state — the session page is
+                // driven by the consoleEntries data, so polling causes no phase flicker.
                 phase = .listingTools(mac)
             } else {
                 phase = .listingTools(mac)
@@ -871,45 +871,45 @@ final class CompanionPairingClient: ObservableObject {
                 Task { @MainActor in
                     guard let self else { return }
                     if error != nil {
-                        self.phase = .failed("发送请求失败。")
+                        self.phase = .failed("Failed to send the request.")
                         self.stopConnection()
                         return
                     }
-                    Self.diag("请求帧已发出（\(request.operation.rawValue)），等待 Mac 响应")
+                    Self.diag("Request frame sent (\(request.operation.rawValue)), waiting for the Mac's response")
                     self.receiveOneMessage { data in
                         Task { @MainActor in self.handleResponse(data, connection: connection) }
                     }
                 }
             })
         } catch {
-            phase = .failed("复用握手失败。")
+            phase = .failed("Resume handshake failed.")
             stopConnection()
         }
     }
 
     private func handleResponse(_ data: Data?, connection: NWConnection) {
         guard let data, let key = pendingSessionKey else {
-            phase = .failed("未收到响应。")
+            phase = .failed("No response received.")
             stopConnection()
             if consolePollingActive { scheduleNextConsolePoll() }
             return
         }
-        // 新任务表单目录拉取（listScopes → listFixedTasks 两轮）与任务提交回执。
-        // 轮次判断：pendingCatalogRequests==2 是本轮 scopes，==1 是本轮 tasks。
+        // New-task form catalog fetch (two rounds, listScopes → listFixedTasks) and the task submission receipt.
+        // Round check: pendingCatalogRequests==2 means this round is scopes, ==1 means this round is tasks.
         if pendingCatalogRequests > 0 {
             do {
                 switch pendingCatalogRequests {
                 case 2:
                     let scopes = try MobilePairingEnvelope.openScopeSummaries(data, using: key)
-                    Self.diag("范围目录 count=\(scopes.count)")
+                    Self.diag("Scope catalog count=\(scopes.count)")
                     consoleScopes = scopes
                     pendingCatalogRequests = 1
                     stopConnection()
-                    // 第二轮走完整浏览编排（LAN 优先 → tailnet 兜底）。
+                    // The second round goes through the full browse orchestration (LAN first → tailnet fallback).
                     fetchNextCatalogRound()
                 case 1:
                     let tasks = try MobilePairingEnvelope.openFixedTaskSummaries(data, using: key)
-                    Self.diag("固定任务目录 count=\(tasks.count)")
+                    Self.diag("Fixed task catalog count=\(tasks.count)")
                     consoleFixedTasks = tasks
                     pendingCatalogRequests = 0
                     isFetchingCatalog = false
@@ -920,41 +920,41 @@ final class CompanionPairingClient: ObservableObject {
                     stopConnection()
                 }
             } catch {
-                Self.diag("目录拉取解密失败")
+                Self.diag("Catalog fetch decryption failed")
                 pendingCatalogRequests = 0
                 isFetchingCatalog = false
                 stopConnection()
             }
             return
         }
-        // M4-3 交互响应：Mac 静默断开无回执帧——直接收尾。
+        // M4-3 interaction response: the Mac disconnects silently with no receipt frame — just wrap up.
         if let responded = pendingInteractionResponse {
             pendingInteractionResponse = nil
-            Self.diag("交互响应已发送：\(responded.selection)")
+            Self.diag("Interaction response sent: \(responded.selection)")
             stopConnection()
-            // 流长连接若已被 stopConnection 断开，靠自动重连续传。
+            // If the long-lived stream connection was already closed by stopConnection, auto-reconnect resumes it.
             return
         }
-        // M4 流回执：openTaskStream 接受 → 当前连接转为长连接收推送循环；
-        // 拒绝（含窗口未开）→ 停止并显示原因。
+        // M4 stream receipt: openTaskStream accepted → the current connection becomes a long-lived connection running the push receive loop;
+        // rejected (including window not open) → stop and show the reason.
         if pendingStreamRequest {
             pendingStreamRequest = false
             do {
                 let response = try MobilePairingEnvelope.openStreamResponse(data, using: key)
                 guard response.status == .accepted, let start = response.resumeOffset else {
-                    Self.diag("流订阅被拒：\(response.reason ?? "-")")
+                    Self.diag("Stream subscription rejected: \(response.reason ?? "-")")
                     isStreaming = false
                     streamingTaskID = nil
                     stopConnection()
                     return
                 }
-                Self.diag("流订阅接受，游标=\(start)")
+                Self.diag("Stream subscription accepted, cursor=\(start)")
                 streamConsumedOffset = start
-                // 当前连接升级为流长连接：不停接收循环，推送块逐帧入缓冲。
+                // The current connection is upgraded to a long-lived stream connection: the receive loop keeps running and pushed chunks are buffered frame by frame.
                 streamConnection = connection
                 receiveStreamFrames(on: connection)
             } catch {
-                Self.diag("流回执解析失败")
+                Self.diag("Failed to parse the stream receipt")
                 isStreaming = false
                 streamingTaskID = nil
                 stopConnection()
@@ -964,22 +964,22 @@ final class CompanionPairingClient: ObservableObject {
         if pendingStreamClose {
             pendingStreamClose = false
             pendingStreamCloseTaskID = nil
-            // 退订回执：无需内容，连接自然关闭。
+            // Unsubscribe receipt: no content needed, the connection closes naturally.
             stopConnection()
             return
         }
-        // M2c 任务取消回执：接受/拒绝都即时反馈（本地状态标记）。
+        // M2c task cancellation receipt: both accept and reject give immediate feedback (local status marker).
         if let cancel = pendingCancelTask {
             pendingCancelTask = nil
             do {
                 let response = try MobilePairingEnvelope.openTaskProposalResponse(data, using: key)
-                Self.diag("任务取消回执 status=\(response.status.rawValue) reason=\(response.reason ?? "-")")
+                Self.diag("Task cancellation receipt status=\(response.status.rawValue) reason=\(response.reason ?? "-")")
                 stopConnection()
-                // 无论接受与否，立拉一轮会话快照——running 条目将变 stopped。
+                // Accepted or not, fetch a session snapshot right away — the running entry will become stopped.
                 pendingConsoleRequest = true
                 connect(to: Self.tailnetServiceName, directAddress: currentCredentials?.tailnetEndpoint)
             } catch {
-                Self.diag("任务取消回执解析失败")
+                Self.diag("Failed to parse the task cancellation receipt")
                 stopConnection()
             }
             _ = cancel
@@ -990,40 +990,40 @@ final class CompanionPairingClient: ObservableObject {
             _ = proposal
             do {
                 let response = try MobilePairingEnvelope.openTaskProposalResponse(data, using: key)
-                Self.diag("任务提交回执 status=\(response.status.rawValue) reason=\(response.reason ?? "-")")
+                Self.diag("Task submission receipt status=\(response.status.rawValue) reason=\(response.reason ?? "-")")
                 lastTaskProposalResult = response
                 stopConnection()
-                // 提交后立即进会话页看状态。
+                // Go to the session page right after submitting to see the status.
                 openTaskConsole()
             } catch {
-                Self.diag("任务提交回执解析失败")
+                Self.diag("Failed to parse the task submission receipt")
                 stopConnection()
                 openTaskConsole()
             }
             return
         }
-        // 会话轮询响应先试：Mac 只回 [MobileSessionEntry]（一问一答模型下
-        // 与其他响应类型按 pending 标志互斥，不会误判）。
+        // Try the session polling response first: the Mac only returns [MobileSessionEntry] (under the request/response model
+        // it is mutually exclusive with the other response types via the pending flags, so it cannot be misidentified).
         if pendingConsoleRequest {
             pendingConsoleRequest = false
             do {
                 let entries = try MobilePairingEnvelope.openSessionEntries(data, using: key)
-                Self.diag("会话快照 count=\(entries.count)")
+                Self.diag("Session snapshot count=\(entries.count)")
                 consoleEntries = entries
                 stopConnection()
                 scheduleNextConsolePoll()
             } catch {
-                Self.diag("会话快照解密失败")
+                Self.diag("Session snapshot decryption failed")
                 stopConnection()
                 scheduleNextConsolePoll()
             }
             return
         }
-        // requestLaunch 的响应先试：Mac 只回 MobileLaunchResponse。
+        // Try the requestLaunch response first: the Mac only returns MobileLaunchResponse.
         if let launch = pendingLaunchRequest {
             do {
                 let response = try MobilePairingEnvelope.openLaunchResponse(data, using: key)
-                Self.diag("启动结果 status=\(response.status.rawValue)")
+                Self.diag("Launch result status=\(response.status.rawValue)")
                 pendingLaunchRequest = nil
                 stopConnection()
                 switch response.status {
@@ -1035,44 +1035,44 @@ final class CompanionPairingClient: ObservableObject {
             } catch {
                 pendingLaunchRequest = nil
                 stopConnection()
-                phase = .failed("启动请求结果解析失败。")
+                phase = .failed("Failed to parse the launch request result.")
             }
             _ = launch
             return
         }
         do {
             let summaries = try MobilePairingEnvelope.openToolSummaries(data, using: key)
-            Self.diag("收到工具目录 count=\(summaries.count)")
-            // 最小数据校验：任何 4 字段之外的字段都拒收（防 Mac 端 schema 漂移）。
+            Self.diag("Received tool catalog count=\(summaries.count)")
+            // Minimal data validation: reject anything with fields beyond the 4 allowed (guards against schema drift on the Mac).
             guard summaries.allSatisfy({ summary in
                 summary.iconSymbolName == nil || !(summary.iconSymbolName?.isEmpty ?? true)
             }) else {
-                phase = .failed("工具目录字段越界。")
+                phase = .failed("The tool catalog contains out-of-bounds fields.")
                 stopConnection()
                 return
             }
             stopConnection()
             phase = .toolSummaries(summaries)
         } catch {
-            phase = .failed("工具目录解密失败。")
+            phase = .failed("Failed to decrypt the tool catalog.")
             stopConnection()
         }
     }
 
-    // MARK: M4 流长连接接收循环
+    // MARK: M4 long-lived stream connection receive loop
 
-    /// 流连接的持续接收：解帧 → 判类型（chunk/state/interaction）→ 更新
-    /// streamText/state。断线时保留游标供重连续传（isStreaming 保持，
-    /// 由详情页的重试按钮或自动重连触发新一轮 openTaskStream）。
+    /// Continuous receive on the stream connection: decode frames → determine the type (chunk/state/interaction) → update
+    /// streamText/state. On disconnect the cursor is kept for resuming after a reconnect (isStreaming stays set;
+    /// the detail page's retry button or auto-reconnect triggers a new openTaskStream round).
     private func receiveStreamFrames(on connection: NWConnection) {
-        Self.diag("流接收循环启动")
+        Self.diag("Stream receive loop started")
         connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] content, _, isComplete, error in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if error != nil || (isComplete && content == nil) {
-                    Self.diag("流连接断开（offset=\(self.streamConsumedOffset)）——3 秒后自动重连")
+                    Self.diag("Stream connection lost (offset=\(self.streamConsumedOffset)) — auto-reconnecting in 3 seconds")
                     self.streamConnection = nil
-                    // 自动重连：带游标续传（streamResumeOffset）。
+                    // Auto-reconnect: resume from the cursor (streamResumeOffset).
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
                         Task { @MainActor [weak self] in
                             guard let self, self.isStreaming, self.streamingTaskID != nil,
@@ -1084,7 +1084,7 @@ final class CompanionPairingClient: ObservableObject {
                     return
                 }
                 if let content { self.streamReceiveBuffer.append(content) }
-                // 解出所有完整帧。
+                // Decode all complete frames.
                 while case .message(let message, let remainder) =
                         MobilePairingFrame.decodeOne(from: self.streamReceiveBuffer) {
                     self.streamReceiveBuffer = remainder
@@ -1097,11 +1097,11 @@ final class CompanionPairingClient: ObservableObject {
         }
     }
 
-    /// 单帧流消息分发。
+    /// Dispatch a single stream frame message.
     private func handleStreamFrame(_ data: Data) {
-        Self.diag("流帧到达：\(data.count)B key=\(pendingSessionKey != nil ? "有" : "无")")
+        Self.diag("Stream frame arrived: \(data.count)B key=\(pendingSessionKey != nil ? "yes" : "no")")
         guard let key = pendingSessionKey, !data.isEmpty else { return }
-        // 推送块（最常见）先试；状态变化次之。
+        // Try the pushed chunk first (most common); state changes next.
         if let chunk = try? MobilePairingEnvelope.openStreamChunk(data, using: key) {
             streamText += chunk.text
             streamConsumedOffset = chunk.offset + chunk.text.utf8.count
@@ -1110,21 +1110,21 @@ final class CompanionPairingClient: ObservableObject {
         if let state = try? MobilePairingEnvelope.openStreamStateChange(data, using: key) {
             streamState = state.executionState
             if state.finishedAt != nil {
-                // 任务结束：保留文本供阅读，连接可退订。
-                Self.diag("流状态更新：\(state.executionState) exit=\(state.exitCode.map(String.init) ?? "-")")
+                // Task finished: keep the text for reading; the connection can be unsubscribed.
+                Self.diag("Stream state update: \(state.executionState) exit=\(state.exitCode.map(String.init) ?? "-")")
             }
             return
         }
-        // M4-3 交互请求帧：弹选择卡。
+        // M4-3 interaction request frame: show the choice card.
         if let interaction = try? MobilePairingEnvelope.openStreamInteraction(data, using: key) {
-            Self.diag("收到交互请求：\(interaction.prompt.prefix(20))…")
+            Self.diag("Received interaction request: \(interaction.prompt.prefix(20))…")
             pendingInteraction = interaction
             return
         }
-        Self.diag("流帧无法识别——忽略")
+        Self.diag("Unrecognized stream frame — ignored")
     }
 
-    /// 退订发送（流连接还活着时走原连接；否则走一次短连接）。
+    /// Send the unsubscribe (over the original connection while the stream connection is alive; otherwise over one short-lived connection).
     private func sendStreamClose(on connection: NWConnection, taskID: UUID) {
         guard let key = pendingSessionKey else {
             connection.cancel()
@@ -1138,13 +1138,13 @@ final class CompanionPairingClient: ObservableObject {
             connection.send(content: frame, completion: .contentProcessed { _ in })
         }
         streamConnection = nil
-        // 原连接关闭由 Mac 端退订回执触发。
+        // Closing the original connection is triggered by the Mac's unsubscribe receipt.
     }
 
-    // MARK: - 诊断
+    // MARK: - Diagnostics
 
-    /// 从 Bonjour 实例名还原直连地址：Mac 端通告 "TermiPad-192-168-2-81"，
-    /// 端口固定 listenerPort。名字里没地址（老版 Mac）返回 nil。
+    /// Recover the direct address from the Bonjour instance name: the Mac advertises "TermiPad-192-168-2-81",
+    /// and the port is the fixed listenerPort. Returns nil when the name has no address (older Mac builds).
     nonisolated private static func directAddress(fromServiceName name: String) -> String? {
         guard let range = name.range(of: "\(MobilePairingCrypto.bonjourServiceName)-") else {
             return nil
@@ -1156,8 +1156,8 @@ final class CompanionPairingClient: ObservableObject {
         return "\(host):\(MobilePairingCrypto.listenerPort)"
     }
 
-    /// 同时写 NSLog 与 Documents/companion-diag.log——后者可经 devicectl
-    /// appDataContainer 拉取，不依赖控制台挂载。
+    /// Write to both NSLog and Documents/companion-diag.log — the latter can be pulled via devicectl
+    /// appDataContainer without needing the console attached.
     nonisolated private static func diag(_ message: String) {
         NSLog("companion-diag: \(message)")
         let line = "[\(Date())] \(message)\n"
@@ -1174,16 +1174,16 @@ final class CompanionPairingClient: ObservableObject {
         }
     }
 
-    // MARK: - 帧收发
+    // MARK: - Frame send/receive
 
-    /// 锁 Wi-Fi 接口（与 Mac 端监听器对称）：避免解析到 VPN/隧道接口的不可达地址。
+    /// Pin the Wi-Fi interface (symmetric with the Mac's listener): avoids resolving to unreachable addresses on VPN/tunnel interfaces.
     nonisolated private static func wifiParameters() -> NWParameters {
         let parameters = NWParameters.tcp
         parameters.requiredInterfaceType = .wifi
         return parameters
     }
 
-    /// 异地 tailnet 连接参数：无接口约束（流量走 Tailscale utun）。
+    /// Remote tailnet connection parameters: no interface constraint (traffic goes through Tailscale's utun).
     private static func tunnelParameters() -> NWParameters {
         NWParameters.tcp
     }
@@ -1270,26 +1270,26 @@ final class CompanionPairingClient: ObservableObject {
         }
     }
 
-    // MARK: - 派生 helper
+    // MARK: - Derived helpers
 
     private var currentCredentials: CompanionPairingCredentials? {
         if case .paired(let credentials) = phase { return credentials }
         return CompanionPairingStore.loadCredentials()
     }
 
-    /// UI 用：钥匙串里是否存有异地端点（browsing 文案与失败文案据此分流）。
+    /// For the UI: whether the keychain holds a remote endpoint (the browsing copy and failure copy branch on this).
     var hasTailnetEndpoint: Bool {
         !(currentCredentials?.tailnetEndpoint ?? "").isEmpty
     }
 
-    /// UI 用：工具目录是否已在手（顶部进度条收起判断）。
+    /// For the UI: whether the tool catalog is already in hand (decides when to collapse the top progress bar).
     var hasToolSummaries: Bool {
         if case .toolSummaries = phase { return true }
         return false
     }
 
-    /// POSIX 50（ENETDOWN）：接口无网。iOS 上常见于关 Wi-Fi 后蜂窝/VPN
-    /// 未接管流量的窗口期——是"LAN 已死"的可靠信号。
+    /// POSIX 50 (ENETDOWN): the interface has no network. On iOS this is common in the window after Wi-Fi is turned off and before
+    /// cellular/VPN takes over the traffic — a reliable signal that "the LAN is dead".
     private static func isNetworkDown(_ error: NWError) -> Bool {
         if case .posix(let code) = error, code == .ENETDOWN { return true }
         return false
@@ -1297,7 +1297,7 @@ final class CompanionPairingClient: ObservableObject {
 
     private var currentDiscoveredMac: DiscoveredMac? {
         if case .connecting(let mac) = phase { return mac }
-        // resume 流程在 .awaitingAck 阶段就要发 listTools——此前用 capturedServiceName。
+        // The resume flow has to send listTools as early as the .awaitingAck phase — it used capturedServiceName before.
         if case .awaitingAck = phase, let name = capturedServiceName {
             return DiscoveredMac(serviceName: name)
         }

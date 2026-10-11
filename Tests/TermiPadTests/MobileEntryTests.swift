@@ -2,10 +2,10 @@ import XCTest
 import SwiftData
 @testable import TermiPad
 
-/// M0 移动端入口数据模型 + 撤销行为测试（track-protocol stage 4.3）。
+/// M0 mobile entry data model + revocation behavior tests (track-protocol stage 4.3).
 ///
-/// 对应 docs/m0-m1-mobile-entry-design.md §2.7 完成度门槛第 1 行 "6 字段持久化 +
-/// 默认 false/nil/everyTime"。
+/// Corresponds to row 1 of the completion bar in docs/m0-m1-mobile-entry-design.md §2.7, "6 fields persisted +
+/// default false/nil/everyTime".
 final class MobileEntryTests: XCTestCase {
     private var container: ModelContainer!
     private var context: ModelContext!
@@ -23,22 +23,22 @@ final class MobileEntryTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
-        // in-memory container 丢弃即可
+        // an in-memory container can simply be discarded
     }
 
     func testDefaultsAreAllClosed() {
-        // docs/m0-m1-mobile-entry-design.md §2.2: "默认全关"
-        XCTAssertNil(tool.mobileDisplayName, "mobileDisplayName 默认 nil（用本地 name）。")
-        XCTAssertEqual(tool.mobileDescription, "", "mobileDescription 默认空串。")
-        XCTAssertFalse(tool.showInMobileEntry, "showInMobileEntry 默认 false。")
-        XCTAssertFalse(tool.allowMobileLaunchRequest, "allowMobileLaunchRequest 默认 false。")
-        XCTAssertEqual(tool.mobileLocalConfirmPolicy, .everyTime, "mobileLocalConfirmPolicy 默认 .everyTime。")
-        XCTAssertNil(tool.revokeMobilePermissionAt, "revokeMobilePermissionAt 默认 nil。")
+        // docs/m0-m1-mobile-entry-design.md §2.2: "all off by default"
+        XCTAssertNil(tool.mobileDisplayName, "mobileDisplayName defaults to nil (uses the local name).")
+        XCTAssertEqual(tool.mobileDescription, "", "mobileDescription defaults to an empty string.")
+        XCTAssertFalse(tool.showInMobileEntry, "showInMobileEntry defaults to false.")
+        XCTAssertFalse(tool.allowMobileLaunchRequest, "allowMobileLaunchRequest defaults to false.")
+        XCTAssertEqual(tool.mobileLocalConfirmPolicy, .everyTime, "mobileLocalConfirmPolicy defaults to .everyTime.")
+        XCTAssertNil(tool.revokeMobilePermissionAt, "revokeMobilePermissionAt defaults to nil.")
     }
 
     func testRoundTripPersistsAllSixFields() throws {
-        tool.mobileDisplayName = "项目同步"
-        tool.mobileDescription = "运行 git pull --rebase"
+        tool.mobileDisplayName = "Project Sync"
+        tool.mobileDescription = "Run git pull --rebase"
         tool.showInMobileEntry = true
         tool.allowMobileLaunchRequest = true
         tool.mobileLocalConfirmPolicy = .perSession
@@ -47,8 +47,8 @@ final class MobileEntryTests: XCTestCase {
         try context.save()
 
         let fetched = try XCTUnwrap(context.fetch(FetchDescriptor<TerminalTool>()).first)
-        XCTAssertEqual(fetched.mobileDisplayName, "项目同步")
-        XCTAssertEqual(fetched.mobileDescription, "运行 git pull --rebase")
+        XCTAssertEqual(fetched.mobileDisplayName, "Project Sync")
+        XCTAssertEqual(fetched.mobileDescription, "Run git pull --rebase")
         XCTAssertTrue(fetched.showInMobileEntry)
         XCTAssertTrue(fetched.allowMobileLaunchRequest)
         XCTAssertEqual(fetched.mobileLocalConfirmPolicy, .perSession)
@@ -56,27 +56,27 @@ final class MobileEntryTests: XCTestCase {
     }
 
     func testRevokeTripleActionSetsAllThreeFields() throws {
-        // docs/m0-m1-mobile-entry-design.md §2.4: "撤销 = 写时间戳 + 关 2 个开关"
-        // 这里直接 mutate + save 模拟 performMobileRevoke() 的副作用（按钮本身在 UI 测试覆盖）。
+        // docs/m0-m1-mobile-entry-design.md §2.4: "revocation = write the timestamp + turn off the 2 switches"
+        // Here we mutate + save directly to simulate the side effects of performMobileRevoke() (the button itself is covered by UI tests).
         tool.showInMobileEntry = true
         tool.allowMobileLaunchRequest = true
         tool.mobileLocalConfirmPolicy = .lowRiskSessionOnly
         context.insert(tool)
         try context.save()
 
-        // 模拟 performMobileRevoke 的双撤销
+        // Simulate performMobileRevoke's double revocation
         tool.revokeMobilePermissionAt = Date()
         tool.showInMobileEntry = false
         tool.allowMobileLaunchRequest = false
         try context.save()
 
         let fetched = try XCTUnwrap(context.fetch(FetchDescriptor<TerminalTool>()).first)
-        XCTAssertNotNil(fetched.revokeMobilePermissionAt, "撤销后时间戳被写入。")
-        XCTAssertFalse(fetched.showInMobileEntry, "撤销后 showInMobileEntry 被关。")
-        XCTAssertFalse(fetched.allowMobileLaunchRequest, "撤销后 allowMobileLaunchRequest 被关。")
-        // mobileLocalConfirmPolicy 不在撤销范围内——保留用户的偏好以便之后再次开启时复用。
+        XCTAssertNotNil(fetched.revokeMobilePermissionAt, "The timestamp is written after revocation.")
+        XCTAssertFalse(fetched.showInMobileEntry, "showInMobileEntry is turned off after revocation.")
+        XCTAssertFalse(fetched.allowMobileLaunchRequest, "allowMobileLaunchRequest is turned off after revocation.")
+        // mobileLocalConfirmPolicy is outside the scope of revocation — the user's preference is kept so it can be reused when turned on again later.
         XCTAssertEqual(fetched.mobileLocalConfirmPolicy, .lowRiskSessionOnly,
-                       "撤销不影响 confirm policy——用户偏好保留。")
+                       "Revocation does not affect the confirm policy — the user's preference is kept.")
     }
 
     func testAllThreePolicyCasesRoundTrip() throws {
@@ -96,15 +96,15 @@ final class MobileEntryTests: XCTestCase {
     }
 
     func testMigrationFromOlderRecordWithoutMobileFields() throws {
-        // 模拟旧 store 没有 6 字段的记录（forward-compatibility：M0 是叠加层）
-        // SwiftData @Model 新增 Optional 字段不应破坏旧 record 加载。
-        // 这里直接构造一个没有设过 6 字段的 TerminalTool，模拟旧记录语义。
+        // Simulate a record from an old store without the 6 fields (forward compatibility: M0 is an overlay)
+        // Adding Optional fields to a SwiftData @Model should not break loading old records.
+        // Here we directly construct a TerminalTool whose 6 fields were never set, simulating old-record semantics.
         let old = TerminalTool(
             name: "legacy",
             executablePath: "/usr/local/bin/legacy",
             commandTemplate: "legacy"
         )
-        // 不设 6 字段
+        // Do not set the 6 fields
         context.insert(old)
         try context.save()
 

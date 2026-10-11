@@ -1,6 +1,6 @@
 import Foundation
 
-/// `{{variable_name}}` 命令模板的解析与渲染。
+/// Parsing and rendering of `{{variable_name}}` command templates.
 enum CommandTemplate {
     private static let tokenExpression = try! NSRegularExpression(pattern: #"\{\{\s*([A-Za-z][A-Za-z0-9_-]{0,63})\s*\}\}"#)
 
@@ -57,7 +57,7 @@ enum CommandTemplate {
         tool.variableValuesJSON = json
     }
 
-    /// 以 POSIX 单引号转义用户变量，避免未确认的空格、引号或 shell 元字符改变命令结构。
+    /// Escape user variables with POSIX single quotes so that unconfirmed spaces, quotes, or shell metacharacters cannot change the command structure.
     static func shellEscape(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\u{22}'\u{22}'") + "'"
     }
@@ -69,7 +69,7 @@ enum CommandTemplateError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .missingValues(let variables):
-            return "请先填写：\(variables.joined(separator: "、"))。"
+            return "Please fill in first: \(variables.joined(separator: ", "))."
         }
     }
 }

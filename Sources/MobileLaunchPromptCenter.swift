@@ -1,7 +1,7 @@
-// M1 启动请求的本机确认中心（docs/m0-m1-mobile-entry-design.md §3.3.2）。
-// 手机 requestLaunch 到达后，Mac 必须经本中心获得**本机用户**的明确同意；
-// 60 秒无响应 = 拒绝（防无人值守 Mac 上请求悬挂——Mac 始终是唯一执行权威）。
-// 只承载"是否同意"这一个布尔决策，不承载命令、路径或任何工具数据。
+// Local confirmation center for M1 launch requests (docs/m0-m1-mobile-entry-design.md §3.3.2).
+// After a phone's requestLaunch arrives, the Mac must obtain the explicit consent of the **local user** through this center;
+// no response within 60 seconds = denied (prevents requests from hanging on an unattended Mac — the Mac is always the sole execution authority).
+// It carries only the single boolean decision "consent or not", never commands, paths, or any tool data.
 import Foundation
 
 @MainActor
@@ -20,7 +20,7 @@ final class MobileLaunchPromptCenter: ObservableObject {
     private var continuations: [UUID: CheckedContinuation<Bool, Never>] = [:]
     private var timeoutTasks: [UUID: Task<Void, Never>] = [:]
 
-    /// 等待本机用户决策；60 秒超时视为拒绝。
+    /// Wait for the local user's decision; a 60-second timeout counts as a denial.
     func requestConfirmation(toolName: String, deviceName: String) async -> Bool {
         let id = UUID()
         let accepted = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
@@ -35,7 +35,7 @@ final class MobileLaunchPromptCenter: ObservableObject {
         return accepted
     }
 
-    /// alert 按钮回调：启动 / 拒绝。
+    /// Alert button callbacks: launch / deny.
     func respond(_ accepted: Bool) {
         guard let current = pending else { return }
         respond(accepted, for: current.id)

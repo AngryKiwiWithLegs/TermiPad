@@ -1,39 +1,39 @@
 # TermiPad
 
-**TermiPad** 是一款原生 macOS 终端工具启动器：它把主动安装、需要直接交互使用的 CLI 工具整理为可搜索、可分类、可一键启动的工具库。
+**TermiPad** is a native macOS launcher for terminal tools: it organizes the CLI tools you installed yourself and use interactively into a searchable, categorized library you can launch with one click.
 
-> 当前仓库为私有开发版。项目仍在公开发布前的完善阶段；请勿将 API Key 写入源码或提交到仓库。
+> This repository is a private development build. The project is still being polished ahead of a public release; do not write API keys into the source or commit them to the repository.
 
-## 当前可用能力
+## What works today
 
-| 能力 | 当前行为 |
+| Capability | Current behavior |
 |---|---|
-| 候选发现 | 扫描 `$PATH` 和常见第三方安装目录；新命令先进入**候选收件箱**，不会自动污染工具墙。 |
-| 人工整理 | 可收录、忽略、恢复候选；支持手动添加、编辑、隐藏、恢复和删除已收录工具。 |
-| 常用工具 | 可在工具卡片右键收藏；左侧边栏提供“收藏”和按成功启动时间排序的“最近使用”，均只保存在本机。 |
-| 效率入口 | 菜单栏状态项与“工具”菜单可打开工具库、收藏、最近使用、发现和手动添加；支持 `⌘1`、`⌘2`、`⌘3`、`⇧⌘D`、`⇧⌘N`。 |
-| 项目发现预览 | 默认关闭；仅在用户明确启用并手动刷新时读取固定的公开 GitHub CLI 仓库查询，使用本地可解释排序与 ETag 缓存。它不是 GitHub 官方热门榜或安全评级，绝不安装软件、生成命令、自动收录项目或上传本地工具数据。 |
-| 更新检查 | 默认关闭；仅在用户手动触发时读取配置的 HTTPS JSON 版本源，绝不下载、安装或执行更新。 |
-| iCloud 同步 | 默认显式禁用。需 Apple Developer 团队、CloudKit 容器、冲突策略和双设备验证后才会实现；见 [`docs/icloud-sync-design-gate.md`](docs/icloud-sync-design-gate.md)。 |
-| 命令模板 | 支持 `{{variable_name}}` 占位符；首次启动时会要求填写变量、展示命令预览并保存本机默认值。 |
-| 工作目录 | 可为单个工具从本机选择工作目录；启动时只以 shell 安全转义的 `cd --` 前缀包装命令，目录失效时直接进入编辑修复，不运行探测命令。 |
-| 终端启动 | 可在设置中选择 Terminal.app、iTerm、Warp 或“仅复制命令”。Warp 采用打开应用并复制命令的保守方式。 |
-| 工具健康 | 对记录的绝对可执行路径只检查存在性与可执行权限；若路径失效，阻止启动并直接提供编辑修复入口，不会运行检查命令。 |
-| 信息补充 | 可选 GitHub README 搜索与 AI 提炼；默认关闭网络补充，失败时保留本地命令和手动编辑能力。AI API Key 仅保存于 macOS Keychain。 |
-| 图标 | 默认使用本地内置的差异化语义图标与稳定渐变回退；可从本机选择图片作为自定义图标。所选图片会复制到受控本地 PNG 目录，不会下载或显示 GitHub 所有者头像。 |
-| 本地存储 | 工具、候选、分类、隐藏状态、命令模板和变量值保存在本机 SwiftData 容器中。 |
+| Candidate discovery | Scans `$PATH` and common third-party install directories; new commands go to the **Review Inbox** first and never pollute the tool wall automatically. |
+| Manual curation | Accept, ignore, or restore candidates; add tools manually, and edit, hide, restore, or delete accepted tools. |
+| Frequent tools | Favorite a tool from its card's context menu; the left sidebar offers "Favorites" and "Recent" (sorted by last successful launch), both stored only on this Mac. |
+| Quick access | The menu bar status item and the "Tools" menu open the library, Favorites, Recent, discovery, and manual add; `⌘1`, `⌘2`, `⌘3`, `⇧⌘D`, and `⇧⌘N` are supported. |
+| Project Discovery Preview | Off by default; only when the user explicitly enables it and refreshes manually does it read a fixed public GitHub CLI repository query, using locally explainable ranking and an ETag cache. It is not an official GitHub trending list or a security rating, and it never installs software, generates commands, adds projects automatically, or uploads local tool data. |
+| Update checks | Off by default; reads the configured HTTPS JSON version feed only when the user triggers it manually, and never downloads, installs, or executes an update. |
+| iCloud sync | Explicitly disabled by default. It will be implemented only after an Apple Developer team, a CloudKit container, a conflict policy, and two-device verification are in place; see [`docs/icloud-sync-design-gate.md`](docs/icloud-sync-design-gate.md). |
+| Command templates | Supports `{{variable_name}}` placeholders; on first launch it asks for the variables, shows a command preview, and saves the defaults on this Mac. |
+| Working directory | Choose a local working directory per tool; at launch the command is only wrapped in a shell-escaped `cd --` prefix, and if the directory is gone you are taken straight to editing to fix it, with no probing command run. |
+| Terminal launching | Choose Terminal.app, iTerm, Warp, or "Copy Command Only" in Settings. Warp uses the conservative approach of opening the app and copying the command. |
+| Tool health | For the recorded absolute executable path, only existence and execute permission are checked; if the path is no longer valid, launching is blocked and an edit-to-fix entry is offered directly, with no check command run. |
+| Enrichment | Optional GitHub README lookup and AI summarization; network enrichment is off by default, and on failure the local command and manual editing remain available. The AI API key is stored only in the macOS Keychain. |
+| Icons | By default uses locally built-in, differentiated semantic icons with a stable gradient fallback; you can pick a local image as a custom icon. The chosen image is copied into a controlled local PNG directory; GitHub owner avatars are never downloaded or shown. |
+| Local storage | Tools, candidates, categories, hidden state, command templates, and variable values are stored in a local SwiftData container. |
 
-## 本地运行
+## Running locally
 
-### 前置条件
+### Prerequisites
 
-- macOS 14 或更高版本。
-- Xcode 15 或更高版本。
-- 使用 **macOS / My Mac** 作为运行目标；请勿选择 iPhone 或 iPad 模拟器。
+- macOS 14 or later.
+- Xcode 15 or later.
+- Use **macOS / My Mac** as the run destination; do not choose an iPhone or iPad simulator.
 
-### 推荐方式：使用项目定义生成 Xcode 工程
+### Recommended: generate the Xcode project from the project definition
 
-项目包含 `project.yml`，用于生成带单元测试和 macOS UI 测试的原生工程。
+The project includes `project.yml`, which generates a native project with unit tests and macOS UI tests.
 
 ```bash
 brew install xcodegen
@@ -42,148 +42,148 @@ xcodegen generate
 open TermiPad.xcodeproj
 ```
 
-在 Xcode 顶部选择 **TermiPad > My Mac**，然后按 `Command + R`。首次运行会先说明扫描、数据、本地终端自动化与可选网络补充的边界；确认后再使用“发现工具”。首轮扫描后，请进入左侧 **候选收件箱**确认要收录的工具。
+In the Xcode toolbar choose **TermiPad > My Mac**, then press `Command + R`. The first run explains the boundaries of scanning, data, local terminal automation, and optional network enrichment; confirm, then use "Discover Tools". After the first scan, open the **Review Inbox** in the left sidebar to confirm which tools to accept.
 
-### Swift Package 方式
+### Swift Package
 
-也可直接打开包定义：
+You can also open the package definition directly:
 
 ```bash
 cd TermiPad
 open Package.swift
 ```
 
-同样必须在 Xcode 中选择 **My Mac**。包方式适合源码浏览与基础构建；完整 UI 自动化测试以生成的 `.xcodeproj` 为准。
+You must still choose **My Mac** in Xcode. The package route suits source browsing and basic builds; for the full UI automation tests, use the generated `.xcodeproj`.
 
-## 使用流程
+## Workflow
 
 ```text
-本地工具：发现工具 → 候选收件箱确认收录 → （可选）GitHub / AI 补充 → 点击图标
-→ 若模板含变量则填写表单 → 在偏好终端执行或复制命令
+Local tools: Discover Tools → accept in the Review Inbox → (optional) GitHub / AI enrichment → click the icon
+→ fill in the form if the template has variables → run in your preferred terminal or copy the command
 
-项目发现预览：默认关闭 → 用户手动刷新公开仓库元数据 → 自行审查项目与官方渠道
-（仅浏览；不会安装软件、生成命令或加入工具库）
+Project Discovery Preview: off by default → the user refreshes public repository metadata manually → review the project and its official channels yourself
+(browse only; it does not install software, generate commands, or add anything to the library)
 ```
 
-## 首次启动、数据与网络边界
+## First launch, data, and network boundaries
 
-首次启动时，TermiPad 会明确说明以下行为：扫描仅检查 PATH 与常见第三方安装目录，并排除 macOS 系统目录、Apple Command Line Tools、Xcode 工具链、包管理器、服务进程与脚本零件；新命令先进入候选收件箱，不会自动加入工具墙；工具、分类、模板与变量值默认保存在本机；GitHub / AI 网络补充可选且默认关闭。终端命令只会在您点击工具后交给所选终端执行。
+On first launch TermiPad states the following explicitly: scanning only checks PATH and common third-party install directories, and excludes macOS system directories, Apple Command Line Tools, the Xcode toolchain, package managers, service processes, and script parts; new commands go to the Review Inbox first and are never added to the tool wall automatically; tools, categories, templates, and variable values are stored on this Mac by default; GitHub / AI network enrichment is optional and off by default. A terminal command is handed to the chosen terminal only after you click a tool.
 
-从工具库左侧边栏的 **设置**，或 macOS 菜单栏的 **TermiPad → Settings… → AI 服务**，可设置兼容 OpenAI Chat Completions 的服务地址、模型和 API Key。API Key 仅写入 macOS Keychain，不保存在 UserDefaults 或仓库中；删除 API Key 后，应用会自动退回本地说明和手动编辑能力。GitHub 补充仅接受内置官方仓库映射或高置信度的名称匹配，低置信搜索结果不会自动写入工具。AI 只能补充用途说明和分类，**不会改写启动命令**；GitHub 仓库所有者头像也不会被当作工具官方图标，图标继续由本地目录或稳定回退提供。
+From **Settings** in the library's left sidebar, or **TermiPad → Settings… → AI Service** in the macOS menu bar, you can set an OpenAI Chat Completions-compatible service URL, model, and API key. The API key is written only to the macOS Keychain, never to UserDefaults or the repository; after you remove the API key, the app falls back to local descriptions and manual editing. GitHub enrichment accepts only the built-in official repository mapping or a high-confidence name match; low-confidence search results are never written to a tool automatically. AI may only add a purpose description and a category and **never rewrites the launch command**; a GitHub repository owner's avatar is not treated as the tool's official icon either, so icons keep coming from the local catalog or the stable fallback.
 
-从左侧边栏的 **设置 → 备份与恢复**，或菜单栏的 **TermiPad → Settings… → 备份与恢复**，可导出版本化 JSON 备份，或导入另一台 Mac 的备份并先预览合并结果。备份包含工具、候选、分类、本地图标元数据、安装来源、GitHub 匹配依据、收藏状态、最近启动时间和命令模板；**API Key 永不导出**，已保存的变量值默认排除，只有用户明确勾选后才会包含。用户选择的自定义图片仅保存在本机受控目录，不作为 JSON 路径或二进制内容导出；恢复到另一台 Mac 时会安全回退至本地图标策略。每工具工作目录同样只保存在本机，不作为 JSON 路径写入备份或诊断包；恢复后维持当前 Mac 的本地偏好或使用默认启动上下文。导入按记录 ID 和可执行路径合并，不会删除当前已有工具或候选。为兼容旧版 schema 1 备份，缺失的来源与可信度字段会从本地路径安全推导；旧备份中可能存在的远程头像 URL 会被忽略且不会再被导出。
+From **Settings → Backup & Restore** in the left sidebar, or **TermiPad → Settings… → Backup & Restore** in the menu bar, you can export a versioned JSON backup, or import a backup from another Mac and preview the merge first. A backup contains tools, candidates, categories, local icon metadata, installation source, GitHub match evidence, favorite state, last launch time, and command templates; **API keys are never exported**, and saved variable values are excluded by default and included only when the user explicitly checks the option. A custom image the user chose is stored only in the controlled local directory and is not exported as a JSON path or binary content; when restoring on another Mac it safely falls back to the local icon strategy. Per-tool working directories are likewise stored only on this Mac and are not written as JSON paths into backups or diagnostic packages; after a restore the current Mac's local preference is kept or the default launch context is used. Import merges by record ID and executable path and never deletes existing tools or candidates. For compatibility with old schema 1 backups, missing source and trust fields are derived safely from the local path; remote avatar URLs that may exist in old backups are ignored and never exported again.
 
-候选收件箱会显示命令的本地安装来源。收录后，可在 **编辑工具 → 来源与可信度** 查看该工具来自何种本地目录、是否经过 GitHub 官方映射或高置信名称匹配、关联仓库以及匹配分数。用户手动编辑的命令保持优先，不会被远程补充覆盖。
+The Review Inbox shows each command's local installation source. After accepting a tool, **Edit Tool → Source & Trust** shows which kind of local directory it came from, whether it went through the official GitHub mapping or a high-confidence name match, the linked repository, and the match score. Commands the user edited manually keep priority and are never overwritten by remote enrichment.
 
-在 **设置 → 诊断与支持** 中，用户可以主动导出本地 JSON 诊断包或清除记录。诊断仅包含固定事件类别、时间、终端名称和数量；**不会**包含工具名称、可执行路径、命令、变量值、API Key 或 GitHub 内容。诊断包不会自动上传或联网。
+In **Settings → Diagnostics & Support** the user can deliberately export a local JSON diagnostic package or clear the records. Diagnostics contain only fixed event categories, timestamps, terminal names, and counts; they **never** contain tool names, executable paths, commands, variable values, API keys, or GitHub content. The diagnostic package is never uploaded automatically and never touches the network.
 
-在 **设置 → 更新检查** 中，用户可选择开启手动 HTTPS 版本检查。TermiPad 没有预置更新源，也不会下载、安装或执行任何更新；即使发现新版本，仍由用户自行查看说明并通过独立分发流程取得。JSON 格式与完整边界见 [`docs/update-check-contract.md`](docs/update-check-contract.md)。
+In **Settings → Update Checks** the user can opt in to a manual HTTPS version check. TermiPad ships with no preset update feed and never downloads, installs, or executes any update; even when a new version is found, the user still reads the notes and obtains it through a separate distribution process. The JSON format and the full boundaries are in [`docs/update-check-contract.md`](docs/update-check-contract.md).
 
-## 终端偏好
+## Terminal preference
 
-从左侧边栏的 **设置**，或从 macOS 菜单栏打开 **TermiPad → Settings…**：
+From **Settings** in the left sidebar, or **TermiPad → Settings…** in the macOS menu bar:
 
-- **Terminal.app**：通过 AppleScript 在新标签或窗口中执行命令。
-- **iTerm**：将命令写入当前会话；未打开窗口时会创建默认窗口。
-- **Warp**：打开 Warp 并复制完整命令，用户可检查后粘贴执行。
-- **仅复制命令**：不打开任何终端，只将最终命令复制到剪贴板。
+- **Terminal.app**: runs the command in a new tab or window via AppleScript.
+- **iTerm**: writes the command into the current session; creates a default window if none is open.
+- **Warp**: opens Warp and copies the full command so the user can review it and paste it to run.
+- **Copy Command Only**: opens no terminal and only copies the final command to the clipboard.
 
-### macOS 自动化权限
+### macOS Automation permission
 
-首次使用 **Terminal.app** 或 **iTerm** 一键启动时，macOS 可能会请求允许 TermiPad 控制所选终端。这是系统隐私保护机制，应用无法自行绕过。请在弹窗中选择允许；若此前已拒绝，请前往 **系统设置 → 隐私与安全性 → 自动化**，在 TermiPad 下启用对应的 Terminal.app 或 iTerm。
+The first time you use one-click launch with **Terminal.app** or **iTerm**, macOS may ask whether TermiPad may control the chosen terminal. This is a system privacy mechanism the app cannot bypass. Choose Allow in the prompt; if you denied it earlier, go to **System Settings → Privacy & Security → Automation** and enable the corresponding Terminal.app or iTerm under TermiPad.
 
-如果权限尚未授予，TermiPad 不会丢弃已填写或渲染好的命令：它会自动复制命令到剪贴板，并显示上述明确的授权路径。授权后再次点击工具即可继续一键启动。
+If the permission has not been granted yet, TermiPad does not discard the command you filled in or rendered: it copies the command to the clipboard automatically and shows the explicit authorization path above. After granting permission, click the tool again to continue with one-click launch.
 
-## 命令模板
+## Command templates
 
-将必须由用户填写的内容写为 `{{variable_name}}`，例如：
+Write anything the user must fill in as `{{variable_name}}`, for example:
 
 ```text
 claude --model {{model}} {{prompt}}
 ```
 
-TermiPad 会在启动前显示表单。变量值会使用 POSIX 单引号方式进行 shell 转义，以避免空格或引号意外改变命令结构；但用户仍应在执行前确认最终命令及其影响。
+TermiPad shows a form before launching. Variable values are shell-escaped with POSIX single quotes so that spaces or quotes cannot accidentally change the command structure; the user should still confirm the final command and its effects before running it.
 
-## 自动化验证
+## Automated verification
 
-在 macOS 本机，优先运行以下一键验证脚本：
+On a Mac, prefer running the following one-step verification script:
 
 ```bash
 cd ~/TermiPad
 ./scripts/verify-macos.sh
 ```
 
-脚本会重新生成 `.xcodeproj`，依次执行 Swift Package 清单校验、单元测试、`xcodebuild` 构建，并在 UI 冒烟测试前校验测试 Runner 的本机签名。每次日志、`.xcresult`、可导出的 UI 截图和摘要都会写入 `.verification/`。如只需快速检查核心逻辑和构建，可运行 `./scripts/verify-macos.sh --skip-ui`。
+The script regenerates the `.xcodeproj`, then runs Swift Package manifest validation, unit tests, and the `xcodebuild` build in order, and verifies the local signature of the test Runner before the UI smoke tests. Each run's logs, `.xcresult`, exportable UI screenshots, and summary are written to `.verification/`. To quickly check only the core logic and the build, run `./scripts/verify-macos.sh --skip-ui`.
 
-GitHub Actions 工作流包含：
+The GitHub Actions workflow includes:
 
-1. Swift 单元测试：扫描过滤、分类、命令变量与图标回退。
-2. `xcodebuild` macOS 构建。
-3. macOS UI Smoke Test：完成首次信任引导、检查主要控件、归档 `.xcresult` 和截图。
+1. Swift unit tests: scan filtering, categorization, command variables, and icon fallback.
+2. `xcodebuild` macOS build.
+3. macOS UI smoke test: completes the first-run trust onboarding, checks the main controls, and archives the `.xcresult` and screenshots.
 
-当前 GitHub Actions 的云端运行受账户级账单/额度限制拦截；恢复后，工作流会自动继续执行上述验证。
+Cloud runs of GitHub Actions are currently blocked by an account-level billing/quota limit; once that is resolved, the workflow resumes the verification above automatically.
 
-### 发行工件检查
+### Release artifact check
 
-`./scripts/verify-macos.sh` 只验证开发构建，不会也不能代替 Developer ID 签名与 Apple 公证。在已归档、签名后的 `.app` 上，可运行以下脚本归档签名、Hardened Runtime、entitlement 与（可选）Gatekeeper/票据检查证据：
+`./scripts/verify-macos.sh` only verifies development builds; it does not and cannot replace Developer ID signing and Apple notarization. On an archived, signed `.app`, you can run the following script to archive evidence of the signature, Hardened Runtime, entitlements, and (optionally) Gatekeeper/ticket checks:
 
 ```bash
 cd ~/TermiPad
 ./scripts/verify-release-artifact.sh "/path/to/TermiPad.app"
-# 已完成公证并 staple 票据后：
+# After notarization is complete and the ticket is stapled:
 ./scripts/verify-release-artifact.sh "/path/to/TermiPad.app" --require-notarization
 ```
 
-该脚本**不会**签名、上传公证或发布软件；它只审计已经生成的发行工件并把证据写入 `release-evidence/`。正式放行要求见 [`docs/private-beta-release-audit.md`](docs/private-beta-release-audit.md)。
+The script does **not** sign, upload for notarization, or publish software; it only audits an already-built release artifact and writes the evidence to `release-evidence/`. The requirements for a formal release are in [`docs/private-beta-release-audit.md`](docs/private-beta-release-audit.md).
 
-## 项目结构
+## Project structure
 
 ```text
 TermiPad/
-├── scripts/verify-macos.sh      # 一键执行本机 macOS 验证
-├── scripts/verify-release-artifact.sh # 已签名发行工件的证据检查
+├── scripts/verify-macos.sh      # one-step local macOS verification
+├── scripts/verify-release-artifact.sh # evidence check for a signed release artifact
 ├── Sources/
-│   ├── TerminalTool.swift       # SwiftData 工具与候选模型
-│   ├── ToolScanner.swift        # PATH 与常见生态路径扫描
-│   ├── CommandTemplate.swift    # {{variable}} 解析、渲染与转义
-│   ├── TerminalLauncher.swift   # Terminal / iTerm / Warp / 剪贴板启动适配
-│   ├── LaunchpadView.swift      # 原生侧边栏、候选收件箱、工具墙与表单
-│   ├── PreferencesView.swift    # 应用偏好设置
-│   └── ToolIconView.swift       # 差异化图标系统
-├── Tests/                       # 核心逻辑单元测试
-├── UITests/                     # macOS UI 自动化测试
-├── project.yml                  # XcodeGen 原生工程定义
-└── .github/workflows/           # 云端构建与截图归档
+│   ├── TerminalTool.swift       # SwiftData tool and candidate models
+│   ├── ToolScanner.swift        # scanning of PATH and common ecosystem paths
+│   ├── CommandTemplate.swift    # {{variable}} parsing, rendering, and escaping
+│   ├── TerminalLauncher.swift   # Terminal / iTerm / Warp / clipboard launch adapters
+│   ├── LaunchpadView.swift      # native sidebar, Review Inbox, tool wall, and forms
+│   ├── PreferencesView.swift    # app preferences
+│   └── ToolIconView.swift       # differentiated icon system
+├── Tests/                       # unit tests for the core logic
+├── UITests/                     # macOS UI automation tests
+├── project.yml                  # XcodeGen native project definition
+└── .github/workflows/           # cloud builds and screenshot archiving
 ```
 
-## 公开版前的开发路线
+## Roadmap before the public release
 
-公开前仍需完成正式签名与公证、发布包复核以及更深的 UI 测试。图标保持本地语义目录；若未来引入品牌图标，必须采用可验证来源、显式用户控制和本地缓存策略。详细优先级见私有开发文档 `termipad_development_backlog.md`。
+Before going public, formal signing and notarization, a release package review, and deeper UI tests are still needed. Icons stay in the local semantic catalog; if brand icons are ever introduced, they must use verifiable sources, explicit user control, and a local caching strategy. Detailed priorities are in the private development document `termipad_development_backlog.md`.
 
 ## Language and appearance
 
-TermiPad supports an immediate in-app language switch between **简体中文** and **English**. Use the compact **中 / EN** segmented control in the main toolbar, or open **TermiPad → Settings… → Language**. Tool names, commands, paths, and README-derived descriptions are deliberately left unchanged.
+TermiPad supports an immediate in-app language switch between **English** (the default) and **简体中文** (Simplified Chinese). Use the compact **中 / EN** segmented control in the main toolbar, or open **TermiPad → Settings… → Language**. Tool names, commands, paths, and README-derived descriptions are deliberately left unchanged.
 
 The compact three-segment appearance control in the main toolbar, and **Settings → Appearance**, provides one-click access to **System**, **Light**, and **Dark**. The preference is stored locally and applied to both the main window and the Settings window.
 
-### 柔和 macOS 外观
+### Soft macOS appearance
 
-浅色模式采用轻微蓝灰的窗口背景和近白内容表面，而非大面积纯白；深色模式采用石墨灰和分层卡片表面，而非纯黑。侧边栏、内容区和工具卡片使用统一的语义层级。切换“跟随系统 / 浅色 / 深色”时会以约 0.30 秒的缓入缓出过渡完成；若 macOS 启用了“减少动态效果”，应用会尊重该辅助功能并取消动画。
+Light mode uses a slightly blue-grey window background and near-white content surfaces instead of large areas of pure white; dark mode uses graphite grey and layered card surfaces instead of pure black. The sidebar, content area, and tool cards share one semantic hierarchy. Switching between "System / Light / Dark" completes with an ease-in-out transition of about 0.30 seconds; if "Reduce motion" is enabled in macOS, the app respects that accessibility setting and drops the animation.
 
-### 原生控件与初始窗口位置
+### Native controls and initial window position
 
-工具卡片使用更紧凑的 `7pt` 连续圆角、轻描边和短阴影，以接近 macOS 内容表面的几何比例；候选操作与工具栏继续使用系统的 bordered / borderedProminent 控件样式。
+Tool cards use a more compact `7pt` continuous corner radius, a light stroke, and a short shadow to approach the geometry of macOS content surfaces; candidate actions and the toolbar keep using the system bordered / borderedProminent control styles.
 
-首次启动时，TermiPad 会把主窗口放置到**主显示器可用区域的左半边**（会避开菜单栏和 Dock）。之后应用会尊重您手动调整的位置和尺寸，不会再次抢占窗口。若要重新体验首次定位，可执行：
+On first launch TermiPad places the main window in the **left half of the main display's usable area** (avoiding the menu bar and the Dock). After that the app respects the position and size you set manually and never grabs the window again. To experience the first-launch placement again, run:
 
 ```bash
 defaults delete com.termipad.app TermiPad.hasPlacedInitialMainWindow
 ```
 
-工程定义已更新 Xcode 升级检查标记。拉取更新后请务必重新运行 `xcodegen generate`，不要继续使用旧的 `.xcodeproj`。
+The project definition has updated the Xcode upgrade check marker. After pulling the update, be sure to run `xcodegen generate` again; do not keep using the old `.xcodeproj`.
 
-### 工具格子提示与工具栏控件
+### Tool tile tips and toolbar controls
 
-主窗口的语言和外观分段控件使用常规 macOS 控件尺寸，并在两组控件之间保留额外留白。工具格始终只显示图标与工具名称，保持紧凑一致；分类继续用于左侧边栏筛选、内部整理及说明回退，但不会占用格子空间。将鼠标停留在任一工具格子上时，macOS 原生 popover 会在工具墙之上显示两段简洁说明：**用途**说明它能帮助完成什么，**如何开始**说明应在何处启动、需要做什么准备或如何继续操作。说明内容使用连续圆角、中性浅灰材质、细描边与柔和阴影，并会随浅色和深色外观调整表面对比度。常见 CLI（如 Claude、GitHub CLI、Lazygit、FFmpeg、fzf 与 Terraform）使用更具体的本地说明；已有 README / AI 可靠摘要时会优先作为用途。旧版“正在尝试 AI 增强”等后台状态不会再作为悬浮提示或辅助功能文本展示。
+The language and appearance segmented controls in the main window use the regular macOS control size, with extra spacing between the two groups. A tool tile always shows only the icon and the tool name, staying compact and consistent; categories are still used for filtering in the left sidebar, internal organization, and description fallback, but take no space on the tile. When the pointer rests on any tool tile, a native macOS popover shows two short notes above the tool wall: **Purpose** says what it helps you get done, and **Getting started** says where to launch it, what to prepare, or how to continue. The notes use continuous rounded corners, a neutral light-grey material, a thin stroke, and a soft shadow, and adjust their surface contrast for light and dark appearances. Common CLIs (such as Claude, GitHub CLI, Lazygit, FFmpeg, fzf, and Terraform) get more specific local notes; a reliable README / AI summary, when available, is preferred as the purpose. Legacy background statuses such as "正在尝试 AI 增强" ("attempting AI enrichment") are no longer shown as hover tips or accessibility text.
 
-`project.yml` 已显式启用 Xcode 推荐的 Dead Code Stripping、User Script Sandboxing、String Catalog Symbol Generation 与 Asset Symbol Extensions。重新生成工程后，项目级“Update to recommended settings”清单应不再要求这些设置。
+`project.yml` explicitly enables the Xcode-recommended Dead Code Stripping, User Script Sandboxing, String Catalog Symbol Generation, and Asset Symbol Extensions. After regenerating the project, the project-level "Update to recommended settings" checklist should no longer ask for these settings.

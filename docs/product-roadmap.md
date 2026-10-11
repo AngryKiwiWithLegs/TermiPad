@@ -1,205 +1,205 @@
-# TermiPad 整体产品路线图
+# TermiPad overall product roadmap
 
-**产品定位：** TermiPad 是一款原生 macOS 的**可信终端能力管理器**。它将用户主动配置、可解释、可撤销的 CLI 工作流组织为图标工具；在后续阶段，它还将提供受限的一次性测试任务、智能体协作和原生移动管理端，但不会演变为公网远程 Shell。
+**Product positioning:** TermiPad is a native macOS **trusted terminal capability manager**. It organizes the CLI workflows the user configured deliberately — explainable and revocable — into icon tools; in later phases it will also offer restricted one-off test tasks, agent collaboration, and a native mobile management app, but it will not evolve into a public remote shell.
 
-**路线图状态：** 开发规划；不代表所有阶段已实现、已验证、已签名或可分发。
+**Roadmap status:** Development planning; it does not mean every phase is implemented, verified, signed, or distributable.
 
-## 1. 北极星场景
+## 1. North-star scenario
 
-用户正在手机上与智能体讨论一个项目。智能体提出新的测试或修复命令；用户不在 Mac 前，无法复制命令到终端。用户应能够从自己的移动端确认任务建议，TermiPad 在 Mac 上创建一个有项目范围、时限、权限和停止能力的受限任务会话，并只将最小必要结果返回已授权会话。
+The user is discussing a project with an agent on the phone. The agent proposes a new test or fix command; the user is not at the Mac and cannot copy the command into a terminal. The user should be able to confirm the task proposal from their own mobile device, with TermiPad creating a restricted task session on the Mac that has a project scope, time limit, permissions, and the ability to stop, and returning only the minimal necessary result to the authorized session.
 
-与此同时，已经稳定的构建、测试、部署、同步或转换流程应继续以用户认识的图标工具形式出现，不需要由智能体每次重新生成命令。
+Meanwhile, already stable build, test, deploy, sync, or conversion flows should keep appearing as icon tools the user recognizes, without the agent regenerating the command every time.
 
-> **长期承诺：** 固定工作流被产品化为可信图标能力；临时工作被约束为可审阅、可过期的任务；Mac 始终是唯一执行权威。
+> **Long-term promise:** fixed workflows are productized as trusted icon capabilities; temporary work is constrained into reviewable, expiring tasks; the Mac is always the sole execution authority.
 
-## 2. 当前产品基线
+## 2. Current product baseline
 
-| 层级 | 当前状态 | 结论 |
+| Layer | Current status | Conclusion |
 |---|---|---|
-| **Mendocino 核心启动器** | 已在用户真实 Apple Silicon Mac 完成集中验证，基线为 `70d9d40` | 可作为私有开发/自测基线。 |
-| **P0、P1、P2-A/B/C** | 已完成并在真实 macOS 验证 | 候选收件箱、保守项目发现、受控安装审查、只读环境报告均已收口。 |
-| **iPad-inspired macOS 工作区** | 已完成并验证 | 保留原生 macOS 结构，不模拟 iPad 机身。 |
-| **本地图标系统** | 已在用户真实 Mac 完成集中验证，提交 `0265caf` | 最近一次完整验证于 2026-08-26 17:51 通过；5 个 UI 测试和 UI 冒烟测试均通过。 |
-| **Telegram / PWA 图标预览** | 已完成静态原型与设计研究 | 不连接真实 Mac、不保存 token、不执行任务。 |
-| **T0 受限临时任务策略** | 已在真实 macOS 验证 | 固定目录、项目范围、本地审阅窗口、风险、nonce、过期、取消、撤销与隐私化诊断已实现；不执行任务。 |
-| **T1 本机受限任务执行器** | 已在真实 macOS 验证 | 仅执行 T0 已批准固定任务；项目范围、固定 executable/arguments、停止、超时、最小状态/退出码与空输入输出已实现。 |
-| **T2 本机受限 MCP 协作** | 已在真实 macOS 验证并完成隔离只读演练 | 用户明确开启且应用运行时，独立本机 `stdio` 服务端经 CFMessagePort 仅提供固定任务/范围查询、待审阅任务提案、最小状态读取与未开始任务取消；精确支持 `2025-03-26` 与经 OpenCode 1.14.33 证实的 `2025-11-25` 初始化版本。实机 OpenCode 演练仅列出范围与固定任务，结束后服务恢复关闭；不开放网络或执行权。 |
-| **原生 iPhone App** | 后续阶段 | 未实现，且不应绕过后续安全与验收闸门。 |
-| **外部分发、iCloud、CloudKit** | 未实施 | 受 Apple Developer、签名、公证、Gatekeeper 与真实多设备测试等外部闸门限制。 |
+| **Mendocino core launcher** | Consolidated verification complete on the user's real Apple Silicon Mac, baseline `70d9d40` | Usable as the private development / self-test baseline. |
+| **P0, P1, P2-A/B/C** | Complete and verified on real macOS | The review inbox, conservative project discovery, controlled install review, and read-only environment report are all finished. |
+| **iPad-inspired macOS workspace** | Complete and verified | Keeps the native macOS structure and does not imitate an iPad body. |
+| **Local icon system** | Consolidated verification complete on the user's real Mac, commit `0265caf` | The latest full verification passed on 2026-08-26 17:51; all 5 UI tests and the UI smoke test passed. |
+| **Telegram / PWA icon preview** | Static prototype and design research complete | Connects to no real Mac, stores no token, and runs no tasks. |
+| **T0 restricted temporary task policy** | Verified on real macOS | The fixed catalog, project scope, local review window, risk, nonce, expiry, cancellation, revocation, and privacy-preserving diagnostics are implemented; it runs no tasks. |
+| **T1 local restricted task executor** | Verified on real macOS | Runs only fixed tasks approved by T0; project scope, fixed executable/arguments, stop, timeout, minimal status / exit code, and empty input/output are implemented. |
+| **T2 local restricted MCP collaboration** | Verified on real macOS and the isolated read-only walkthrough is done | When the user explicitly turns it on and the app is running, the separate local `stdio` server offers, through CFMessagePort, only fixed task / scope queries, task proposals for review, minimal status reads, and cancellation of tasks that have not started; it supports exactly `2025-03-26` and the `2025-11-25` initialization version confirmed with OpenCode 1.14.33. The real-machine OpenCode walkthrough only listed scopes and fixed tasks, and the service was turned off again afterwards; no network or execution rights are opened. |
+| **Native iPhone app** | Later phase | Not implemented, and it should not bypass the later security and acceptance gates. |
+| **External distribution, iCloud, CloudKit** | Not implemented | Limited by external gates such as Apple Developer, signing, notarization, Gatekeeper, and real multi-device testing. |
 
-私有 beta 的已验证范围、发布限制和 Apple 外部闸门详见 `docs/private-beta-release-audit.md`。当前不得把 Developer ID、Hardened Runtime、公证、Gatekeeper 冷启动、iCloud 或公开发布表述为已完成。
+The verified scope of the private beta, the release restrictions, and the external Apple gates are detailed in `docs/private-beta-release-audit.md`. For now Developer ID, Hardened Runtime, notarization, Gatekeeper cold start, iCloud, or a public release must not be described as done.
 
-## 3. 最终产品架构
+## 3. Final product architecture
 
-TermiPad 不以某个手机入口或聊天平台为中心，而以 Mac 上的本地策略核心为中心。固定工具、临时任务、智能体请求和手机请求都必须经过同一套本地决策。
+TermiPad is centered not on some phone entry or chat platform but on the local policy core on the Mac. Fixed tools, temporary tasks, agent requests, and phone requests must all go through the same local decision.
 
 ```text
-原生 iPhone App（长期主入口）
-PWA（验证/兼容层）
-Telegram Mini App / Bot（可选快捷入口与通知）
-本机 MCP 客户端（智能体协作）
+Native iPhone app (long-term primary entry)
+PWA (validation / compatibility layer)
+Telegram Mini App / Bot (optional shortcut entry and notifications)
+Local MCP client (agent collaboration)
                  │
                  ▼
-        TermiPad 本地策略核心（Mac）
-工具许可 · 项目范围 · 远程允许窗口 · 风险等级
-签名 · nonce · 时限 · 速率限制 · 停止 · 撤销 · 审计
+        TermiPad local policy core (Mac)
+tool permission · project scope · remote allow window · risk level
+signature · nonce · time limit · rate limiting · stop · revocation · audit
                  │
       ┌──────────┴──────────┐
       ▼                     ▼
-固定图标工具            受限临时任务会话
-已保存命令              一次性命令、项目边界、超时
-Terminal/iTerm/Warp     最小结果回传
+Fixed icon tools        Restricted temporary task session
+saved commands          one-off command, project boundary, timeout
+Terminal/iTerm/Warp     minimal result return
 ```
 
-### 两种执行平面
+### Two execution planes
 
-| 执行平面 | 适合的工作 | 命令来源 | 对外结果 |
+| Execution plane | Suitable work | Command source | External result |
 |---|---|---|---|
-| **固定图标工具** | 稳定、高频、已验证流程 | 用户已保存的固定命令 | 固定状态，不公开命令或终端输出。 |
-| **受限临时任务** | 对话中刚生成的测试、构建或诊断任务 | 可审阅的一次性 `TaskIntent` | 受策略限制的结构化结果/最小诊断，不传完整交互终端。 |
+| **Fixed icon tools** | Stable, frequent, verified flows | Fixed commands saved by the user | Fixed states; commands and terminal output are not exposed. |
+| **Restricted temporary tasks** | Test, build, or diagnostic tasks just generated in a conversation | A reviewable one-off `TaskIntent` | Structured results / minimal diagnostics limited by policy; no full interactive terminal is transferred. |
 
-固定工具永不因智能体请求而被改写；临时任务也不会静默升级为固定工具。只有用户在 Mac 本机明确确认后，临时任务才可被保存为新的图标工具。
+A fixed tool is never rewritten because of an agent request; and a temporary task is never silently promoted to a fixed tool. Only after the user explicitly confirms on the Mac can a temporary task be saved as a new icon tool.
 
-## 4. 战略分层
+## 4. Strategic layers
 
-| 产品层 | 目的 | 最终形态 | 当前优先级 |
+| Product layer | Purpose | Final form | Current priority |
 |---|---|---|---|
-| **A. 本地可信工具库** | 让用户识别、组织、启动和恢复自己的 CLI 工具 | 原生 macOS TermiPad | 最高；当前持续收口。 |
-| **B. 受限任务工作台** | 让一次性测试任务有范围、时限和可停止性 | Mac 本地 TaskIntent/Task Session | 下一核心开发线。 |
-| **C. 智能体协作** | 让本机智能体调用固定能力或提出临时任务建议 | `stdio` TermiPad MCP | 在 B 成熟后实施。 |
-| **D. 原生移动管理端** | 管理配对、图标、任务、允许窗口与撤销 | 原生 iPhone App | 长期移动端终局。 |
-| **E. 兼容与通知入口** | 免安装验证、聊天内快捷打开、状态通知 | PWA、Telegram Mini App/Bot | 仅复用核心，不拥有策略。 |
-| **F. 发行与生态** | 私有 beta、签名、公证、未来同步 | Developer ID / Apple 服务 | 依赖外部账户与真实验证。 |
+| **A. Local trusted tool library** | Let users recognize, organize, launch, and recover their own CLI tools | Native macOS TermiPad | Highest; being finished continuously. |
+| **B. Restricted task workbench** | Give one-off test tasks a scope, a time limit, and the ability to stop | Local TaskIntent / Task Session on the Mac | The next core development line. |
+| **C. Agent collaboration** | Let local agents invoke fixed capabilities or propose temporary tasks | `stdio` TermiPad MCP | Implemented after B matures. |
+| **D. Native mobile management app** | Manage pairing, icons, tasks, allow windows, and revocation | Native iPhone app | The long-term mobile end state. |
+| **E. Compatibility and notification entries** | Install-free validation, opening shortcuts inside chat, status notifications | PWA, Telegram Mini App/Bot | Only reuse the core; they own no policy. |
+| **F. Release and ecosystem** | Private beta, signing, notarization, future sync | Developer ID / Apple services | Depends on external accounts and real verification. |
 
-## 5. 阶段路线图
+## 5. Phase roadmap
 
-### 阶段 0：完成当前图标系统验收（已完成）
+### Stage 0: finish acceptance of the current icon system (done)
 
-**目标。** 将 `0265caf` 的本地图标系统从静态审计完成状态升级为真实 macOS 验证状态。
+**Goal.** Move the local icon system of `0265caf` from the static-audit-complete state to the real-macOS-verified state.
 
-**范围。** 扩展本地 SF Symbol 目录；未知工具的持久化、确定性回退样式；手动图标选择；恢复自动分配；受控本地 PNG 最高优先级；备份/恢复兼容；无网络图标静态防护。
+**Scope.** Extended local SF Symbol catalog; persisted, deterministic fallback styles for unknown tools; manual icon selection; restoring automatic assignment; controlled local PNG with the highest priority; backup/restore compatibility; static guard against network icons.
 
-**验收。** 用户回到 Mac 后运行一次既有集中脚本：
+**Acceptance.** Back at the Mac, the user runs the existing consolidated script once:
 
 ```bash
 cd ~/TermiPad && git pull --ff-only origin master && ./scripts/verify-macos.sh
 ```
 
-**完成条件。** `TEST EXECUTE SUCCEEDED` 和 `[通过] ui-smoke-test`。该条件已于 2026-08-26 17:51 满足；图标批次已进入真实 macOS 验证基线。
+**Completion condition.** `TEST EXECUTE SUCCEEDED` and `[PASS] ui-smoke-test`. This condition was met on 2026-08-26 17:51; the icon batch has entered the real macOS verification baseline.
 
-### 阶段 1：T0 — Mac 本地任务策略核心（已完成）
+### Stage 1: T0 — local task policy core on the Mac (done)
 
-**目标。** 建立一次性任务的 `TaskIntent` 和状态机，先不联网、不接智能体、不接手机。
+**Goal.** Establish the `TaskIntent` for one-off tasks and its state machine, without networking, agents, or the phone at first.
 
-**已实现范围。** 项目根目录引用、随应用发布的固定任务目录、命令预览、风险等级、短期本地审阅窗口、nonce、过期、拒绝原因、取消、撤销、最小状态和隐私化固定诊断事件。
+**Implemented scope.** Project root reference, the fixed task catalog shipped with the app, command preview, risk level, short local review window, nonce, expiry, rejection reasons, cancellation, revocation, minimal status, and privacy-preserving fixed diagnostic events.
 
-**安全原则。** 临时任务不是“隐藏 shell”；无永久后台交互会话；无动态参数透传；无任务自动升级为固定工具；无自动安装、升级、卸载或信任改变。T0 不执行命令、不创建进程、不接网络、MCP、手机、PWA、Telegram 或 PTY。
+**Security principles.** A temporary task is not a "hidden shell"; no permanent background interactive session; no dynamic argument pass-through; no task automatically promoted to a fixed tool; no automatic install, upgrade, uninstall, or trust change. T0 runs no commands, creates no processes, and connects to no network, MCP, phone, PWA, Telegram, or PTY.
 
-**验收。** 单元测试覆盖固定目录、审阅窗口、风险不匹配、过期、重放、未知任务、撤销、取消、持久化和诊断隐私；真实 macOS 集中脚本已于 2026-08-26 的 `20260826-181107` 结果目录通过。
+**Acceptance.** Unit tests cover the fixed catalog, review window, risk mismatch, expiry, replay, unknown task, revocation, cancellation, persistence, and diagnostics privacy; the real macOS consolidated script passed in the `20260826-181107` result directory on 2026-08-26.
 
-### 阶段 2：T1 — Mac 本地临时任务执行器与工作台（已完成）
+### Stage 2: T1 — local temporary task executor and workbench on the Mac (done)
 
-**目标。** 在不扩大为交互式终端的前提下，让用户在 Mac 上可见、可理解、可控制地执行已按 T0 批准的本地任务。
+**Goal.** Without growing into an interactive terminal, let the user run local tasks approved by T0 on the Mac in a visible, understandable, controllable way.
 
-**已实现范围。** 仅执行已批准的 `TaskIntent`；项目范围约束；固定 executable/arguments；空 stdin/stdout/stderr；明确开始/拒绝/停止；任务级自动超时；最小本地状态、时间与退出码；失败状态与直接任务进程停止。固定目录之外的命令、参数、环境变量、URL、PATH 搜索与 Shell 均不能形成执行请求。
+**Implemented scope.** Runs only approved `TaskIntent`s; project scope constraint; fixed executable/arguments; empty stdin/stdout/stderr; explicit start/reject/stop; task-level automatic timeout; minimal local status, time, and exit code; failure states and stopping the direct task process. Commands, arguments, environment variables, URLs, PATH searches, and shells outside the fixed catalog cannot form an execution request.
 
-**明确不做。** 不嵌入完整终端模拟器；不提供 PTY 输入；不显示或导出默认完整终端记录；不联网。
+**Explicit non-goals.** No embedded full terminal emulator; no PTY input; no showing or exporting a full terminal record by default; no network.
 
-**验收。** 策略测试覆盖已批准固定任务、范围预检、未批准/过期/重复启动拒绝、非零退出最小结果；UI 冒烟覆盖受限本地执行边界；真实 macOS 集中脚本已于 2026-08-26 的 `20260826-183921` 结果目录通过。
+**Acceptance.** Policy tests cover approved fixed tasks, scope pre-check, rejection of unapproved/expired/repeated starts, and the minimal result of a non-zero exit; UI smoke covers the restricted local execution boundary; the real macOS consolidated script passed in the `20260826-183921` result directory on 2026-08-26.
 
-### 阶段 3：T2 — 本机受限 MCP 协作（已完成）
+### Stage 3: T2 — local restricted MCP collaboration (done)
 
-**目标。** 让本机支持 MCP 的智能体能够调用 TermiPad，而不是让智能体获得任意 Shell。
+**Goal.** Let local MCP-capable agents call TermiPad, rather than giving agents an arbitrary shell.
 
-**已实现范围。** 独立本机 `stdio` MCP 服务端仅公开 `list_task_scopes`、`list_fixed_tasks`、`propose_task`、`get_task_status` 与 `cancel_task` 五项受限能力。服务端不直接访问 SwiftData，而是经运行中主应用持有的本机 CFMessagePort 桥接回流到 T0 策略核心；MCP 默认关闭，必须由用户在 Mac 本机明确开启。T2 不可批准或执行任务；取消正在运行的 T1 任务会明确拒绝，并要求用户回到本地工作台停止。
+**Implemented scope.** The separate local `stdio` MCP server exposes only the five restricted capabilities `list_task_scopes`, `list_fixed_tasks`, `propose_task`, `get_task_status`, and `cancel_task`. The server does not access SwiftData directly; it goes back to the T0 policy core through the local CFMessagePort bridge held by the running main app; MCP is off by default and must be turned on explicitly by the user on the Mac. T2 cannot approve or run tasks; cancelling a running T1 task is explicitly rejected, and the user is asked to stop it in the local workbench.
 
-**安全原则。** 不暴露 `execute(command, cwd, env)`；不自动读取整个磁盘；不自动回传完整 stdout/stderr；客户端、任务和审批记录可区分、可撤销。
+**Security principles.** No `execute(command, cwd, env)` is exposed; no automatic reading of the whole disk; no automatic return of full stdout/stderr; clients, tasks, and approval records are distinguishable and revocable.
 
-**验收。** 协议测试、严格工具 schema 测试、初始化前调用拒绝、本机开关拒绝、未知字段拒绝、最小固定任务响应、待审阅提案与取消测试；验证脚本还静态禁止 MCP/桥接使用网络、XPC、进程、终端交接、PTY、输出管道及 stdio 直接 SwiftData 访问。该条件先于 2026-08-26 的 `20260826-212137` 结果目录满足；随后包含 OpenCode 1.14.33 `2025-11-25` 精确协商、工作台自动保存反馈和稳定 UI 冒烟断言的回归于 2026-08-27 `20260827-115315` 再次通过，输出 `TEST EXECUTE SUCCEEDED` 与 `[通过] ui-smoke-test`。随后完成一次 OpenCode 1.14.33 的隔离只读演练：仅 `termipad-local` 处于启用状态，仅调用 `list_task_scopes` 和 `list_fixed_tasks`，并在结束时恢复关闭；没有创建、批准、执行或取消任务。
+**Acceptance.** Protocol tests, strict tool schema tests, rejection of calls before initialization, rejection by the local switch, rejection of unknown fields, the minimal fixed task response, proposals for review, and cancellation tests; the verification script also statically forbids MCP / the bridge from using the network, XPC, processes, terminal handoff, PTY, output pipes, and direct SwiftData access from stdio. This condition was first met in the `20260826-212137` result directory on 2026-08-26; the regression including OpenCode 1.14.33 `2025-11-25` exact negotiation, workbench auto-save feedback, and the stable UI smoke assertion then passed again on 2026-08-27 `20260827-115315`, with output `TEST EXECUTE SUCCEEDED` and `[PASS] ui-smoke-test`. An isolated read-only walkthrough with OpenCode 1.14.33 was then completed: only `termipad-local` was enabled, only `list_task_scopes` and `list_fixed_tasks` were called, and it was turned off again at the end; no task was created, approved, run, or cancelled.
 
-### 阶段 4：M0/M1 — 原生 iPhone App 产品与同网配对
+### Stage 4: M0/M1 — native iPhone app product and same-network pairing
 
-**目标。** 以原生 iPhone App 作为长期移动管理入口，在同一局域网内验证设备配对和任务管理体验。
+**Goal.** Use a native iPhone app as the long-term mobile management entry, and validate device pairing and the task management experience on the same LAN.
 
-**范围。** 原生工具图标目录、设备配对、Mac 在线状态、固定工具请求、任务卡、取消/撤销、远程允许窗口管理。网络层采用 Network framework、Bonjour、本地 TLS、Keychain 和 CryptoKit；Mac 仍是执行权威。
+**Scope.** Native tool icon catalog, device pairing, Mac online state, fixed tool requests, task cards, cancel/revoke, and remote allow window management. The network layer uses the Network framework, Bonjour, local TLS, the Keychain, and CryptoKit; the Mac remains the execution authority.
 
-**外部条件。** 真实 iPhone/Mac 验证、网络权限与 `Info.plist` 声明；长期真机安装、TestFlight 或公开分发仍受 Apple 账户/签名条件限制。[1]
+**External conditions.** Verification on a real iPhone/Mac, the network permission, and `Info.plist` declarations; long-term real-device install, TestFlight, or public distribution remain limited by Apple account/signing conditions.[1]
 
-**明确不做。** 不做手机 PTY；不在手机显示完整终端输出；不接受自由 Shell；不开放 Mac 入站公网端口。
+**Explicit non-goals.** No PTY on the phone; no full terminal output shown on the phone; no free shell accepted; no inbound public port opened on the Mac.
 
-### 阶段 5：M2 — 异地安全会话
+### Stage 5: M2 — remote secure session
 
-**目标。** 解决用户在外面只能用手机、无法复制临时测试命令的北极星场景。
+**Goal.** Solve the north-star scenario of the user being out with only a phone and unable to copy a temporary test command.
 
-**范围。** Mac 主动维持受认证的出站会话；原生 iPhone App 提交固定工具请求或临时任务建议；TaskIntent 在 Mac 本地重新核验后执行；仅返回最小结果。
+**Scope.** The Mac actively maintains an authenticated outbound session; the native iPhone app submits fixed tool requests or temporary task proposals; the TaskIntent is re-verified locally on the Mac and then run; only the minimal result is returned.
 
-**入口策略。** 原生 iPhone App 是长期主入口。PWA 用于快速界面验证和免安装兼容；Telegram Mini App 是可选聊天内快捷入口；Bot 仅负责固定通知和深链。
+**Entry strategy.** The native iPhone app is the long-term primary entry. The PWA is for quick UI validation and install-free compatibility; the Telegram Mini App is an optional in-chat shortcut entry; the Bot only handles fixed notifications and deep links.
 
-**安全原则。** 不暴露公网 Mac 地址；不让手机、PWA 或 Telegram 持有命令、路径、变量、密钥或完整输出；每个设备与会话均可撤销。
+**Security principles.** No public Mac address is exposed; the phone, PWA, or Telegram never hold commands, paths, variables, secrets, or full output; every device and session can be revoked.
 
-**传输技术决策（2026-09-08 用户拍板）。** 异地通道采用**内置隧道**方案（参照 OpenClaw/SSH 生态验证过的模式）：Mac 上服务仅绑定回环地址，经 Tailscale 式 WireGuard 隧道（出站连接、设备双向认证、路由器零入站端口）接入手机；不上传第三方云中继、不在 Mac 开公网监听。替代方案（公网中继/自建 VPN）不采用。同网 M1 直连（Bonjour + LAN）保留为近场路径；隧道为异地路径，二者共用同一套配对/加密/撤销层。
+**Transport technology decision (user decision of 2026-09-08).** The remote channel uses a **built-in tunnel** (following a pattern proven in the OpenClaw/SSH ecosystem): the service on the Mac binds only to the loopback address and reaches the phone through a Tailscale-style WireGuard tunnel (outbound connection, mutual device authentication, zero inbound ports on the router); nothing is uploaded to a third-party cloud relay and the Mac opens no public listener. The alternatives (public relay / self-built VPN) are not adopted. The same-network M1 direct connection (Bonjour + LAN) is kept as the near-field path; the tunnel is the remote path, and the two share the same pairing/encryption/revocation layer.
 
-**M2a 实施与验收记录（2026-09-09）。** 依托用户自装 Tailscale：Mac 端 `tailscale serve --tcp` 把 tailnet 侧 57147 转发到仅绑回环的 57148 监听（NWListener `requiredInterfaceType = .loopback`），隧道连接与同网 resume 共用配对加密握手链（只接受已配对设备的 resume，首次配对必须同网）；同网 resume 把 `tailnetEndpoint` 随 MacResumeHello 下发持久化进手机钥匙串，出门零操作；手机端 LAN 优先、6 秒无结果或蜂窝 ENETDOWN 立即转 tailnet 兜底。G5 真机验收通过（2026-09-09：蜂窝异地通道连接、目录、启动请求、Mac 端确认、回执全链路）。排查记录：真机一度运行不含 M2a 代码的旧构建导致隧道"静默未就绪"假象——已补齐隧道三个失败分支的 pairing 诊断日志。M2b（最小状态反馈：手机可见工具运行状态与退出码，不见命令与输出）与 G5 剩余项（设备撤销异地复核、异常路径）随后续提交推进。
+**M2a implementation and acceptance record (2026-09-09).** Relying on the user's own Tailscale install: on the Mac, `tailscale serve --tcp` forwards 57147 on the tailnet side to a 57148 listener bound only to loopback (NWListener `requiredInterfaceType = .loopback`), and tunnel connections share the pairing-encryption handshake chain with same-network resume (only resume from already-paired devices is accepted; first pairing must be on the same network); a same-network resume sends `tailnetEndpoint` along with MacResumeHello and persists it in the phone's keychain, so nothing needs to be done when leaving home; the phone prefers the LAN and falls back to the tailnet immediately after 6 seconds without a result or on cellular ENETDOWN. G5 real-device acceptance passed (2026-09-09: the full chain of remote channel connection over cellular, catalog, launch request, confirmation on the Mac, and receipt). Investigation note: the real device was at one point running an old build without the M2a code, creating the illusion of the tunnel being "silently not ready" — pairing diagnostic logs have since been added to the tunnel's three failure branches. M2b (minimal status feedback: the phone sees tool run status and exit codes, not commands or output) and the remaining G5 items (remote re-check of device revocation, abnormal paths) proceed in later commits.
 
-### 阶段 6：M3 — 远程允许窗口与任务策略成熟化
+### Stage 6: M3 — remote allow window and maturing the task policy
 
-**目标。** 在用户明确需要时，降低受限远程任务的确认摩擦。
+**Goal.** Reduce the confirmation friction of restricted remote tasks when the user clearly needs it.
 
-**范围。** 仅对无变量、逐项授权的固定工具或低风险测试任务开放短期远程允许窗口；窗口自动到期；Mac 锁屏、休眠、桥接器停止或策略改变时立即拒绝。
+**Scope.** Open a short remote allow window only for variable-free, individually authorized fixed tools or low-risk test tasks; the window expires automatically; requests are rejected immediately when the Mac is locked, asleep, the bridge stops, or the policy changes.
 
-**验收。** 远程窗口生命周期、自动过期、设备撤销、失联恢复、速率限制、结果最小化和异常拒绝均有真实设备测试。
+**Acceptance.** The remote window lifecycle, automatic expiry, device revocation, recovery after losing contact, rate limiting, result minimization, and abnormal rejection are all tested on real devices.
 
-### 阶段 7：发行与生态闸门
+### Stage 7: release and ecosystem gates
 
-**目标。** 在外部前置条件具备后，推进受控私有 beta 与发行质量。
+**Goal.** Advance the controlled private beta and release quality once the external prerequisites are in place.
 
-**范围。** Developer ID、Hardened Runtime、entitlement 审查、公证、Gatekeeper 冷启动、真实旧 SwiftData store 升级验证、版本与回滚策略。iCloud/CloudKit 仅在开发团队、容器、冲突模型和双设备验证具备后单独立项。
+**Scope.** Developer ID, Hardened Runtime, entitlement review, notarization, Gatekeeper cold start, real old SwiftData store upgrade verification, and version and rollback strategy. iCloud/CloudKit become a separate project only after a development team, container, conflict model, and two-device verification are in place.
 
-**明确不做。** 不用 ad hoc 签名伪装外部分发；不以本地开关代替 iCloud；不在未获得 Apple 外部条件时承诺上架、TestFlight、iCloud 或公证完成。
+**Explicit non-goals.** No passing off ad hoc signing as external distribution; no substituting a local switch for iCloud; no promising a store listing, TestFlight, iCloud, or completed notarization without Apple's external conditions.
 
-## 6. 移动端入口决策
+## 6. Mobile entry decision
 
-| 入口 | 长期角色 | 适用场景 | 不承担的职责 |
+| Entry | Long-term role | Use cases | Responsibilities it does not take |
 |---|---|---|---|
-| **原生 iPhone App** | 最终管理方式 | 配对、工具目录、任务审批、撤销、状态与远程窗口 | 不直接持有 Mac 执行权。 |
-| **PWA** | 验证与兼容层 | 免安装预览、界面迭代、受限访问 | 不作为唯一长期权限仓库。 |
-| **Telegram Mini App** | 可选快捷入口 | 聊天内打开图标工作台 | 不作为唯一安全控制面。 |
-| **Telegram Bot** | 通知与深链 | 固定状态通知、任务提醒 | 不接收自由命令或承载工具网格。 |
+| **Native iPhone app** | The final way to manage | Pairing, tool catalog, task approval, revocation, status, and the remote window | Does not hold the Mac's execution rights directly. |
+| **PWA** | Validation and compatibility layer | Install-free preview, UI iteration, restricted access | Not the sole long-term permission store. |
+| **Telegram Mini App** | Optional shortcut entry | Opening the icon workbench inside chat | Not the sole security control surface. |
+| **Telegram Bot** | Notifications and deep links | Fixed status notifications, task reminders | Does not accept free commands or carry the tool grid. |
 
-## 7. 不可妥协的产品红线
+## 7. Non-negotiable product red lines
 
-| 红线 | 全阶段约束 |
+| Red line | Constraint across all phases |
 |---|---|
-| Mac 不开放公网终端 | 不提供公网监听终端、HTTP MCP 或 PTY。 |
-| 无任意远程 Shell | 手机、Telegram、PWA 和受限 MCP 不接受任意命令、路径、变量或 URL。 |
-| 命令不可被 AI 改写 | 固定工具命令只由用户在 Mac 本地管理；智能体最多提出临时任务建议。 |
-| 最小数据回传 | 不把 API Key、命令正文、工作目录、环境变量、完整 stdout/stderr 发到外部入口。 |
-| 每个权限可撤销 | 设备、会话、工具、项目、任务和远程窗口均可独立撤销。 |
-| 本地优先 | 图标、目录、命令、备份和诊断保持本地受控；网络功能可选且默认关闭。 |
-| 不替代专业远程终端 | 完整远程 PTY、任意键盘输入、远程文件浏览和永久 shell 不进入产品范围。 |
+| The Mac opens no public terminal | No terminal, HTTP MCP, or PTY listening on the public internet. |
+| No arbitrary remote shell | The phone, Telegram, PWA, and restricted MCP accept no arbitrary commands, paths, variables, or URLs. |
+| Commands cannot be rewritten by AI | Fixed tool commands are managed only by the user on the Mac; an agent can at most propose a temporary task. |
+| Minimal data return | API keys, command bodies, working directories, environment variables, and full stdout/stderr are not sent to external entries. |
+| Every permission is revocable | Devices, sessions, tools, projects, tasks, and remote windows can each be revoked independently. |
+| Local-first | Icons, the catalog, commands, backups, and diagnostics stay under local control; network features are optional and off by default. |
+| Not a replacement for professional remote terminals | A full remote PTY, arbitrary keyboard input, remote file browsing, and a permanent shell stay out of the product scope. |
 
-## 8. 依赖与决策闸门
+## 8. Dependencies and decision gates
 
-| 闸门 | 必须满足后才能进入下一阶段 | 当前状态 |
+| Gate | Must be met before entering the next phase | Current status |
 |---|---|---|
-| G0 | 当前图标系统在真实 Mac 集中验证通过 | 已于 2026-08-26 17:51 通过。 |
-| G1 | T0 任务策略核心在本机测试充分，且无网络实现 | 已于 2026-08-26 的 `20260826-181107` 集中验证通过。 |
-| G2 | T1 本地临时任务 UI 通过真实 macOS 验证 | 已于 2026-08-26 的 `20260826-183921` 集中验证通过。 |
-| G3 | T2 本机 MCP 仅暴露受限工具且已通过协议/策略测试 | 已于 2026-08-26 的 `20260826-212137` 集中验证通过；包含 OpenCode `2025-11-25` 精确协商、自动保存反馈与稳定 UI 冒烟断言的回归已于 2026-08-27 `20260827-115315` 再次通过；OpenCode 隔离只读演练已在本机完成并关闭服务。 |
-| G4 | 原生 iPhone 本地配对在真实两设备上测试通过 | 实测进行中（2026-09-06：发现/指纹比对/配对落库 3/7 通过，iPhone 14 Plus ↔ Mac 同网）；会话加密与启动请求通道实现后完成剩余验收。免费 personal team 签名已实证可用。 |
-| G5 | 异地会话已具备设备撤销、会话过期、最小结果回传和攻击面审计 | 未开始。 |
-| G6 | Developer ID、公证和 Gatekeeper 冷启动验收完成 | 受外部 Apple 条件阻塞。 |
+| G0 | The current icon system passes consolidated verification on a real Mac | Passed on 2026-08-26 17:51. |
+| G1 | The T0 task policy core is thoroughly tested locally and has no network implementation | Passed the consolidated verification `20260826-181107` on 2026-08-26. |
+| G2 | The T1 local temporary task UI passes real macOS verification | Passed the consolidated verification `20260826-183921` on 2026-08-26. |
+| G3 | T2 local MCP exposes only restricted tools and has passed protocol/policy tests | Passed the consolidated verification `20260826-212137` on 2026-08-26; the regression including OpenCode `2025-11-25` exact negotiation, auto-save feedback, and the stable UI smoke assertion passed again on 2026-08-27 `20260827-115315`; the isolated OpenCode read-only walkthrough was completed on this Mac and the service turned off. |
+| G4 | Native iPhone local pairing is tested successfully on two real devices | Testing in progress (2026-09-06: discovery / fingerprint comparison / pairing persisted, 3/7 passed, iPhone 14 Plus ↔ Mac on the same network); the remaining acceptance is completed after the session encryption and launch request channels are implemented. Free personal team signing is confirmed to work. |
+| G5 | The remote session has device revocation, session expiry, minimal result return, and an attack surface audit | Not started. |
+| G6 | Developer ID, notarization, and Gatekeeper cold start acceptance are complete | Blocked by external Apple conditions. |
 
-## 9. 下一开发决策
+## 9. Next development decision
 
-**T2 已完成，下一步应先由产品决策驱动，而不是默认扩大权限。** 可选的下一批工作是：其一，为已验证的 T2 编写并在真实本机 MCP 客户端上演练配置与可用性指引；其二，在不接入异地网络或真实 token 的前提下，开始 M0/M1 原生 iPhone 伴侣的配对与本地任务管理设计。两条路径都不能引入 HTTP MCP、公开 Mac 端口、任意 Shell、PTY、完整输出或绕过 Mac 本地审阅。
+**T2 is complete; the next step should be driven by a product decision first, rather than widening permissions by default.** The candidate next batches are: first, write a configuration and usability guide for the verified T2 and exercise it with a real local MCP client; second, without connecting a remote network or real tokens, start the pairing and local task management design of the M0/M1 native iPhone companion. Neither path may introduce HTTP MCP, a public Mac port, an arbitrary shell, a PTY, full output, or a bypass of local review on the Mac.
 
-G0、G1、G2 与 G3 均已完成。项目已具备从“图标系统完善”“本地受限任务工作台”到“本机受限 MCP 协作”的已验证本地基础；手机 UI、Telegram 与网络桥接仍是独立后续阶段，必须逐层引入并各自完成真实设备或外部条件验证。
+G0, G1, G2, and G3 are all complete. The project now has a verified local foundation running from "icon system improvements" and the "local restricted task workbench" to "local restricted MCP collaboration"; the phone UI, Telegram, and network bridging remain separate later phases that must be introduced layer by layer, each completing verification on real devices or against external conditions.
 
-## 参考资料
+## References
 
-[1]: https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy "Apple：TN3179 Understanding Local Network Privacy"
-[2]: https://developer.apple.com/documentation/xcode/configuring-the-macos-app-sandbox "Apple：Configuring the macOS App Sandbox"
-[3]: https://modelcontextprotocol.io/specification/2025-03-26/basic/transports "Model Context Protocol：Transports"
-[4]: https://core.telegram.org/bots/webapps "Telegram：Mini Apps"
-[5]: https://core.telegram.org/bots/api#getupdates "Telegram Bot API：getUpdates"
+[1]: https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy "Apple: TN3179 Understanding Local Network Privacy"
+[2]: https://developer.apple.com/documentation/xcode/configuring-the-macos-app-sandbox "Apple: Configuring the macOS App Sandbox"
+[3]: https://modelcontextprotocol.io/specification/2025-03-26/basic/transports "Model Context Protocol: Transports"
+[4]: https://core.telegram.org/bots/webapps "Telegram: Mini Apps"
+[5]: https://core.telegram.org/bots/api#getupdates "Telegram Bot API: getUpdates"

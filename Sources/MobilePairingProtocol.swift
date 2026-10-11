@@ -1,14 +1,14 @@
-// M1 同网配对协议层（docs/m0-m1-mobile-entry-design.md §3.3-§3.4）。
-// 本文件只做协议数据与握手状态机——数据最小化由结构体字段硬编码保证：
-// 手机发不出命令、路径、参数或环境变量，也收不到它们。
-// 真实网络监听（NWListener）由未来的 Sources/MobilePairingService.swift 接入；
-// 本文件保持零 I/O，verify-macos.sh 的 mobile_pairing_protocol_code 守卫强制。
+// Protocol layer of M1 local network pairing (docs/m0-m1-mobile-entry-design.md §3.3-§3.4).
+// This file only handles protocol data and the handshake state machine — data minimization is guaranteed by the hard-coded struct fields:
+// the phone cannot send commands, paths, arguments, or environment variables, and cannot receive them either.
+// Real network listening (NWListener) is wired in by the future Sources/MobilePairingService.swift;
+// this file stays zero-I/O, enforced by the mobile_pairing_protocol_code guard in verify-macos.sh.
 import CryptoKit
 import Foundation
 import Network
 
-/// M1 操作白名单（§3.4）：任何 iPhone 请求必须 match 之一，否则拒绝。
-/// 与 TaskMCPBridge 的受限 case 设计同一纪律——白名单即攻击面。
+/// M1 operation allowlist (§3.4): every iPhone request must match one of these, otherwise it is rejected.
+/// Same discipline as TaskMCPBridge's restricted case design — the allowlist is the attack surface.
 enum PairedDeviceOperation: String, Codable, CaseIterable, Sendable {
     case listTools
     case requestLaunch
@@ -18,39 +18,39 @@ enum PairedDeviceOperation: String, Codable, CaseIterable, Sendable {
     case getTaskStatus
     case cancelTask
     case heartbeat
-    // M4 交互会话（docs/m4-interactive-session-design.md §2.1）：
-    // 订阅式长连接——openTaskStream 后连接保持，Mac 主动推流；
-    // closeTaskStream 退订。前置条件：每日远程窗口开启。
+    // M4 interactive sessions (docs/m4-interactive-session-design.md §2.1):
+    // subscription-style long-lived connection — after openTaskStream the connection stays up and the Mac pushes the stream;
+    // closeTaskStream unsubscribes. Precondition: the daily remote window is open.
     case openTaskStream
     case closeTaskStream
-    /// M4-3：交互点选择回传（taskIntentID + interactionSelection）。
+    /// M4-3: return of the interaction choice (taskIntentID + interactionSelection).
     case respondInteraction
 }
 
-/// iPhone → Mac 请求的最小载荷。字段集合是产品红线（最小数据回传）：
-/// 任何 commit 不得新增 command/path/parameter/environment 字段——
-/// MobilePairingProtocolTests 锁死编码后的 key 集合。
-/// M2b 增量（docs/m2b-remote-task-console-design.md §3.1）：三个任务引用
-/// 字段全部是 UUID / 白名单枚举字符串，且仅对任务操作有义——
-/// requestTaskProposal 用 taskKind+projectScopeID（引用 FixedTaskCatalog
-/// 与已登记 scope，不下发路径），getTaskStatus/cancelTask 用 taskIntentID。
-/// Optional + 合成 Codable（decodeIfPresent 语义）——旧手机/Mac 双向兼容。
+/// Minimal payload of an iPhone → Mac request. The field set is a product red line (minimal data return):
+/// no commit may add a command/path/parameter/environment field —
+/// MobilePairingProtocolTests locks down the encoded key set.
+/// M2b increment (docs/m2b-remote-task-console-design.md §3.1): the three task reference
+/// fields are all UUIDs / allowlisted enum strings and only meaningful for task operations —
+/// requestTaskProposal uses taskKind+projectScopeID (referencing FixedTaskCatalog
+/// and a registered scope, no path is sent), and getTaskStatus/cancelTask use taskIntentID.
+/// Optional + synthesized Codable (decodeIfPresent semantics) — old phones and Macs stay compatible both ways.
 struct MobilePairingRequest: Codable, Sendable, Equatable {
     let operation: PairedDeviceOperation
     let requestID: UUID
-    /// 仅 listTools / heartbeat 等无目标操作为 nil。
+    /// nil only for target-less operations such as listTools / heartbeat.
     let toolID: UUID?
     var taskKind: String? = nil
     var projectScopeID: UUID? = nil
     var taskIntentID: UUID? = nil
-    /// M4：openTaskStream 的续传偏移（断线重连场景）——从该 UTF-8 字节
-    /// 偏移之后继续推送；nil = 全新订阅。旧端忽略（兼容红线）。
+    /// M4: resume offset for openTaskStream (reconnect after a drop) — pushing continues after this UTF-8 byte
+    /// offset; nil = a brand-new subscription. Ignored by old peers (compatibility red line).
     var streamResumeOffset: Int? = nil
-    /// M4-3：交互点选中的选项（respondInteraction 用）。
+    /// M4-3: the option selected at the interaction point (used by respondInteraction).
     var interactionSelection: String? = nil
 }
 
-/// Mac → iPhone 工具目录条目：手机端只允许看到这 4 个字段。
+/// Mac → iPhone tool catalog entry: the phone is only allowed to see these 4 fields.
 struct MobileToolSummary: Codable, Sendable, Equatable {
     let id: UUID
     let displayName: String
@@ -58,7 +58,7 @@ struct MobileToolSummary: Codable, Sendable, Equatable {
     let iconSymbolName: String?
 }
 
-/// AEAD 信封：JSON 载荷经会话密钥加密后上传输。
+/// AEAD envelope: the JSON payload is encrypted with the session key before transport.
 enum MobilePairingEnvelope {
     static func seal(_ value: some Encodable, using key: SymmetricKey) throws -> Data {
         let data = try JSONEncoder().encode(value)
@@ -85,7 +85,7 @@ enum MobilePairingEnvelope {
         return try JSONDecoder().decode(MobileLaunchResponse.self, from: plaintext)
     }
 
-    // MARK: M2b 任务会话信封解码（与既有 open* 同模式）
+    // MARK: M2b task session envelope decoding (same pattern as the existing open*)
 
     static func openScopeSummaries(_ data: Data, using key: SymmetricKey) throws -> [MobileScopeSummary] {
         let plaintext = try MobilePairingCrypto.open(data, using: key)
@@ -107,7 +107,7 @@ enum MobilePairingEnvelope {
         return try JSONDecoder().decode(MobileTaskProposalResponse.self, from: plaintext)
     }
 
-    // MARK: M4 交互会话信封解码
+    // MARK: M4 interactive session envelope decoding
 
     static func openStreamResponse(_ data: Data, using key: SymmetricKey) throws -> MobileStreamResponse {
         let plaintext = try MobilePairingCrypto.open(data, using: key)
@@ -130,14 +130,14 @@ enum MobilePairingEnvelope {
     }
 }
 
-/// Mac → iPhone 配对确认（经会话密钥 AEAD 加密后发送）。
+/// Mac → iPhone pairing confirmation (sent after AEAD encryption with the session key).
 struct MobilePairingAck: Codable, Sendable, Equatable {
     let accepted: Bool
     let deviceID: UUID
 }
 
-/// Mac → iPhone 启动请求结果（§3.3.2）。手机端只收到结果枚举与可选的
-/// 一句提示，永不收到命令正文/路径/变量/终端输出。
+/// Mac → iPhone launch request result (§3.3.2). The phone receives only the result enum and an optional
+/// one-line hint, never the command body / paths / variables / terminal output.
 struct MobileLaunchResponse: Codable, Sendable, Equatable {
     enum Status: String, Codable, Sendable {
         case accepted
@@ -145,36 +145,36 @@ struct MobileLaunchResponse: Codable, Sendable, Equatable {
     }
 
     let status: Status
-    /// 拒绝时的一句人话原因（固定枚举文案，不含工具数据）。
+    /// One-sentence plain-language reason on rejection (fixed enum copy, contains no tool data).
     let reason: String?
 }
 
-// MARK: - M2b 任务会话回传（docs/m2b-remote-task-console-design.md §3.2）
-// 数据最小化纪律与 M1 目录一致：手机只见引用、显示名与固定枚举，
-// 永不见 rootPath / 命令 / 参数 / 变量 / 工具启动的终端输出。
+// MARK: - M2b task session return data (docs/m2b-remote-task-console-design.md §3.2)
+// Same data-minimization discipline as the M1 catalog: the phone sees only references, display names, and fixed enums,
+// never rootPath / commands / arguments / variables / the terminal output of tool launches.
 
-/// 项目范围条目：id + 显示名（rootPath 永不下发——范围路径是本机数据）。
+/// Project scope entry: id + display name (rootPath is never sent — the scope path is local data).
 struct MobileScopeSummary: Codable, Sendable, Equatable {
     let id: UUID
     let displayName: String
 }
 
-/// 固定任务目录条目：kind + 双语用途 + 固定命令预览（全部是
-/// FixedTaskCatalog 字面量，非用户数据；任务提交只回传 kind 引用）。
+/// Fixed task catalog entry: kind + bilingual purpose + fixed command preview (all
+/// FixedTaskCatalog literals, not user data; task submission returns only the kind reference).
 struct MobileFixedTaskSummary: Codable, Sendable, Equatable {
     let kind: String
     let purpose: String
     let commandPreview: String
-    /// M2c：任务对项目目录的固定要求（FixedTaskCatalog 字面量，非用户
-    /// 数据）——手机端显示"需要：Package.swift"等，让用户能自行对上
-    /// 范围与任务（2026-09-15 实测：缺文件拒绝文案精确了，但选范围时
-    /// 仍无从知道哪个范围满足哪个任务）。Optional + 合成解码——旧 Mac
-    /// 不发此键，旧手机忽略（兼容红线）。
+    /// M2c: the task's fixed requirements for the project directory (FixedTaskCatalog literals, not user
+    /// data) — the phone shows "Requires: Package.swift" and the like, so the user can match
+    /// scopes to tasks themselves (2026-09-15 test: the missing-file rejection copy became precise, but when choosing a scope
+    /// there was still no way to know which scope satisfies which task). Optional + synthesized decoding — old Macs
+    /// do not send this key and old phones ignore it (compatibility red line).
     var requiredRelativePaths: [String]? = nil
 }
 
-/// 会话条目：工具启动与固定任务统一形态（§3.3——状态字符串全部来自
-/// T1 TaskExecutionState 原样枚举，工具启动仅 launched/launchFailed）。
+/// Session entry: one shape for tool launches and fixed tasks (§3.3 — every status string comes from the
+/// raw T1 TaskExecutionState enum; tool launches only use launched/launchFailed).
 struct MobileSessionEntry: Codable, Sendable, Equatable, Identifiable {
     enum SessionKind: String, Codable, Sendable {
         case toolLaunch
@@ -188,12 +188,12 @@ struct MobileSessionEntry: Codable, Sendable, Equatable, Identifiable {
     let exitCode: Int?
     let startedAt: Date?
     let finishedAt: Date?
-    /// 仅输出档位 ≥ restricted 且条目为 T1 固定任务时非 nil（§5.4）；
-    /// 工具启动（终端交接路径）永无输出。
+    /// Non-nil only when the output visibility is ≥ restricted and the entry is a T1 fixed task (§5.4);
+    /// tool launches (the terminal handoff path) never have output.
     var outputSnippet: String? = nil
 }
 
-/// requestTaskProposal 的回执：接受/拒绝 + 任务引用（拒绝文案固定枚举）。
+/// Receipt for requestTaskProposal: accept/reject + task reference (rejection copy is a fixed enum).
 struct MobileTaskProposalResponse: Codable, Sendable, Equatable {
     enum Status: String, Codable, Sendable {
         case accepted
@@ -201,17 +201,17 @@ struct MobileTaskProposalResponse: Codable, Sendable, Equatable {
     }
 
     let status: Status
-    /// 拒绝时的一句人话原因（固定枚举文案，无路径无命令）。
+    /// One-sentence plain-language reason on rejection (fixed enum copy, no paths and no commands).
     let reason: String?
-    /// 接受时手机后续 getTaskStatus / cancelTask 的任务引用。
+    /// On acceptance, the task reference the phone uses for later getTaskStatus / cancelTask calls.
     let taskIntentID: UUID?
 }
 
-// MARK: - M4 交互会话推送（docs/m4-interactive-session-design.md §2.1）
-// Mac → 手机主动推送帧（订阅式长连接内）。全部经既有 AEAD 信封；
-// 输出先经 OutputRedactor 脱敏；工具启动（终端交接）永无流。
+// MARK: - M4 interactive session pushes (docs/m4-interactive-session-design.md §2.1)
+// Frames pushed proactively from the Mac to the phone (inside the subscription-style long-lived connection). All go through the existing AEAD envelope;
+// output is redacted by OutputRedactor first; tool launches (terminal handoff) never have a stream.
 
-/// 流订阅回执：接受（带游标——断线续传起点）或拒绝。
+/// Stream subscription receipt: accepted (with a cursor — the starting point for resuming after a drop) or rejected.
 struct MobileStreamResponse: Codable, Sendable, Equatable {
     enum Status: String, Codable, Sendable {
         case accepted
@@ -220,20 +220,20 @@ struct MobileStreamResponse: Codable, Sendable, Equatable {
 
     let status: Status
     let reason: String?
-    /// 续传游标：从此偏移（字节）之后的输出开始推送；新订阅为 0。
+    /// Resume cursor: push output starting after this offset (bytes); 0 for a new subscription.
     let resumeOffset: Int?
 }
 
-/// 输出块推送（Mac → 手机，流生命周期内多次）。
+/// Output chunk push (Mac → phone, many times over the stream's lifetime).
 struct MobileStreamChunk: Codable, Sendable, Equatable {
     let streamID: UUID
-    /// 本块覆盖的字节区间起点（续传游标依据）。
+    /// Start of the byte range covered by this chunk (basis for the resume cursor).
     let offset: Int
-    /// 脱敏后的输出文本（行级合帧，≤8KB/块）。
+    /// Redacted output text (line-level framing, ≤8KB per chunk).
     let text: String
 }
 
-/// 状态变化推送。
+/// State change push.
 struct MobileStreamStateChange: Codable, Sendable, Equatable {
     let streamID: UUID
     let executionState: String
@@ -241,19 +241,19 @@ struct MobileStreamStateChange: Codable, Sendable, Equatable {
     let finishedAt: Date?
 }
 
-/// 交互点推送（M4-3）：任务需要决策。选项全部来自任务定义字面量。
+/// Interaction point push (M4-3): the task needs a decision. All options come from task-definition literals.
 struct MobileStreamInteraction: Codable, Sendable, Equatable {
     let streamID: UUID
     let prompt: String
-    /// 固定选项（任务定义声明，非运行时生成）。
+    /// Fixed options (declared by the task definition, not generated at runtime).
     let options: [String]
 }
 
-/// 手机端持久化凭据（原 CompanionApp 私有类型，M2a 迁入共享协议层——
-/// Mac 测试可锁其编解码兼容性，两端单一事实源；iOS 端 Keychain 存储不变）。
-/// `tailnetEndpoint`（M2a）：同网 resume 时由 MacResumeHello 下发并持久化，
-/// 供异地直连 "100.x.x.x:57147"。可 Optional + 合成 Codable 对 Optional 用
-/// decodeIfPresent——旧凭据 JSON 无此键也能解码（恢复兼容红线，测试锁）。
+/// Persisted phone-side credentials (formerly a private CompanionApp type, moved into the shared protocol layer in M2a —
+/// so Mac tests can lock down its encode/decode compatibility, a single source of truth for both sides; Keychain storage on iOS is unchanged).
+/// `tailnetEndpoint` (M2a): issued by MacResumeHello during a same-network resume and persisted,
+/// for connecting directly to "100.x.x.x:57147" when away. Optional + synthesized Codable uses
+/// decodeIfPresent for Optionals — old credential JSON without this key still decodes (restore compatibility red line, locked by tests).
 struct CompanionPairingCredentials: Codable, Sendable, Equatable {
     let deviceID: UUID
     let macPublicKey: Data
@@ -262,11 +262,11 @@ struct CompanionPairingCredentials: Codable, Sendable, Equatable {
     var tailnetEndpoint: String? = nil
 }
 
-/// 4 字节大端长度前缀帧编解码。纯逻辑——分包/粘包由测试覆盖；
-/// 网络层只做"收字节进缓冲、解出一帧、发一帧"。
+/// Frame codec with a 4-byte big-endian length prefix. Pure logic — fragmentation/coalescing is covered by tests;
+/// the network layer only "receives bytes into a buffer, decodes one frame, sends one frame".
 enum MobilePairingFrame {
     static let headerByteCount = 4
-    /// 单帧上限 64 KB：配对与工具目录消息远小于此；声明超过即协议违规，直接断连。
+    /// Single-frame limit of 64 KB: pairing and tool catalog messages are far smaller; declaring more is a protocol violation and disconnects immediately.
     static let maxPayloadByteCount = 65_536
 
     enum DecodeOutcome: Equatable {
@@ -302,17 +302,17 @@ enum MobilePairingFrame {
     }
 }
 
-/// Bonjour 广播契约：服务类型固定，不允许运行时配置——防仿冒服务重定向。
-/// TXT 只广播协议版本 + 指纹前缀 + LAN 直连地址（a/p，供手机绕开 iOS 26
-/// 对 .service 端点的解析卡死）；不广播主机名/用户名/工具信息。
+/// Bonjour advertisement contract: the service type is fixed and not configurable at runtime — prevents redirection to a spoofed service.
+/// TXT advertises only the protocol version + fingerprint prefix + LAN direct address (a/p, so the phone can bypass iOS 26's
+/// stuck resolution of .service endpoints); it does not advertise the host name, user name, or tool information.
 extension MobilePairingCrypto {
     static let bonjourServiceType = "_termipad-m1._tcp"
     static let bonjourServiceName = "TermiPad"
-    /// M1 监听固定端口（Mac 端监听用它；手机端从实例名还原直连地址时拼端口）。
-    /// 跨端共享故放协议层。
+    /// Fixed M1 listening port (the Mac listens on it; the phone appends it when recovering the direct address from the instance name).
+    /// Shared across both sides, hence placed in the protocol layer.
     static let listenerPort: UInt16 = 57146
-    /// M2a 异地隧道监听固定端口（Mac 回环监听 + tailscale serve TCP 转发；
-    /// 与 M1 的 57146 独立——两条路径互不干扰、可独立开关、故障域隔离）。
+    /// Fixed listening port for the M2a remote tunnel (Mac loopback listener + tailscale serve TCP forwarding;
+    /// independent of M1's 57146 — the two paths do not interfere, can be toggled separately, and have isolated failure domains).
     static let tunnelListenerPort: UInt16 = 57147
 
     static func bonjourTXTRecord(fingerprint: String) -> [String: String] {
@@ -322,8 +322,8 @@ extension MobilePairingCrypto {
         ]
     }
 
-    /// TXT 是否携带直连地址（"a"=IPv4, "p"=端口）——手机端用它决定
-    /// 走 hostPort 直连还是回退到 .service 端点解析。
+    /// Whether the TXT carries a direct address ("a"=IPv4, "p"=port) — the phone uses it to decide between
+    /// a direct hostPort connection and falling back to .service endpoint resolution.
     static func bonjourDirectAddress(fromTXT txt: NWTXTRecord) -> (host: String, port: UInt16)? {
         guard let host = txt["a"], let portString = txt["p"],
               let port = UInt16(portString), !host.isEmpty else {
@@ -333,13 +333,13 @@ extension MobilePairingCrypto {
     }
 }
 
-/// 配对握手（§3.3 步骤 3-6）的 Mac 侧状态机。纯逻辑：真实收发由网络层调用，
-/// 测试用双端进程内模拟完成全握手。
+/// Mac-side state machine of the pairing handshake (§3.3 steps 3-6). Pure logic: real send/receive is driven by the network layer,
+/// and tests complete the full handshake with both ends simulated in-process.
 enum MobilePairingHandshake {
     static let currentProtocolVersion = MobilePairingCrypto.protocolVersion
     static let resumeProtocolInfo = "termipad-m1-resume-v1"
 
-    /// Mac → iPhone 第一步：公布协议版本、公钥、nonce 与指纹（iPhone 屏上人工比对）。
+    /// Mac → iPhone step one: announce the protocol version, public key, nonce, and fingerprint (compared by eye on the iPhone screen).
     struct MacHello: Codable, Sendable, Equatable {
         let protocolVersion: String
         let macPublicKey: Data
@@ -347,7 +347,7 @@ enum MobilePairingHandshake {
         let fingerprint: String
     }
 
-    /// iPhone → Mac 第二步：手机公钥 + nonce + 用户抄写的配对码 + 设备名。
+    /// iPhone → Mac step two: phone public key + nonce + the pairing code the user copied + device name.
     struct PhoneHello: Codable, Sendable, Equatable {
         let protocolVersion: String
         let phonePublicKey: Data
@@ -356,7 +356,7 @@ enum MobilePairingHandshake {
         let deviceName: String
     }
 
-    /// Mac 接受配对后的产物：会话密钥 + 待写入 PairedDeviceStore 的最小记录。
+    /// What the Mac produces after accepting a pairing: the session key + the minimal record to write to PairedDeviceStore.
     struct AcceptedPairing: Sendable, Equatable {
         let sessionKeyData: Data
         let phonePublicKeyHash: String
@@ -380,7 +380,7 @@ enum MobilePairingHandshake {
         identity: MobilePairingIdentity,
         macNonce: Data
     ) throws -> AcceptedPairing {
-        // 协议版本精确钉死（与 MCP initialize 版本协商同一纪律）——不接受"更高版本"。
+        // The protocol version is pinned exactly (same discipline as MCP initialize version negotiation) — "a higher version" is not accepted.
         guard hello.protocolVersion == currentProtocolVersion else {
             throw MobilePairingError.unsupportedProtocolVersion
         }
@@ -405,9 +405,9 @@ enum MobilePairingHandshake {
             deviceName: hello.deviceName)
     }
 
-    // MARK: - 会话复用（§3.3.1，2026-09-06 增补）
+    // MARK: - Session resume (§3.3.1, added 2026-09-06)
 
-    /// 已配对手机重连时的第一个帧。无 pairingCode 字段——与 PhoneHello 靠字段区分。
+    /// First frame when an already-paired phone reconnects. No pairingCode field — distinguished from PhoneHello by its fields.
     struct PhoneResumeHello: Codable, Sendable, Equatable {
         let protocolVersion: String
         let deviceID: UUID
@@ -415,11 +415,11 @@ enum MobilePairingHandshake {
         let phoneNonce: Data
     }
 
-    /// Mac 回给已配对手机的明文 hello（公钥与 nonce 非机密；后续全部帧走 AEAD）。
-    /// M2a 增补：`tailnetEndpoint` 仅当 Mac 端开启"异地访问"时非 nil
-    /// （"100.x.x.x:57147"）。明文可接受——tailnet IP 的机密性由 tailnet
-    /// 成员资格天然保障，非成员路由不到 100.64/10；连接仍需应用层配对双通过。
-    /// 旧 Mac 不发此字段（解码得 nil）；旧手机忽略未知键——双向兼容。
+    /// Plaintext hello the Mac returns to a paired phone (public key and nonce are not secret; all later frames use AEAD).
+    /// M2a addition: `tailnetEndpoint` is non-nil only when "Remote Access" is turned on on the Mac
+    /// ("100.x.x.x:57147"). Plaintext is acceptable — the confidentiality of the tailnet IP is inherently protected by tailnet
+    /// membership, non-members cannot route to 100.64/10; the connection still needs both app-layer pairing checks to pass.
+    /// Old Macs do not send this field (decodes to nil); old phones ignore unknown keys — compatible both ways.
     struct MacResumeHello: Codable, Sendable, Equatable {
         let protocolVersion: String
         let macPublicKey: Data
@@ -427,13 +427,13 @@ enum MobilePairingHandshake {
         var tailnetEndpoint: String? = nil
     }
 
-    /// Mac 收到的第一个 hello 的分流结果。
+    /// Dispatch result for the first hello the Mac receives.
     enum IncomingHello {
         case pairing(PhoneHello)
         case resume(PhoneResumeHello)
     }
 
-    /// 按 JSON 字段存在性区分两种 hello：含 pairingCode → 配对；含 deviceID → 复用。
+    /// Tell the two hellos apart by which JSON fields exist: has pairingCode → pairing; has deviceID → resume.
     static func decodeIncomingHello(from data: Data) -> IncomingHello? {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
@@ -447,15 +447,15 @@ enum MobilePairingHandshake {
         return nil
     }
 
-    /// Mac 侧复用校验 + 会话密钥派生。拆为两步以让 iOS 端也能复用纯计算部分：
-    /// 1. `validateResumeRecord`：版本/记录/指纹三重绑定（Mac 专用，依赖 PairedDeviceRecord）
-    /// 2. `resumeSessionKey`：纯计算，签名双方一致即同密钥
+    /// Mac-side resume validation + session key derivation. Split into two steps so that iOS can also reuse the pure computation:
+    /// 1. `validateResumeRecord`: triple binding of version/record/fingerprint (Mac only, depends on PairedDeviceRecord)
+    /// 2. `resumeSessionKey`: pure computation; identical signatures on both sides yield the same key
     ///
-    /// 整体等价于原 `acceptResume` + `expectedRecord.revokedAt == nil` + 公钥指纹校验。
-    /// 拆出的目的是让 iOS 复用握手代码无须引入 Mac 专用 PairedDeviceRecord 类型。
+    /// Overall equivalent to the original `acceptResume` + `expectedRecord.revokedAt == nil` + public-key fingerprint check.
+    /// The point of the split is to let iOS reuse the handshake code without pulling in the Mac-only PairedDeviceRecord type.
 
-    /// 纯计算侧：版本钉死 + 派生会话密钥。iOS 端在双向公钥指纹绑定后调用此方法。
-    /// Mac 端先调 `validateResumeRecord` 再调本方法——两步等价原 `acceptResume`。
+    /// Pure computation side: pinned version + session key derivation. iOS calls this after the two-way public-key fingerprint binding.
+    /// The Mac calls `validateResumeRecord` first and then this method — the two steps are equivalent to the original `acceptResume`.
     static func deriveResumeSessionKey(
         _ hello: PhoneResumeHello,
         identity: MobilePairingIdentity,

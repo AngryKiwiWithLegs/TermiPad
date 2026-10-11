@@ -1,9 +1,9 @@
-// M2b 任务会话中心（docs/m2b-remote-task-console-design.md §5）。
-// 职责：聚合"会话条目流"（工具启动 + 固定任务统一时间线）并处理手机端
-// 任务会话操作。数据最小化纪律：手机只见引用、显示名、状态枚举与退出码，
-// 永不见 rootPath / 命令 / 参数 / 变量 / 工具启动的终端输出。
-// M2b-1 范围：listScopes / listFixedTasks / getTaskStatus 三个只读操作 +
-// 工具启动事件的条目记录。M2b-3：requestTaskProposal 核验链 + cancelTask。
+// M2b task session center (docs/m2b-remote-task-console-design.md §5).
+// Responsibilities: aggregate the "session entry feed" (a unified timeline of tool launches + fixed tasks) and handle the phone's
+// task session operations. Data-minimization discipline: the phone sees only references, display names, status enums, and exit codes,
+// never rootPath / commands / arguments / variables / the terminal output of tool launches.
+// M2b-1 scope: the three read-only operations listScopes / listFixedTasks / getTaskStatus +
+// entry records for tool launch events. M2b-3: the requestTaskProposal verification chain + cancelTask.
 import CoreGraphics
 import Foundation
 import SwiftData
@@ -12,18 +12,18 @@ import SwiftData
 final class MobileTaskConsoleService: ObservableObject {
     static let shared = MobileTaskConsoleService()
 
-    /// 条目环缓冲上限（设计 §5.3）：手机一次 getTaskStatus 拿全量快照，
-    /// ≤50 条 × 每条 ≤ 数百字节，远小于 64 KB 帧上限。
+    /// Entry ring buffer limit (design §5.3): one getTaskStatus from the phone gets the full snapshot,
+    /// ≤50 entries × at most a few hundred bytes each, far below the 64 KB frame limit.
     static let entryLimit = 50
-    /// 条目仅保留状态摘要的时限（设计 §5.3）：10 分钟后清 outputSnippet
-    /// ——输出片段的驻留窗口由内存环自然约束。
+    /// How long an entry keeps more than its status summary (design §5.3): outputSnippet is cleared after 10 minutes
+    /// — the retention window of output snippets is naturally bounded by the in-memory ring.
     static let outputRetentionInterval: TimeInterval = 600
 
     struct SessionEntry: Identifiable, Equatable {
         let id: UUID
         let title: String
         let kind: MobileSessionEntry.SessionKind
-        /// T1 TaskExecutionState 原样字符串 / 工具启动 launched|launchFailed。
+        /// Raw T1 TaskExecutionState string / launched|launchFailed for tool launches.
         let executionState: String
         let exitCode: Int?
         let startedAt: Date
@@ -35,18 +35,18 @@ final class MobileTaskConsoleService: ObservableObject {
 
     @Published private(set) var entries: [SessionEntry] = []
 
-    /// 与 MobileLaunchSession 同款测试模式：单例走系统时钟，测试注入
-    /// 固定时钟获得隔离实例（单例状态不在测试间泄漏）。
+    /// Same test pattern as MobileLaunchSession: the singleton uses the system clock, and tests inject
+    /// a fixed clock to get an isolated instance (singleton state does not leak between tests).
     private let now: () -> Date
 
     init(now: @escaping () -> Date = { Date() }) {
         self.now = now
     }
 
-    // MARK: - 条目流（工具启动事件接入）
+    // MARK: - Entry feed (tool launch events)
 
-    /// M1 requestLaunch 链的启动结果回调在此登记条目（TerminalLauncher
-    /// 交接路径无退出码、无输出——这是红线，不是待办）。
+    /// The launch result callback of the M1 requestLaunch chain registers the entry here (the TerminalLauncher
+    /// handoff path has no exit code and no output — that is a red line, not a to-do).
     func recordToolLaunch(id: UUID, title: String, succeeded: Bool) {
         append(SessionEntry(
             id: id,
@@ -60,9 +60,9 @@ final class MobileTaskConsoleService: ObservableObject {
         DiagnosticsStore.shared.record(.mobileConsoleEntryRecorded)
     }
 
-    /// T1 任务生命周期事件登记（M2b-3 接入 TaskExecutionCoordinator 后由其
-    /// 调用；M2b-1 先落数据面）。输出片段仅档位 ≥ restricted 时由调用方
-    /// 传入（§5.4 裁决在服务层，见 outputVisibility）。
+    /// Registers T1 task lifecycle events (called by TaskExecutionCoordinator once M2b-3 wires it in;
+    /// M2b-1 lands the data plane first). The output snippet is passed in by the caller only when the visibility is ≥ restricted
+    /// (the §5.4 decision is made in the service layer, see outputVisibility).
     func recordTaskState(
         id: UUID,
         title: String,
@@ -96,7 +96,7 @@ final class MobileTaskConsoleService: ObservableObject {
         }
     }
 
-    /// 输出驻留时限到期即清片段（getTaskStatus 快照前统一回收）。
+    /// Clear the snippet as soon as the output retention period expires (reclaimed in one place before a getTaskStatus snapshot).
     private func sweepExpiredOutput(now: Date = Date()) {
         for index in entries.indices {
             guard entries[index].outputSnippet != nil,
@@ -108,7 +108,7 @@ final class MobileTaskConsoleService: ObservableObject {
         }
     }
 
-    // MARK: - 输出档位（设计 §5.4；Mac 是权威，UserDefaults 不进备份）
+    // MARK: - Output visibility (design §5.4; the Mac is the authority, UserDefaults is not backed up)
 
     enum OutputVisibility: String {
         case minimal
@@ -123,9 +123,9 @@ final class MobileTaskConsoleService: ObservableObject {
             ?? .restricted
     }
 
-    // MARK: - 手机操作（分发层已过配对/解密；这里只做数据面）
+    // MARK: - Phone operations (the dispatch layer has already done pairing/decryption; this is the data plane only)
 
-    /// listScopes：已登记项目范围 → id + 显示名（rootPath 永不下发）。
+    /// listScopes: registered project scopes → id + display name (rootPath is never sent).
     func scopeSummaries(modelContext: ModelContext) -> [MobileScopeSummary] {
         let descriptor = FetchDescriptor<TaskProjectScope>(
             predicate: #Predicate { !$0.isRevoked })
@@ -133,8 +133,8 @@ final class MobileTaskConsoleService: ObservableObject {
         return scopes.map { MobileScopeSummary(id: $0.id, displayName: $0.displayName) }
     }
 
-    /// listFixedTasks：固定目录字面量（kind + 用途 + 命令预览——全部是
-    /// FixedTaskCatalog 已公开的目录信息，非用户数据）。
+    /// listFixedTasks: fixed catalog literals (kind + purpose + command preview — all
+    /// catalog information FixedTaskCatalog already exposes, not user data).
     func fixedTaskSummaries(language: AppLanguage) -> [MobileFixedTaskSummary] {
         FixedTaskCatalog.definitions.map { definition in
             MobileFixedTaskSummary(
@@ -145,7 +145,7 @@ final class MobileTaskConsoleService: ObservableObject {
         }
     }
 
-    /// getTaskStatus：条目流全量快照（≤50 条，输出按档位与驻留时限裁决）。
+    /// getTaskStatus: full snapshot of the entry feed (≤50 entries; output is decided by the visibility level and retention period).
     func sessionEntries(now: Date = Date()) -> [MobileSessionEntry] {
         sweepExpiredOutput(now: now)
         return entries.map { entry in
@@ -161,29 +161,29 @@ final class MobileTaskConsoleService: ObservableObject {
         }
     }
 
-    // MARK: - M2b-3 任务提交核验链（设计 §5.2——顺序即攻击面检查顺序）
+    // MARK: - M2b-3 task submission verification chain (design §5.2 — the order is the attack-surface check order)
 
-    /// requestTaskProposal 的完整核验与执行。返回给手机的最小回执。
-    /// 1 配对有效性由握手层保证（进入这里即已配对）；此处从锁屏开始。
+    /// Full verification and execution of requestTaskProposal. Returns the minimal receipt to the phone.
+    /// 1 Pairing validity is guaranteed by the handshake layer (reaching here means already paired); this starts from the lock screen.
     func handleTaskProposal(
         taskKind: String?,
         projectScopeID: UUID?,
         modelContext: ModelContext,
         confirm: (String) async -> Bool
     ) async -> MobileTaskProposalResponse {
-        // 3. 锁屏拒绝（防线 3）：Mac 锁屏期间不接受任何远程任务。
+        // 3. Reject while locked (defense line 3): no remote tasks are accepted while the Mac is locked.
         if Self.isLoginSessionLocked() {
             DiagnosticsStore.shared.record(.remoteTaskBlockedScreenLocked)
             return MobileTaskProposalResponse(
-                status: .rejected, reason: "Mac 处于锁屏状态，已拒绝远程任务。", taskIntentID: nil)
+                status: .rejected, reason: "The Mac is locked. The remote task was rejected.", taskIntentID: nil)
         }
-        // 4. taskKind 白名单（FixedTaskCatalog 即攻击面）。
+        // 4. taskKind allowlist (FixedTaskCatalog is the attack surface).
         guard let taskKind, let kind = TaskKind(rawValue: taskKind),
               let definition = FixedTaskCatalog.definition(for: kind) else {
             return MobileTaskProposalResponse(
-                status: .rejected, reason: "未知的任务类型。", taskIntentID: nil)
+                status: .rejected, reason: "Unknown task type.", taskIntentID: nil)
         }
-        // 5. scope 已登记、未撤销、目录可用。
+        // 5. The scope is registered, not revoked, and its directory is available.
         let scopeID = projectScopeID ?? UUID()
         var scopeDescriptor = FetchDescriptor<TaskProjectScope>(
             predicate: #Predicate { $0.id == scopeID })
@@ -191,28 +191,28 @@ final class MobileTaskConsoleService: ObservableObject {
         guard let scope = try? modelContext.fetch(scopeDescriptor).first,
               !scope.isRevoked, scope.directoryIsAvailable else {
             return MobileTaskProposalResponse(
-                status: .rejected, reason: "项目范围不可用（未登记或已撤销）。", taskIntentID: nil)
+                status: .rejected, reason: "The project scope is unavailable (not registered or revoked).", taskIntentID: nil)
         }
-        // 6. T0 全策略核验：风险/窗口/nonce/过期。
+        // 6. Full T0 policy verification: risk / window / nonce / expiry.
         let intent = TaskIntentPolicy.makeIntent(scope: scope, kind: kind)
         let windows = (try? modelContext.fetch(FetchDescriptor<TaskReviewWindow>())) ?? []
         let existing = (try? modelContext.fetch(FetchDescriptor<TaskIntent>())) ?? []
         let decision = TaskIntentPolicy.review(
             intent, scope: scope, windows: windows, existingIntents: existing)
         guard case .allowed = decision else {
-            // 拒绝原因映射为固定文案；具体 reason 写 diagMac（review() 是
-            // 纯判定不落 rejectionReason——直接从 decision 取，2026-09-15：
-            // 之前读 intent.rejectionReason 恒 nil）。
+            // Rejection reasons are mapped to fixed copy; the specific reason is written to diagMac (review() is
+            // a pure decision and does not persist rejectionReason — take it straight from the decision; 2026-09-15:
+            // reading intent.rejectionReason before was always nil).
             let reason: TaskRejectionReason?
             if case .rejected(let r) = decision { reason = r } else { reason = nil }
             let text = Self.rejectionText(reason)
             DiagnosticsStore.shared.record(.remoteTaskRejectedByPolicy)
-            MobilePairingService.diagMac("手机任务被 T0 策略拒绝：\(reason?.rawValue ?? "未知")")
+            MobilePairingService.diagMac("Phone task rejected by T0 policy: \(reason?.rawValue ?? "unknown")")
             return MobileTaskProposalResponse(
                 status: .rejected, reason: text, taskIntentID: nil)
         }
-        // 7. 确认档位（M1.1 三档推广 + M3 每日窗口）：lowRisk 且 risk==.low
-        //    命中白名单或每日远程窗口开启 → 免确认；其余弹 60 秒本机确认。
+        // 7. Confirmation tier (the three M1.1 tiers extended + the M3 daily window): lowRisk with risk==.low
+        //    hitting the allowlist, or the daily remote window being open → no confirmation; everything else shows the 60-second local confirmation.
         let needsConfirmation: Bool
         if definition.risk == .low,
            MobileLaunchSession.shared.canSkipConfirmation(
@@ -223,28 +223,28 @@ final class MobileTaskConsoleService: ObservableObject {
         } else if RemoteAllowWindow.shared.allowsSkipConfirmation() {
             needsConfirmation = false
             DiagnosticsStore.shared.record(.remoteAllowWindowUsed)
-            MobilePairingService.diagMac("每日远程窗口命中，任务免确认")
+            MobilePairingService.diagMac("Daily remote window hit, task runs without confirmation")
         } else {
             needsConfirmation = true
         }
         if needsConfirmation {
-            let accepted = await confirm(definition.purpose(language: .simplifiedChinese))
+            let accepted = await confirm(definition.purpose(language: .current))
             guard accepted else {
                 DiagnosticsStore.shared.record(.remoteTaskRejectedByUser)
                 return MobileTaskProposalResponse(
-                    status: .rejected, reason: "Mac 上拒绝了本次任务。", taskIntentID: nil)
+                    status: .rejected, reason: "This task was denied on the Mac.", taskIntentID: nil)
             }
             MobileLaunchSession.shared.recordConfirmation(toolID: intent.id)
         }
-        // 8. approve → T1 执行（固定 executable/参数/超时/可停止/空 stdin）。
+        // 8. approve → T1 execution (fixed executable / arguments / timeout / stoppable / empty stdin).
         _ = TaskIntentPolicy.approve(intent, scope: scope, windows: windows, existingIntents: existing)
         try? modelContext.insert(intent)
-        let title = definition.purpose(language: .simplifiedChinese)
+        let title = definition.purpose(language: .current)
         let started = TaskExecutionCoordinator.shared.start(intent: intent, scope: scope) {}
         if case .rejected(let rejection) = started {
-            // 精确反馈（2026-09-10 用户要求）：预检失败必须说明缺什么——
-            // 红线允许回传"任务的固定目录要求"（FixedTaskCatalog 字面量，
-            // 非用户数据），不允许回传 scope 路径本身。
+            // Precise feedback (requested by the user on 2026-09-10): a failed pre-check must say what is missing —
+            // the red line allows returning "the task's fixed directory requirements" (FixedTaskCatalog literals,
+            // not user data), but not the scope path itself.
             let missingPaths = definition.requiredRelativePaths.filter { relative in
                 !FileManager.default.fileExists(
                     atPath: URL(fileURLWithPath: scope.rootPath, isDirectory: true)
@@ -252,11 +252,11 @@ final class MobileTaskConsoleService: ObservableObject {
             }
             let reason: String
             if !missingPaths.isEmpty {
-                reason = "目标目录缺少该任务必需的文件：\(missingPaths.joined(separator: "、"))。请登记一个包含这些文件的项目目录。"
+                reason = "The target directory is missing files this task requires: \(missingPaths.joined(separator: ", ")). Register a project directory that contains these files."
             } else {
-                reason = "任务启动预检未通过（所需可执行文件在本机不存在，或目标目录不可用）。"
+                reason = "The task start pre-check did not pass (the required executable does not exist on this Mac, or the target directory is unavailable)."
             }
-            MobilePairingService.diagMac("手机任务启动预检拒绝：\(rejection.rawValue)，缺文件=\(missingPaths.count)")
+            MobilePairingService.diagMac("Phone task start pre-check rejected: \(rejection.rawValue), missing files=\(missingPaths.count)")
             return MobileTaskProposalResponse(status: .rejected, reason: reason, taskIntentID: intent.id)
         }
         recordTaskState(
@@ -267,27 +267,27 @@ final class MobileTaskConsoleService: ObservableObject {
             status: .accepted, reason: nil, taskIntentID: intent.id)
     }
 
-    /// T0 拒绝原因 → 手机端固定文案（无路径无命令——枚举语义，不是数据）。
+    /// T0 rejection reason → fixed copy for the phone (no paths and no commands — enum semantics, not data).
     private static func rejectionText(_ reason: TaskRejectionReason?) -> String {
         switch reason {
-        case .localReviewRequired: return "Mac 上没有开启活跃的项目审阅窗口。"
-        case .reviewWindowExpired: return "项目审阅窗口已过期，请在 Mac 上重新开启。"
-        case .riskNotPermitted: return "任务风险等级超出审阅窗口允许范围。"
-        case .projectScopeUnavailable: return "项目范围不可用（未登记或已撤销）。"
-        case .unknownTaskKind: return "未知的任务类型。"
-        case .taskExpired: return "任务建议已过期。"
-        case .taskNotPending: return "任务不在待审状态。"
-        case .nonceReplayed: return "任务请求重放，已拒绝。"
-        case .taskCancelled: return "任务已被取消。"
-        default: return "任务被本地策略拒绝（\(reason?.rawValue ?? "未知原因")）。"
+        case .localReviewRequired: return "No active project review window is open on the Mac."
+        case .reviewWindowExpired: return "The project review window has expired. Open it again on the Mac."
+        case .riskNotPermitted: return "The task's risk level exceeds what the review window allows."
+        case .projectScopeUnavailable: return "The project scope is unavailable (not registered or revoked)."
+        case .unknownTaskKind: return "Unknown task type."
+        case .taskExpired: return "The task proposal has expired."
+        case .taskNotPending: return "The task is not pending review."
+        case .nonceReplayed: return "The task request was replayed and has been rejected."
+        case .taskCancelled: return "The task was cancelled."
+        default: return "The task was rejected by local policy (\(reason?.rawValue ?? "unknown reason"))."
         }
     }
 
-    /// Mac 登录会话锁屏检测（防线 3）。CGSessionCopyCurrentDictionary 单点
-    /// 守卫（verify-macos.sh 白名单仅本文件）。
+    /// Lock detection for the Mac login session (defense line 3). Single CGSessionCopyCurrentDictionary call site,
+    /// guarded (the verify-macos.sh allowlist contains only this file).
     nonisolated static func isLoginSessionLocked() -> Bool {
         guard let session = CGSessionCopyCurrentDictionary() as? [String: Any] else {
-            // 取不到会话字典（无 GUI/异常环境）按保守处理：视为锁屏。
+            // If the session dictionary cannot be read (no GUI / abnormal environment), be conservative: treat it as locked.
             return true
         }
         if let locked = session["CGSSessionScreenIsLocked"] as? Bool {
@@ -296,15 +296,15 @@ final class MobileTaskConsoleService: ObservableObject {
         return false
     }
 
-    // MARK: - M2b-3 cancelTask（设计 §5.1：仅手机提交且 running 的任务）
+    // MARK: - M2b-3 cancelTask (design §5.1: only tasks submitted by the phone that are running)
 
-    /// 取消运行中的任务。手机只能停 T1 任务（工具启动是终端交接，停止
-    /// 权在终端侧——不新增执行入口）。
+    /// Cancel a running task. The phone can only stop T1 tasks (tool launches are terminal handoffs, and the terminal
+    /// owns stopping — no new execution entry point).
     func cancelTask(taskIntentID: UUID) -> MobileTaskProposalResponse {
         let coordinator = TaskExecutionCoordinator.shared
         if coordinator.runningIntentIDs.contains(taskIntentID) {
-            // 找回 intent 对象由 coordinator 内部 activeIntents 管理；
-            // stop 需要 intent——通过条目登记生命周期即可停进程。
+            // Finding the intent object is handled by the coordinator's internal activeIntents;
+            // stop needs the intent — the entry's registered lifecycle is enough to stop the process.
             if let intent = coordinator.intent(forID: taskIntentID) {
                 coordinator.stop(intent: intent)
                 return MobileTaskProposalResponse(
@@ -312,6 +312,6 @@ final class MobileTaskConsoleService: ObservableObject {
             }
         }
         return MobileTaskProposalResponse(
-            status: .rejected, reason: "任务不在运行中，无法停止。", taskIntentID: nil)
+            status: .rejected, reason: "The task is not running and cannot be stopped.", taskIntentID: nil)
     }
 }

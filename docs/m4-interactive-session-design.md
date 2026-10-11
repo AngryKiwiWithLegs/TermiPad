@@ -1,103 +1,103 @@
-# M4 交互会话设计——原生交互层（非终端仿真）
+# M4 interactive session design — a native interaction layer (not terminal emulation)
 
-**状态：** 设计评审稿（2026-09-17）。先评审后实现。
+**Status:** Design review draft (2026-09-17). Review first, then implement.
 
-**上位文档：** `docs/product-roadmap.md` §5 阶段 5-6；`docs/m3-remote-allow-window-design.md`（每日窗口——本设计的会话授权基座）。
+**Parent documents:** `docs/product-roadmap.md` §5 stages 5-6; `docs/m3-remote-allow-window-design.md` (the daily window — the session authorization base of this design).
 
-**用户拍板澄清（2026-09-17）：** "不一定是终端界面"指**不拘泥终端形式**（小字难读、内容不可控），不是不做交互——**交互操作必须做，做安全、做友好**。M2b/M3 把这句话执行窄了（只做状态回执，没做交互），本设计补齐。
+**Clarification of the user's decision (2026-09-17):** "not necessarily a terminal UI" means **not being tied to the terminal form** (small, hard-to-read text and uncontrolled content), not skipping interaction — **interactive operation must be built, and built safe and friendly**. M2b/M3 executed that sentence too narrowly (only status receipts, no interaction); this design fills the gap.
 
-## 1. 目标体验（与 zcode 对齐的交互会话）
+## 1. Target experience (an interactive session aligned with zcode)
 
-任务会话页从"状态面板"升级为**可参与的会话流**：
+The task session page is upgraded from a "status panel" to a **session feed you can take part in**:
 
 ```
-┌─ 手机任务会话 ────────────────────────────────┐
-│ ▶ swift test        运行中 · 已 1 分 12 秒      │
+┌─ Task session on the phone ───────────────────┐
+│ ▶ swift test        running · 1 min 12 s        │
 │ ┌─────────────────────────────────────────┐  │
-│ │ 实时输出流（大字、自动滚动、可暂停）         │  │
+│ │ Live output stream (large type, auto-scroll, pausable) │  │
 │ │ Test Suite 'ToolTests' started…          │  │
 │ │ ✔ 12 tests passed                        │  │
 │ │ ⚠ 1 test failed: testBackupRoundTrip     │  │
 │ └─────────────────────────────────────────┘  │
-│ [停止]                                        │
+│ [Stop]                                        │
 │                                              │
-│ 💬 任务需要你的输入：                           │
+│ 💬 The task needs your input:                  │
 │ ┌─────────────────────────────────────────┐  │
-│ │ 检测到覆盖文件 build.lock，如何处理？       │  │
-│ │ [跳过] [覆盖] [终止任务]                    │  │
+│ │ Overwritten file build.lock detected. What now? │  │
+│ │ [Skip] [Overwrite] [Abort task]             │  │
 │ └─────────────────────────────────────────┘  │
 └──────────────────────────────────────────────┘
 ```
 
-- **流式输出**：任务运行中输出实时推送上屏（大字、原生渲染、自动滚动可暂停）——替代"结束后 32 行片段"
-- **交互点**：任务需要决策时（脚本经标准输入提问/固定任务定义的交互点），手机弹**结构化选择卡**——点按钮，不是打字
-- **输入**：确实需要文本输入时（如参数），走受控输入框——仍是结构化字段，不是自由 shell
-- **全程原生大字 UI**——永远不是终端仿真
+- **Streamed output**: while a task runs, its output is pushed to the screen in real time (large type, native rendering, auto-scroll that can be paused) — replacing "a 32-line snippet after it ends"
+- **Interaction points**: when a task needs a decision (a script asks via standard input / an interaction point of a fixed task definition), the phone shows a **structured choice card** — tap a button, do not type
+- **Input**: when text input is really needed (e.g. a parameter), it goes through a controlled input field — still a structured field, not a free shell
+- **Native large-type UI throughout** — never terminal emulation
 
-## 2. 技术架构
+## 2. Technical architecture
 
-### 2.1 输出流式推送（协议的核心改造）
+### 2.1 Streaming output push (the core protocol change)
 
-现状是"一连接一请求一响应"（连接生命周期 = 一次请求）。M4 引入**订阅式长连接**：
+Today it is "one connection, one request, one response" (connection lifetime = one request). M4 introduces a **subscription-style long-lived connection**:
 
 ```
-手机订阅：openStream(taskIntentID) → 连接保持
-Mac 推送：outputChunk(streamId, text) × N     ← T1 stdout/stderr 有新数据即推
-       ：stateChange(streamId, newState)      ← 状态转换即推
-       ：interactionRequest(streamId, prompt, options[])  ← 任务需要输入
-手机回应：interactionResponse(streamId, selection)
-手机退订：closeStream(streamId) → 连接关闭
+Phone subscribes: openStream(taskIntentID) → the connection stays up
+Mac pushes: outputChunk(streamId, text) × N     ← pushed whenever T1 stdout/stderr has new data
+       : stateChange(streamId, newState)      ← pushed on every state transition
+       : interactionRequest(streamId, prompt, options[])  ← the task needs input
+Phone responds: interactionResponse(streamId, selection)
+Phone unsubscribes: closeStream(streamId) → the connection closes
 ```
 
-- 复用既有帧协议（4 字节长度前缀 + AEAD 信封），新增 `PairedDeviceOperation.openTaskStream` / `closeTaskStream` 两个操作 + 推送消息结构
-- 输出缓冲：Mac 端 T1 捕获缓冲扩大为**流源**（既有 32KB ring 基础上加游标——手机断线重连后从游标续传，不重不漏）
-- 背压：手机不在线时输出只入缓冲（64KB 上限，超出丢最旧），重连补发
-- **红线不变**：输出仍经 OutputRedactor 脱敏后才下发；工具启动（终端交接）依然无流
+- Reuses the existing frame protocol (4-byte length prefix + AEAD envelope), adding the two operations `PairedDeviceOperation.openTaskStream` / `closeTaskStream` + the push message structures
+- Output buffer: the Mac's T1 capture buffer is extended into a **stream source** (a cursor on top of the existing 32KB ring — after the phone reconnects it resumes from the cursor, with no repeats and no gaps)
+- Backpressure: while the phone is offline, output only goes into the buffer (64KB cap, the oldest dropped beyond that) and is re-sent on reconnect
+- **Red line unchanged**: output is still redacted by OutputRedactor before being sent; tool launches (terminal handoff) still have no stream
 
-### 2.2 交互点的来源（安全边界的关键）
+### 2.2 Where interaction points come from (the key to the security boundary)
 
-**任务怎么"提问"？** 三个来源，全部白名单化：
+**How does a task "ask"?** Three sources, all allowlisted:
 
-1. **固定任务定义声明交互点**（首选）：`FixedTaskDefinition` 增加可选 `interactionPoints`——例如 macOSVerification 在检测到环境问题时提问"继续/终止"。交互选项是**目录字面量**，不是运行时任意生成的
-2. **脚本经 stdin 提问的通用模式**：任务定义声明"允许 stdin 交互"，Mac 端把任务 stdout 中匹配固定模式的提问行（任务定义里配置的正则字面量）转为交互点，选项同样由任务定义字面量给出
-3. **手机主动操作**：停止（已有）/ 下一阶段可加"重跑"，都是按钮不是打字
+1. **A fixed task definition declares interaction points** (preferred): `FixedTaskDefinition` gains optional `interactionPoints` — for example macOSVerification asks "continue / abort" when it detects an environment problem. The interaction options are **catalog literals**, not generated arbitrarily at runtime
+2. **The generic pattern of a script asking via stdin**: the task definition declares "stdin interaction allowed", and the Mac turns question lines in the task's stdout that match a fixed pattern (a regex literal configured in the task definition) into interaction points, with options likewise given by task-definition literals
+3. **Actions initiated from the phone**: stop (existing) / "rerun" could be added in a later phase — both are buttons, not typing
 
-**永远没有的**：自由文本输入直达 shell、运行时生成的未声明选项、任务间的自由对话。
+**Never available**: free-text input going straight to a shell, undeclared options generated at runtime, free conversation between tasks.
 
-### 2.3 每日窗口绑定（安全基座，复用 M3）
+### 2.3 Binding to the daily window (the security base, reusing M3)
 
-- **流订阅前置条件 = RemoteAllowWindow.isOpen**——窗口关着，openStream 直接拒绝（回执"今日远程窗口未开启"）
-- 锁屏 → LockStateMonitor → 关窗 → **所有活跃流立即断开**（Mac 主动 close stream）
-- 输出缓冲随窗口关闭清空（内存态，同窗口纪律）
-- 交互点的**响应**同样只在窗口内有效
+- **Precondition for stream subscription = RemoteAllowWindow.isOpen** — with the window closed, openStream is rejected outright (receipt "Today's remote window is not open")
+- Lock screen → LockStateMonitor → close the window → **all active streams are disconnected immediately** (the Mac closes the streams)
+- The output buffer is cleared when the window closes (in-memory state, the same discipline as the window)
+- **Responses** to interaction points are likewise valid only inside the window
 
-## 3. 手机端设计（CompanionApp）
+## 3. Phone-side design (CompanionApp)
 
-- 任务会话页升级：条目点开进**会话详情**（输出流大字视图 + 自动滚动/暂停 + 交互卡片 + 停止按钮）
-- 流式连接管理：进入详情页开流、离开关流、断线自动重连+游标续传
-- 输出大字渲染：等宽 14pt 起、可选字号、节流刷新（每 200ms 合帧）
-- 零落盘纪律不变
+- Task session page upgrade: tapping an entry opens the **session detail** (large-type output stream view + auto-scroll/pause + interaction cards + stop button)
+- Stream connection management: open the stream on entering the detail page, close it on leaving, auto-reconnect after a drop + resume from the cursor
+- Large-type output rendering: monospaced from 14pt, selectable font size, throttled refresh (frames merged every 200ms)
+- The nothing-written-to-disk discipline is unchanged
 
-## 4. Mac 端设计
+## 4. Mac-side design
 
-- `TaskOutputStreamService`（新文件）：流注册表（taskID → 订阅状态+游标）、T1 输出钩子（既有捕获管道接分发）、推送编码
-- `MobilePairingService`：长连接模式（openStream 后连接不主动断，收推送循环）；既有一问一答路径保留（目录/启动/状态轮询不变）
-- T1 stdout 捕获管道已在（M2b-2）——加"每行回调 → 分发"钩子，不动执行语义
+- `TaskOutputStreamService` (new file): stream registry (taskID → subscription state + cursor), T1 output hook (the existing capture pipe feeds the dispatch), push encoding
+- `MobilePairingService`: long-lived connection mode (after openStream the connection is not dropped proactively and runs a push receive loop); the existing request/response path is kept (catalog / launch / status polling unchanged)
+- The T1 stdout capture pipe already exists (M2b-2) — add a "per-line callback → dispatch" hook without touching execution semantics
 
-## 5. 验收清单（G8，真机）
+## 5. Acceptance checklist (G8, real devices)
 
-| # | 验证项 | 通过标准 |
+| # | Verification item | Pass criterion |
 |---|---|---|
-| 1 | 流式输出 | 手机进详情页 → 输出实时滚动（延迟 ≤ 1s）|
-| 2 | 断线续传 | 手机锁屏 10s 再解锁 → 输出从断点续显，不重不漏 |
-| 3 | 交互点 | 带交互点的任务运行 → 手机弹出选择卡 → 选项生效 |
-| 4 | 窗口绑定 | 窗口关闭时 openStream 被拒；锁屏 → 活跃流即断 |
-| 5 | 脱敏 | 构造含 token 的输出 → 流内已脱敏 |
-| 6 | 停止 | 流视图中停止按钮可用（复用 M2c 链路）|
-| 7 | 红线 | 无自由输入直达 shell；交互选项全部来自任务定义字面量；缓冲纯内存；输出经脱敏；协议无 command/path 字段 |
+| 1 | Streamed output | The phone enters the detail page → output scrolls in real time (delay ≤ 1s) |
+| 2 | Resume after a drop | Lock the phone for 10s and unlock → output continues from the breakpoint, with no repeats and no gaps |
+| 3 | Interaction points | A task with interaction points runs → the phone shows a choice card → the selection takes effect |
+| 4 | Window binding | openStream is rejected while the window is closed; lock screen → active streams are cut at once |
+| 5 | Redaction | Build output containing a token → it is already redacted in the stream |
+| 6 | Stop | The stop button works in the stream view (reusing the M2c chain) |
+| 7 | Red lines | No free input goes straight to a shell; all interaction options come from task-definition literals; buffers are memory only; output is redacted; the protocol has no command/path fields |
 
-## 6. 阶段切分
+## 6. Phase split
 
-- **M4-1**：协议增量（流操作 + 推送结构）+ Mac 端流服务 + T1 钩子
-- **M4-2**：手机端会话详情页（流渲染 + 重连续传）
-- **M4-3**：交互点（任务定义声明 + 选择卡 UI + 响应链）
+- **M4-1**: protocol increment (stream operations + push structures) + Mac-side stream service + T1 hook
+- **M4-2**: phone-side session detail page (stream rendering + reconnect and resume)
+- **M4-3**: interaction points (task definition declarations + choice card UI + response chain)

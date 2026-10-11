@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// 可记录的本地诊断事件。所有字段均为固定枚举或计数，禁止存入命令、路径、工具名、变量值和密钥。
+/// Local diagnostic events that may be recorded. Every field is a fixed enum or a count; storing commands, paths, tool names, variable values, or secrets is forbidden.
 enum DiagnosticEventKind: String, Codable, CaseIterable {
     case scanCompleted
     case launchSucceeded
@@ -36,46 +36,46 @@ enum DiagnosticEventKind: String, Codable, CaseIterable {
     case taskExecutionTimedOut
     case taskExecutionRejected
     case taskExecutionStartFailed
-    /// T1/T2 任何入口（T0 工作台 UI、T1 执行器读取、T2 MCP）读取 task 执行结果时记一次。
-    /// 与 `.mcpTaskStatusRead` 互补：后者是协议层审计，前者是 task 域审计。同一次读取
-    /// 可能产生两个 event：用户/智能体走 MCP 协议调用 + task 域记录最小结果回传。
+    /// Recorded once whenever any T1/T2 entry point (T0 workbench UI, T1 executor read, T2 MCP) reads a task's execution result.
+    /// Complements `.mcpTaskStatusRead`: that one is a protocol-level audit, this one is a task-domain audit. A single read
+    /// may produce two events: the user/agent calling through the MCP protocol + the task domain recording the minimal result return.
     case taskExecutionResultRead
-    /// 任务 proposal 即将过期（remaining < 60s 但 > 0s）时记一次，给用户
-    /// 在工作台上的"即将过期"提示提供审计依据。
+    /// Recorded once when a task proposal is about to expire (remaining < 60s but > 0s), giving
+    /// the workbench's "expiring soon" hint an audit trail.
     case taskProposalExpiringSoon
-    /// M0 移动端入口：用户在工具编辑面板点"撤销手机权限"按钮时记一次。
-    /// 同时 ToolTool.revokeMobilePermissionAt 时间戳被写、showInMobileEntry 与
-    /// allowMobileLaunchRequest 被设回 false，iPhone 端下次心跳读到新值即停用。
+    /// M0 mobile entry: recorded once when the user clicks "Revoke Mobile Permission" in the tool edit panel.
+    /// At the same time the ToolTool.revokeMobilePermissionAt timestamp is written and showInMobileEntry and
+    /// allowMobileLaunchRequest are set back to false; the iPhone deactivates as soon as its next heartbeat reads the new values.
     case mobilePermissionRevoked
-    /// M1.1 perSession/lowRisk 会话白名单命中、免本机确认直启时记一次。
-    /// 仅时间戳与终端目标（与 launchSucceeded 并读即知哪些启动跳过了确认）；
-    /// 隐私纪律禁止记工具名/设备名。
+    /// Recorded once when the M1.1 perSession/lowRisk session allowlist is hit and the tool launches directly without local confirmation.
+    /// Timestamp and terminal target only (read together with launchSucceeded to see which launches skipped confirmation);
+    /// the privacy discipline forbids recording tool or device names.
     case mobileLaunchAutoConfirmed
-    /// M2a 异地隧道回环监听就绪时记一次（不记 tailnet IP——隐私纪律）。
+    /// Recorded once when the M2a remote tunnel loopback listener becomes ready (the tailnet IP is not recorded — privacy discipline).
     case remoteTunnelOpened
-    /// M2a 异地隧道关闭时记一次。
+    /// Recorded once when the M2a remote tunnel is closed.
     case remoteTunnelClosed
-    /// M2b 任务会话：条目流新增/更新（工具启动或任务状态）时记一次。
-    /// 仅时间戳——隐私纪律不记工具名/任务名/设备名。
+    /// M2b task sessions: recorded once when the entry feed gains or updates an entry (tool launch or task status).
+    /// Timestamp only — the privacy discipline records no tool/task/device names.
     case mobileConsoleEntryRecorded
-    /// M2b-3 任务提交被 T0 本地策略拒绝（审阅窗口/风险/范围等）时记一次。
+    /// Recorded once when an M2b-3 task submission is rejected by the T0 local policy (review window / risk / scope, etc.).
     case remoteTaskRejectedByPolicy
-    /// M2b-3 任务提交被 Mac 本机用户拒绝（60s 确认）时记一次。
+    /// Recorded once when an M2b-3 task submission is rejected by the local Mac user (60s confirmation).
     case remoteTaskRejectedByUser
-    /// M2b-3 lowRisk 白名单命中、免本机确认直启任务时记一次。
+    /// Recorded once when the M2b-3 lowRisk allowlist is hit and the task starts directly without local confirmation.
     case mobileTaskAutoConfirmed
-    /// M2b-3 Mac 锁屏期间远程任务被拒（防线 3）时记一次。
+    /// Recorded once when a remote task is rejected while the Mac is locked (defense line 3), M2b-3.
     case remoteTaskBlockedScreenLocked
-    /// M3 用户触摸 ID 开启"今日远程窗口"时记一次（仅时间戳）。
+    /// Recorded once when the M3 user opens "Today's Remote Window" with Touch ID (timestamp only).
     case remoteAllowWindowOpened
-    /// M3 用户手动关闭远程窗口时记一次。
+    /// Recorded once when the M3 user closes the remote window manually.
     case remoteAllowWindowClosed
-    /// M3 Mac 锁屏触发远程窗口失效时记一次。
+    /// Recorded once when locking the Mac invalidates the M3 remote window.
     case remoteAllowWindowLocked
-    /// M3 远程操作经窗口免确认执行时记一次（与 mobileLaunchAutoConfirmed
-    /// 同隐私纪律：不记工具名/设备名）。
+    /// Recorded once when an M3 remote action runs through the window without confirmation (same privacy discipline as
+    /// mobileLaunchAutoConfirmed: no tool or device names).
     case remoteAllowWindowUsed
-    /// M4-3 手机对任务交互点作出选择时记一次（仅时间戳，不记选项内容）。
+    /// Recorded once when the phone makes a choice at an M4-3 task interaction point (timestamp only, not the option content).
     case mobileInteractionResponded
     case mcpToolListed
     case mcpTaskProposed
@@ -104,7 +104,7 @@ struct DiagnosticEvent: Codable, Equatable, Identifiable {
     }
 }
 
-/// 可由用户自行导出的最小诊断报告；不含任何工具、命令或凭据内容。
+/// A minimal diagnostic report the user can export themselves; contains no tool, command, or credential content.
 struct PrivacyDiagnosticReport: Codable, Equatable {
     static let schemaVersion = 1
 
@@ -131,7 +131,7 @@ struct PrivacyDiagnosticReport: Codable, Equatable {
     }
 }
 
-/// 小型环形本地日志。诊断仅在用户主动导出时离开这台 Mac。
+/// A small local ring log. Diagnostics leave this Mac only when the user exports them.
 final class DiagnosticsStore {
     static let shared = DiagnosticsStore()
 

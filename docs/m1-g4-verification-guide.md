@@ -1,56 +1,56 @@
-# M1 G4 双设备验证指引（免费 Apple ID 签名）
+# M1 G4 two-device verification guide (free Apple ID signing)
 
-**适用阶段：** `feature/m1-local-network-pairing` 分支的 Mac 侧实现合入后、宣称 G4 通过之前。
+**Applies when:** After the Mac-side implementation on the `feature/m1-local-network-pairing` branch is merged and before G4 is declared passed.
 
-**前提：** `docs/m0-m1-mobile-entry-design.md` §3.1/§6（2026-09-06 更新）——免费 Apple ID（personal team）支撑真机**开发验证**；长期安装/TestFlight/外部分发仍需付费会员。
+**Premise:** `docs/m0-m1-mobile-entry-design.md` §3.1/§6 (updated 2026-09-06) — a free Apple ID (personal team) supports real-device **development verification**; long-term install / TestFlight / external distribution still need a paid membership.
 
-## 1. 一次性准备（可提前做，与开发并行）
+## 1. One-time preparation (can be done ahead of time, in parallel with development)
 
-| 步骤 | 操作 | 说明 |
+| Step | Action | Notes |
 |---|---|---|
-| 1 | Xcode → Settings → Accounts → 登录你的 Apple ID | 免费 personal team 自动创建；无需付款 |
-| 2 | iPhone：设置 → 隐私与安全性 → 开发者模式 → 开启 | iOS 16+ 侧载必开，需重启手机 |
-| 3 | iPhone 用数据线连 Mac，Xcode → Devices and Windows → 信任并启用 | 设备注册进 personal team |
-| 4 | 确认 Mac 与 iPhone 在**同一 Wi-Fi**，且路由器未开启 AP 隔离 | AP 隔离会挡 Bonjour，是最常见的发现失败原因 |
+| 1 | Xcode → Settings → Accounts → sign in with your Apple ID | A free personal team is created automatically; no payment needed |
+| 2 | iPhone: Settings → Privacy & Security → Developer Mode → turn on | Required for sideloading on iOS 16+; the phone must restart |
+| 3 | Connect the iPhone to the Mac with a cable, Xcode → Devices and Windows → trust and enable | The device is registered in the personal team |
+| 4 | Make sure the Mac and iPhone are on the **same Wi-Fi** and the router does not have AP isolation on | AP isolation blocks Bonjour and is the most common cause of discovery failure |
 
-**免费账号限额（务必知晓）：** 每台设备 ≤3 个 app 同时安装；App ID/设备注册 **7 天过期**；每周 10 个新 App ID。手机端 app 过期后图标变白打不开——Xcode 里重新 Run 一次即续期。**这不影响 Mac 端 TermiPad**（本地 ad hoc 签名，无 7 天限制）。
+**Free account limits (be aware):** ≤3 apps installed at the same time per device; App ID / device registration **expires after 7 days**; 10 new App IDs per week. Once the phone app expires its icon turns white and it will not open — Run it once more in Xcode to renew. **This does not affect TermiPad on the Mac** (local ad hoc signing, no 7-day limit).
 
-## 2. 验收清单（G4 完成条件，逐项记录证据）
+## 2. Acceptance checklist (G4 completion conditions; record evidence for each item)
 
-| # | 验证项 | 通过标准 | 证据 |
+| # | Verification item | Pass criterion | Evidence |
 |---|---|---|---|
-| 1 | Bonjour 发现 | iPhone app 能在列表看到 `TermiPad`（`_termipad-m1._tcp`）| 截图 |
-| 2 | 指纹人工比对 | iPhone 屏显示的 Mac 指纹与 Mac 设置页一致 | 截图 ×2 |
-| 3 | 配对成功 | 输入配对码后，Mac `PairedDeviceStore` 出现该设备记录 | Mac 截图 |
-| 4 | 会话加密 | 配对后手机能列出 `showInMobileEntry=true` 的工具目录（仅 4 字段）| 截图 |
-| 5 | 启动请求 + 本地确认 | 手机点工具 → Mac 按 `mobileLocalConfirmPolicy` 弹确认 → 确认后经 `TerminalLauncher` 打开终端 | 截图 |
-| 6 | 双重撤销 | Mac 撤销设备 / 撤销工具手机权限 → 手机端立即失效 | 截图 |
-| 7 | 7 天重签 | 到期重装后重新配对流程可走通（配对凭据是否保留如实记录）| 记录 |
+| 1 | Bonjour discovery | The iPhone app can see `TermiPad` (`_termipad-m1._tcp`) in the list | Screenshot |
+| 2 | Fingerprint comparison by eye | The Mac fingerprint shown on the iPhone matches the one on the Mac's Settings page | Screenshot ×2 |
+| 3 | Pairing succeeds | After entering the pairing code, the device's record appears in the Mac's `PairedDeviceStore` | Mac screenshot |
+| 4 | Session encryption | After pairing the phone can list the tool catalog of tools with `showInMobileEntry=true` (4 fields only) | Screenshot |
+| 5 | Launch request + local confirmation | Tap a tool on the phone → the Mac prompts for confirmation per `mobileLocalConfirmPolicy` → after confirming, the terminal opens via `TerminalLauncher` | Screenshot |
+| 6 | Double revocation | The Mac revokes the device / revokes the tool's mobile permission → it stops working on the phone immediately | Screenshot |
+| 7 | 7-day re-signing | After reinstalling on expiry, the pairing flow works again (record truthfully whether the pairing credentials were kept) | Record |
 
-**红线复核（每一项不过即 G4 不通过）：** 手机端任意时刻不可见命令/路径/变量/环境变量/终端输出；Mac 无公网入站端口（监听仅 Bonjour 局域网广播）；白名单外的操作一律拒绝。
+**Red-line review (failing any item means G4 does not pass):** the phone must never see commands / paths / variables / environment variables / terminal output at any time; the Mac has no public inbound port (listening is only the Bonjour LAN advertisement); operations outside the allowlist are always rejected.
 
-## 4. 验收记录
+## 4. Acceptance record
 
-**2026-09-06 首轮（iPhone 14 Plus, iOS 26.6.1 ↔ MacBook Pro, 192.168.2.81/en0）：**
+**2026-09-06 first round (iPhone 14 Plus, iOS 26.6.1 ↔ MacBook Pro, 192.168.2.81/en0):**
 
-| # | 验证项 | 结果 | 备注 |
+| # | Verification item | Result | Notes |
 |---|---|---|---|
-| 1 | Bonjour 发现 | ✅ 通过 | `_termipad-m1._tcp`；iOS 端本地网络权限声明由 project.yml info.properties 生成（手写 plist 曾被 XcodeGen 覆盖，见 commit 278b9a7） |
-| 2 | 指纹人工比对 | ✅ 通过 | 手机屏显 MacHello.fingerprint 与 Mac 屏一致后人工确认 |
-| 3 | 配对成功 | ✅ 通过 | 钥匙串 `mobile-pairing.device-index=["BE0172EB-…"]` + `mobile-pairing.identity` 均确认存在 |
-| 4 | 会话加密（工具目录） | ✅ 通过（2026-09-07）| 加密 resume 握手 + listTools；手机日志 `收到工具目录 count=3`（commit a161200）|
-| 5 | 启动请求 + 本地确认 | ✅ 通过（2026-09-08）| 双路径实测：手机点工具卡 → Mac 弹 60s 确认 → 确认后终端执行、手机绿✅；拒绝路径手机橙✖（拒绝原因回显）。Mac 日志（08:34:49/08:35:06/08:35:12 三轮 `收到请求 op=requestLaunch toolID=…`）。首轮"Mac 无反应"根因：手机端 phase 提前切换致发送块被静默跳过（commit 07f2495 修复），列表请求因不切 phase 一直正常 |
-| 6 | 双重撤销实测 | ✅ 通过（2026-09-07）| Mac 撤销设备 → 手机 resume 立即被拒（复用握手无响应），UI 明确提示重新配对并自动清凭据（commit a394e93）|
-| 7 | 7 天重签 | ⏳ 未测 | 时间依赖；profile 实际有效期至 2026-09-13。签名模式已改 Automatic（commit 07f2495），Manual 模式要求显式 profile 曾阻断构建；重签后凭据保留情况待记录 |
+| 1 | Bonjour discovery | ✅ Passed | `_termipad-m1._tcp`; the iOS local network permission declaration is generated from project.yml info.properties (a hand-written plist was once overwritten by XcodeGen, see commit 278b9a7) |
+| 2 | Fingerprint comparison by eye | ✅ Passed | Confirmed by eye after MacHello.fingerprint on the phone screen matched the Mac screen |
+| 3 | Pairing succeeds | ✅ Passed | Keychain entries `mobile-pairing.device-index=["BE0172EB-…"]` + `mobile-pairing.identity` both confirmed present |
+| 4 | Session encryption (tool catalog) | ✅ Passed (2026-09-07) | Encrypted resume handshake + listTools; phone log `Received tool catalog count=3` (commit a161200) |
+| 5 | Launch request + local confirmation | ✅ Passed (2026-09-08) | Both paths tested: tap a tool card on the phone → the Mac shows the 60s confirmation → after confirming, the terminal runs it and the phone shows a green ✅; on the denial path the phone shows an orange ✖ (the rejection reason is echoed). Mac log (three rounds of `Received request op=requestLaunch toolID=…` at 08:34:49/08:35:06/08:35:12). Root cause of the first round's "no reaction on the Mac": the phone switched phase too early, so the send block was skipped silently (fixed in commit 07f2495); list requests always worked because they do not switch phase |
+| 6 | Double revocation tested | ✅ Passed (2026-09-07) | The Mac revokes the device → the phone's resume is rejected immediately (no response to the resume handshake), and the UI clearly prompts to pair again and clears the credentials automatically (commit a394e93) |
+| 7 | 7-day re-signing | ⏳ Not tested | Time-dependent; the profile is actually valid until 2026-09-13. The signing mode was changed to Automatic (commit 07f2495); Manual mode requiring an explicit profile had blocked the build; whether credentials survive re-signing is still to be recorded |
 
-**2026-09-08 M1.1 真机复测（perSession/lowRisk 会话白名单，commit 1781496）：**
+**2026-09-08 M1.1 real-device retest (perSession/lowRisk session allowlist, commit 1781496):**
 
-| # | 验证项 | 结果 | 备注 |
+| # | Verification item | Result | Notes |
 |---|---|---|---|
-| 5a | lowRisk 免确认直启 | ✅ 通过 | 用户将工具策略设为 `lowRiskSessionOnly` 后连续四次手机启动：首次弹窗确认写入白名单；12:42:31/12:42:39/12:43:32 三次 Mac 日志 `会话白名单命中，免确认直启 policy=lowRiskSessionOnly`（88 秒内，5 分钟窗内）。元字符第二道防线未拦截（模板干净） |
-| 5b | 首次确认路径回归 | ✅ 通过 | 12:42:04 首次请求正常走 60s 弹窗确认（everyTime 路径不受 M1.1 影响） |
+| 5a | lowRisk direct launch without confirmation | ✅ Passed | After the user set the tool's policy to `lowRiskSessionOnly`, four consecutive launches from the phone: the first prompted for confirmation and wrote the allowlist; three Mac log entries `Session allowlist hit, launching directly without confirmation policy=lowRiskSessionOnly` at 12:42:31/12:42:39/12:43:32 (within 88 seconds, inside the 5-minute window). The metacharacter second line of defense did not intercept (the template is clean) |
+| 5b | First-confirmation path regression | ✅ Passed | The first request at 12:42:04 went through the 60s confirmation prompt normally (the everyTime path is unaffected by M1.1) |
 
-M1.1 单测 9 项（窗口过期/刷新/按工具隔离/元字符防线/撤销立即失效）+ 全量集中验证 `20260908-090453` 通过。
+9 M1.1 unit tests (window expiry / refresh / per-tool isolation / metacharacter defense / immediate invalidation on revocation) + the full consolidated verification `20260908-090453` passed.
 
 
-**结论：G4 进行中（5/7 + M1.1 附加项全过）。** 免费签名（team 7LTPLQKWWD，Apple 于 2026-09-06 重登录时轮换）+ 开发者模式 + 同网 mDNS 均已实证可用。仅剩 #7 时间依赖项（2026-09-13 profile 到期重签）。
+**Conclusion: G4 in progress (5/7 + the M1.1 extras all passed).** Free signing (team 7LTPLQKWWD, rotated by Apple on the 2026-09-06 re-login) + Developer Mode + same-network mDNS are all confirmed to work. Only the time-dependent item #7 remains (re-signing when the profile expires on 2026-09-13).

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// P2-B/P2-C 的独立审查页。它不接收网络命令、不执行应用内安装，且不自动扫描或收录任何结果。
+/// Standalone review page for P2-B/P2-C. It accepts no network commands, performs no in-app installs, and never scans or collects any result automatically.
 struct InstallEnvironmentView: View {
     let language: AppLanguage
 

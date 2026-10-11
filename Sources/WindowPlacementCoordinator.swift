@@ -1,8 +1,8 @@
 import AppKit
 import Foundation
 
-/// 仅在首次展示主窗口时以 iPad 纵向基准放入主屏可见区域。
-/// 之后尊重 macOS 的窗口恢复机制和用户手动调整，不会反复抢占窗口位置。
+/// Only when the main window is first shown, place it in the main screen's visible area using the iPad portrait baseline.
+/// After that, respect macOS's window restoration and the user's manual adjustments; never grab the window position repeatedly.
 final class WindowPlacementCoordinator {
     static let shared = WindowPlacementCoordinator()
 
@@ -23,25 +23,25 @@ final class WindowPlacementCoordinator {
     }
 
     private func placeInitialWindowIfNeeded(_ window: NSWindow?) {
-        // UI 测试模式：无条件放置（持久 flag 会让后续测试实例跳过放置，
-        // 而 SwiftUI 的窗口 frame 恢复会盖过 defaultSize——2026-09-09 实测
-        // 窗口卡在 729pt 窄宽）。真实用户路径不变：只放一次。
+        // UI test mode: place unconditionally (a persistent flag would make later test instances skip placement,
+        // and SwiftUI's window frame restoration would override defaultSize — 2026-09-09 test:
+        // the window was stuck at the narrow 729pt width). The real user path is unchanged: placed only once.
         let isUITest = ProcessInfo.processInfo.environment["TERMIPAD_UI_TEST_MODE"] == "1"
         let minimum = TermiPadWorkspaceMetrics.minimumSize
         guard isUITest || !UserDefaults.standard.bool(forKey: hasPlacedInitialWindowKey),
               let window,
-              // SwiftUI 的导航标题（"所有工具"/"设置"等）会替换 NSWindow.title——
-              // 不能用 title == "TermiPad" 识别主窗口。用 contentMinSize 判：
-              // 主窗口有 workspace 最小尺寸约束，其他面板（如 about）没有。
+              // SwiftUI's navigation title ("All Tools" / "Settings", etc.) replaces NSWindow.title —
+              // so the main window cannot be identified by title == "TermiPad". Use contentMinSize instead:
+              // the main window has the workspace minimum-size constraint; other panels (such as About) do not.
               (window.contentMinSize.width >= minimum.width),
               let visibleFrame = (window.screen ?? NSScreen.main)?.visibleFrame else {
             return
         }
 
         let reference = TermiPadWorkspaceMetrics.iPadReferenceSize
-        // UI 测试模式用宽窗口：729pt 实际宽度下外观分段控件会被挤进工具栏
-        // 溢出弹层，identifier 查找失败（2026-09-09 快照实证）。仅测试路径加宽，
-        // 不影响真实用户的 iPad 参考布局。
+        // UI test mode uses a wide window: at the actual 729pt width the appearance segmented control gets squeezed into the toolbar
+        // overflow popover and the identifier lookup fails (confirmed by a snapshot on 2026-09-09). Widened on the test path only;
+        // the real user's iPad reference layout is unaffected.
         let targetWidth = isUITest ? 1_600 : reference.width
         let scale = min(1, visibleFrame.width / targetWidth, visibleFrame.height / reference.height)
         let fittedWidth = max(minimum.width, floor(targetWidth * scale))

@@ -1,23 +1,23 @@
-# iCloud 同步前置条件研究记录
+# iCloud sync prerequisites research note
 
-**日期：** 2026-08-25
-**用途：** TermiPad P1 iCloud 同步的设计闸门，不是实现说明。
+**Date:** 2026-08-25
+**Purpose:** A design gate for TermiPad P1 iCloud sync, not implementation notes.
 
-Apple 的 SwiftData 文档明确指出，自动 iCloud 同步需要 iCloud 与 Background Modes 两项 capability；其中 iCloud capability 需要具有管理员权限的有效 Apple Developer 账户。[1] 应用还需要启用 CloudKit、选择或创建 CloudKit 容器，并开启 Remote notifications 以接收服务器变更。[1]
+Apple's SwiftData documentation states explicitly that automatic iCloud sync needs two capabilities, iCloud and Background Modes; the iCloud capability needs a valid Apple Developer account with admin permission.[1] The app also needs to enable CloudKit, choose or create a CloudKit container, and turn on Remote notifications to receive server changes.[1]
 
-SwiftData 会根据 entitlements 推断 CloudKit 容器，且模型必须符合 CloudKit 的 schema 限制。官方特别提示：CloudKit 无法强制唯一约束，不支持非可选 relationship；生产 schema 提升后只能做加法，不能删除模型类型或更改既有属性。[1]
+SwiftData infers the CloudKit container from the entitlements, and the models must conform to CloudKit's schema restrictions. The official documentation specifically notes: CloudKit cannot enforce unique constraints and does not support non-optional relationships; after the production schema is promoted only additive changes are possible, and model types cannot be deleted nor existing attributes changed.[1]
 
-TermiPad 当前容器工厂对固定 store 测试显式使用 `cloudKitDatabase: .none`，这对本地优先的开发和恢复测试是正确的。没有 Apple Developer 账户、团队、容器 ID、entitlements 与真机 CloudKit 环境时，不能将其改为“看似同步”的实现，也不能声称 P1 iCloud 已完成。
+TermiPad's current container factory explicitly uses `cloudKitDatabase: .none` for fixed-store tests, which is right for local-first development and recovery tests. Without an Apple Developer account, team, container ID, entitlements, and a real-device CloudKit environment, it must not be changed into a "looks like it syncs" implementation, nor can P1 iCloud be claimed as done.
 
-进入 iCloud 实现前，必须先完成以下决策：
+Before entering iCloud implementation, the following decisions must be made first:
 
-| 决策 | TermiPad 需要确定的内容 |
+| Decision | What TermiPad needs to settle |
 |---|---|
-| 账户与容器 | Apple Developer 团队、bundle identifier、私有 CloudKit container 与开发/生产环境。 |
-| 同步对象 | 工具记录、候选、收藏和分类是否同步；API Key、变量值、受控本地图标、工作目录与诊断必须默认留在本地。 |
-| 冲突策略 | 工具命令的跨设备冲突如何处理；不得静默覆盖用户本机命令。 |
-| 迁移 | 既有本地 SwiftData store 向同步 store 的迁移、备份、回滚和用户选择。 |
-| 验收 | 至少两台使用同一 Apple ID 的测试设备、离线变更、冲突、删除、恢复与安全回退。 |
+| Account and container | Apple Developer team, bundle identifier, private CloudKit container, and the development/production environments. |
+| Synced objects | Whether tool records, candidates, favorites, and categories sync; API keys, variable values, controlled local icons, working directories, and diagnostics must stay local by default. |
+| Conflict strategy | How cross-device conflicts of tool commands are handled; the user's local commands must not be overwritten silently. |
+| Migration | Migration of the existing local SwiftData store to a syncing store, backup, rollback, and user choice. |
+| Acceptance | At least two test devices on the same Apple ID, offline changes, conflicts, deletion, recovery, and safe fallback. |
 
 ## References
 

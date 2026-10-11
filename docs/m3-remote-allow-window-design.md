@@ -1,111 +1,111 @@
-# M3 远程允许窗口设计——每日解锁 + 免确认信任窗
+# M3 remote allow window design — daily unlock + confirmation-free trust window
 
-**状态：** 设计评审稿（2026-09-14）。先评审后实现；本文不宣称任何能力已实现。
+**Status:** Design review draft (2026-09-14). Review first, then implement; this document claims no capability as implemented.
 
-**上位文档：** `docs/product-roadmap.md` §5 阶段 6（M3）；`docs/m2b-remote-task-console-design.md` §4 防线 3（本设计是其"每日本机解锁"项的落地）与 §9 衔接预告。
+**Parent documents:** `docs/product-roadmap.md` §5 stage 6 (M3); `docs/m2b-remote-task-console-design.md` §4 defense line 3 (this design lands its "daily local unlock" item) and the preview in §9.
 
-**要解决的问题：** M2b 真机使用确认了北极星场景成立，但每次远程操作都要 Mac 端确认——人不在 Mac 前时这条防线反而是死锁（这正是 M2a 设计文档 §1 预言的"死锁问题"）。M3 给**清醒的在 Mac 前的用户**一个一次性授权手段：今天出门前点一下，之后整天手机操作免确认。
+**The problem to solve:** real-device use of M2b confirmed that the north-star scenario holds, but every remote action needs confirmation on the Mac — when nobody is at the Mac, that defense line becomes a deadlock instead (exactly the "deadlock problem" predicted in §1 of the M2a design doc). M3 gives **the alert user who is at the Mac** a one-off way to authorize: tap once before leaving today, and phone actions need no confirmation for the rest of the day.
 
-## 1. 核心语义：每日解锁（Daily Unlock）
+## 1. Core semantics: Daily Unlock
 
 ```
-用户在 Mac 前（早上出门前）：
-  设置 → 手机伴侣 → 「开启今日远程窗口」→ 触摸 ID/密码确认 → 窗口开启
-  ├─ 有效期：到当日 24:00（自然日界）或用户手动关闭，先到者
-  ├─ 窗口内：手机 requestLaunch / requestTaskProposal **免 Mac 确认**直接执行
-  │   （仍受：锁屏拒绝、30 天时效、速率限制、白名单、T0 策略全核验）
-  └─ 即时失效条件（任一触发窗口立即关闭）：
-     Mac 锁屏 / 睡眠 / app 退出 / 用户点关闭 / 设备撤销
+The user at the Mac (before leaving in the morning):
+  Settings → Mobile Companion → "Open Today's Remote Window" → confirm with Touch ID / password → the window opens
+  ├─ Valid until: 24:00 of the same day (calendar-day boundary) or until the user closes it manually, whichever comes first
+  ├─ Inside the window: the phone's requestLaunch / requestTaskProposal run directly **without confirmation on the Mac**
+  │   (still subject to: rejection while locked, the 30-day lifetime, rate limiting, the allowlist, and full T0 policy verification)
+  └─ Immediate invalidation conditions (any one closes the window at once):
+     Mac locked / asleep / app quit / user clicks close / device revoked
 ```
 
-**与 M1.1 perSession 的关系**：`MobileLaunchSession`（5 分钟白名单）保留并升级为其内部实现——每日解锁把"5 分钟"换成"到当日 24:00"，语义同构（进程内存、不落盘、随时作废）。M3 是 `MobileLaunchSession` 的推广而非替换。
+**Relationship to M1.1 perSession**: `MobileLaunchSession` (the 5-minute allowlist) is kept and upgraded into its internal implementation — the daily unlock replaces "5 minutes" with "until 24:00 today", with isomorphic semantics (process memory, never written to disk, voidable at any time). M3 generalizes `MobileLaunchSession` rather than replacing it.
 
-## 2. 明确不做（红线）
+## 2. Explicit non-goals (red lines)
 
-- **不落盘**：窗口状态只存进程内存（同 M1.1）。app 重启即关——"重启后重新开一次窗口"是可接受的摩擦，换来"磁盘上永远不存在长期免确认凭据"
-- **不随 tailnet 端点下发**：手机端不知道窗口状态，Mac 是唯一权威——窗口关了手机下次请求自然被拒（文案明确"今日远程窗口未开启"）
-- **不做"永久免确认"**：窗口最长到当日 24:00，跨天必须重新解锁
-- **lowRisk 白名单不受影响**：M1.1 的 lowRiskSessionOnly 5 分钟窗与每日窗口并存，取并集
+- **Never written to disk**: the window state lives only in process memory (same as M1.1). An app restart closes it — "open the window again after a restart" is acceptable friction, in exchange for "a long-lived confirmation-free credential never exists on disk"
+- **Not sent along with the tailnet endpoint**: the phone does not know the window state and the Mac is the sole authority — once the window is closed the phone's next request is simply rejected (with the explicit copy "Today's remote window is not open")
+- **No "permanent confirmation-free"**: the window lasts at most until 24:00 today, and a new day requires unlocking again
+- **The lowRisk allowlist is unaffected**: M1.1's 5-minute lowRiskSessionOnly window coexists with the daily window, and the union applies
 
-## 3. Mac 端设计
+## 3. Mac-side design
 
-### 3.1 `RemoteAllowWindow`（新文件 Sources/RemoteAllowWindow.swift）
+### 3.1 `RemoteAllowWindow` (new file Sources/RemoteAllowWindow.swift)
 
 ```swift
 @MainActor
 final class RemoteAllowWindow: ObservableObject {
     static let shared = RemoteAllowWindow()
-    /// 窗口开启时刻；nil = 关闭。进程内存，不落盘。
+    /// When the window was opened; nil = closed. Process memory, never written to disk.
     @Published private(set) var openedAt: Date?
-    /// 解锁时刻（单独记录——锁屏即失效，解锁后需重新开门，见 §3.2）
+    /// Unlock time (recorded separately — locking invalidates it, and the door must be reopened after unlocking, see §3.2)
     private var unlockedAt: Date?
 
-    var isOpen: Bool          // openedAt != nil 且未跨自然日
-    func open(authenticated: Bool)   // authenticated=false 直接拒绝——调用方负责 LAContext
-    func close()                     // 用户手动/锁屏/撤销时调用
-    func invalidateOnLock()          // 锁屏钩子
+    var isOpen: Bool          // openedAt != nil and still the same calendar day
+    func open(authenticated: Bool)   // authenticated=false is rejected outright — the caller is responsible for LAContext
+    func close()                     // called on manual close / lock / revocation
+    func invalidateOnLock()          // lock-screen hook
 }
 ```
 
-### 3.2 生命周期钩子
+### 3.2 Lifecycle hooks
 
-| 事件 | 动作 |
+| Event | Action |
 |---|---|
-| 用户点「开启今日远程窗口」 | LAContext `.deviceOwnerAuthentication`（触摸 ID/密码）通过 → `open()`；诊断 `remoteAllowWindowOpened` |
-| 用户点「关闭」 | `close()`；诊断 `remoteAllowWindowClosed` |
-| Mac 锁屏（`CGSessionCopyCurrentDictionary` 变化，轮询 5s） | `invalidateOnLock()`——**锁屏即关窗**（偷Mac者锁不了你的窗口） |
-| app 启动 | 不恢复（内存态自然丢失） |
-| 设备撤销 / 配对关闭 | `close()`（挂入既有撤销链） |
+| The user clicks "Open Today's Remote Window" | LAContext `.deviceOwnerAuthentication` (Touch ID / password) succeeds → `open()`; diagnostic `remoteAllowWindowOpened` |
+| The user clicks "Close" | `close()`; diagnostic `remoteAllowWindowClosed` |
+| Mac locked (change in `CGSessionCopyCurrentDictionary`, polled every 5s) | `invalidateOnLock()` — **locking closes the window** (whoever steals the Mac cannot be locked out of your window) |
+| App launch | Not restored (the in-memory state is naturally lost) |
+| Device revoked / pairing turned off | `close()` (hooked into the existing revocation chain) |
 
-### 3.3 执行链接入（两处各 +3 行）
+### 3.3 Hooking into the execution chain (+3 lines in each of two places)
 
-`handleLaunchRequest` 与 `handleTaskProposal` 的确认环节改为：
-
-```
-确认档位判定 → 命中 M1.1 白名单？→ 免确认（不变）
-            → RemoteAllowWindow.isOpen？→ 免确认（新，诊断 remoteAllowWindowUsed）
-            → else 弹 60s 确认（不变）
-```
-
-**锁屏检查保持在前**：窗口开着但 Mac 锁屏 → 仍然拒绝（防线不因窗口降级）。
-
-### 3.4 UI（PreferencesView 手机伴侣 Section）
+The confirmation step of `handleLaunchRequest` and `handleTaskProposal` becomes:
 
 ```
-[今日远程窗口：已关闭 / 剩余 6h12m]
-[开启今日远程窗口]（触摸 ID）   [关闭]
-hint: 开启后今天内手机操作免本机确认。Mac 锁屏或重启后自动关闭。
-       首次解锁仍需触摸 ID——窗口只是免去"每次操作都确认"。
+Confirmation tier decision → M1.1 allowlist hit? → no confirmation (unchanged)
+            → RemoteAllowWindow.isOpen? → no confirmation (new, diagnostic remoteAllowWindowUsed)
+            → else show the 60s confirmation (unchanged)
 ```
 
-## 4. 协议与手机端
+**The lock-screen check stays first**: window open but Mac locked → still rejected (the defense line is not downgraded by the window).
 
-**零协议变更**：窗口状态不下发、不进 MacResumeHello。手机端唯一变化是**拒绝文案**新增一种："今日远程窗口未开启，请在 Mac 上开启后重试"（复用现有 reason 字段，固定文案）。UI 上手机无需任何改动——行为透明。
+### 3.4 UI (Mobile Companion section of PreferencesView)
 
-## 5. 安全分析（窗口开着时的暴露面）
+```
+[Today's Remote Window: closed / 6h12m remaining]
+[Open Today's Remote Window] (Touch ID)   [Close]
+hint: Once opened, phone actions need no local confirmation for the rest of today. It closes automatically when the Mac is locked or restarted.
+       The first unlock still needs Touch ID — the window only removes "confirm every action".
+```
 
-| 防线 | 窗口开启时是否仍有效 |
+## 4. Protocol and phone side
+
+**Zero protocol changes**: the window state is not sent and does not enter MacResumeHello. The only change on the phone is one new **rejection copy**: "Today's remote window is not open. Open it on the Mac and try again." (reusing the existing reason field, fixed copy). The phone UI needs no changes at all — the behavior is transparent.
+
+## 5. Security analysis (exposure surface while the window is open)
+
+| Defense line | Still effective while the window is open? |
 |---|---|
-| Face ID app 锁（手机） | ✅ 不变 |
-| 凭据 30 天时效 | ✅ 不变 |
-| 锁屏拒绝 | ✅ **加强**：锁屏即关窗 |
-| 速率限制（每分钟 10 次） | ✅ 不变 |
-| T0 策略全核验（范围/风险/窗口/超时） | ✅ 不变（跳过的只是"本机确认"这一步） |
-| 白名单/确认档位 | lowRisk 并集语义 |
-| 撤销 | ✅ 关窗 + 吊销 |
-| 输出档位/脱敏 | ✅ 不变 |
+| Face ID app lock (phone) | ✅ Unchanged |
+| 30-day credential lifetime | ✅ Unchanged |
+| Rejection while locked | ✅ **Strengthened**: locking closes the window |
+| Rate limiting (10 per minute) | ✅ Unchanged |
+| Full T0 policy verification (scope/risk/window/timeout) | ✅ Unchanged (only the "local confirmation" step is skipped) |
+| Allowlist / confirmation tiers | Union semantics with lowRisk |
+| Revocation | ✅ Closes the window + revokes |
+| Output visibility / redaction | ✅ Unchanged |
 
-**残余风险（用户知情接受）**：窗口开启期间，拿到已解锁手机 + Mac 未锁屏的人可免确认执行固定目录内任务。缓解：自然日界 + 锁屏即关 + 撤销即时。这正是"每日解锁"的产品语义。
+**Residual risk (accepted knowingly by the user)**: while the window is open, someone holding the unlocked phone, with the Mac unlocked, can run tasks from the fixed catalog without confirmation. Mitigations: the calendar-day boundary + locking closes the window + immediate revocation. This is exactly the product semantics of "daily unlock".
 
-## 6. 验收清单（G7，真机）
+## 6. Acceptance checklist (G7, real devices)
 
-| # | 验证项 | 通过标准 |
+| # | Verification item | Pass criterion |
 |---|---|---|
-| 1 | 开窗 | 触摸 ID 后窗口显示剩余时长；诊断事件落盘 |
-| 2 | 免确认 | 窗口内手机提交任务/点工具 → 直接执行（无确认弹窗）|
-| 3 | 仍受防线 | 窗口内 Mac 锁屏 → 操作被拒且窗口关闭；重新解锁后窗口不再开启（需重开）|
-| 4 | 关窗 | 手动关闭后手机操作回到每操作确认 |
-| 5 | 跨天 | 窗口开启状态跨 24:00 → 次日请求被拒（文案"今日远程窗口未开启"）|
-| 6 | 重启失效 | Mac app 重启 → 窗口已关（内存态丢失）|
-| 7 | 撤销联动 | 撤销设备 → 窗口关闭 |
-| 8 | 红线复核 | 窗口状态不落盘、不进备份、不进诊断内容；协议无新增字段 |
+| 1 | Open the window | After Touch ID the window shows the remaining time; the diagnostic event is recorded |
+| 2 | No confirmation | Inside the window, the phone submits a task / taps a tool → it runs directly (no confirmation prompt) |
+| 3 | Defense lines still apply | Inside the window, lock the Mac → the action is rejected and the window closes; after unlocking, the window stays closed (it must be reopened) |
+| 4 | Close the window | After closing manually, phone actions go back to confirmation per action |
+| 5 | Crossing midnight | The window stays open across 24:00 → the next day's request is rejected (copy "Today's remote window is not open") |
+| 6 | Invalid after restart | Restart the Mac app → the window is closed (in-memory state lost) |
+| 7 | Revocation linkage | Revoke the device → the window closes |
+| 8 | Red-line review | The window state is not written to disk, backups, or diagnostic content; the protocol has no new fields |
