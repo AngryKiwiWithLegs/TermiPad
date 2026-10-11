@@ -1,8 +1,8 @@
 import XCTest
 @testable import TermiPad
 
-/// M1 帧层契约测试：4 字节大端长度前缀、64KB 上限、incomplete/invalid 分支。
-/// 这是把"分包/粘包在 listenerQueue 里解"的网络层前置单测。
+/// M1 frame layer contract tests: 4-byte big-endian length prefix, 64KB limit, incomplete/invalid branches.
+/// This is the prerequisite unit test for the network layer's "fragmentation/coalescing is resolved on listenerQueue".
 final class MobilePairingFrameTests: XCTestCase {
     func testEncodeThenDecodeRoundTrips() {
         let payload = Data(repeating: 0xAB, count: 100)
@@ -27,7 +27,7 @@ final class MobilePairingFrameTests: XCTestCase {
     }
 
     func testDecodeRejectsOversizedDeclaredLength() {
-        var fake = Data([0x00, 0x10, 0x00, 0x00]) // 1 MB，远超 64 KB 上限
+        var fake = Data([0x00, 0x10, 0x00, 0x00]) // 1 MB, far beyond the 64 KB limit
         fake.append(Data(count: 1))
         XCTAssertEqual(MobilePairingFrame.decodeOne(from: fake), .invalid)
     }

@@ -1,93 +1,93 @@
-# TermiPad Telegram Mini App 图标化入口设计
+# TermiPad Telegram Mini App Icon-Based Entry Design
 
-**状态：** 可行性与受限试点设计完成；未进入代码实现。
+**Status:** Feasibility and restricted pilot design complete; code implementation not started.
 
-## 1. 结论
+## 1. Conclusion
 
-Telegram Mini App 可以在 Telegram 内呈现真正的图标化工具面板。它是一个嵌入 Telegram 的 HTML/CSS/JavaScript 界面，不是普通 Bot 的文本键盘。Telegram 官方将 Mini Apps 定义为可在 Telegram 内启动的灵活 JavaScript 界面；它们能够使用移动端主题、颜色、安全区域和全屏布局，因此可以制作紧凑的 TermiPad 工具图标网格。[1]
+A Telegram Mini App can present a real icon-based tool panel inside Telegram. It is an HTML/CSS/JavaScript interface embedded in Telegram, not an ordinary Bot's text keyboard. Telegram officially defines Mini Apps as flexible JavaScript interfaces that can be launched inside Telegram; they can use mobile themes, colors, safe areas, and full-screen layouts, so a compact TermiPad tool icon grid can be built.[1]
 
-这能保留 TermiPad 最重要的体验：手机上看到图标、名称与最小化状态，点击图标请求 Mac 启动已授权工具。普通 Bot 的 inline/reply keyboard 可以提供文字或 emoji 按钮，但不能提供真实品牌/本地图标网格；因此若“图标化”是硬需求，Mini App 是 Telegram 路线中唯一合适的界面层。
+This preserves TermiPad's most important experience: on the phone you see icons, names, and minimized status, and tap an icon to ask the Mac to launch an authorized tool. An ordinary Bot's inline/reply keyboard can offer text or emoji buttons but not a real brand/local icon grid; so if “icon-based” is a hard requirement, a Mini App is the only suitable interface layer on the Telegram route.
 
-不过 Mini App 增加了一个新的、不可省略的外部组件：它必须从受信的 HTTPS Web 地址加载。该网页绝不能成为 Mac 的远程终端 API；也不能接触终端命令、路径、变量、工作目录、密钥或输出。Mini App 只显示一个经过最小化处理的、短期可撤销的图标目录，并只产生不透明的启动请求。
+However, a Mini App adds a new external component that cannot be omitted: it must be loaded from a trusted HTTPS web address. That web page must never become a remote terminal API for the Mac; nor may it touch terminal commands, paths, variables, working directories, secrets, or output. The Mini App shows only a minimized, short-lived, revocable icon catalog and produces only opaque launch requests.
 
-## 2. 三种手机入口的体验与架构差异
+## 2. Experience and Architecture Differences Among the Three Phone Entries
 
-| 入口 | 图标化程度 | 外部基础设施 | 是否能异地使用 | 推荐定位 |
+| Entry | Degree of icon support | External infrastructure | Usable remotely | Recommended positioning |
 |---|---|---|---|---|
-| 纯 Telegram Bot | 低：文字/emoji 按钮 | Telegram Bot token；Mac 长轮询 | 可以 | 最快的安全动作原型 |
-| Telegram Mini App | 高：可做图标网格、分组、状态卡 | Telegram Bot + HTTPS 静态网页 + 最小化会话服务 | 可以 | **若坚持 Telegram 图标体验，推荐的受限路线** |
-| 原生 iPhone Companion | 最高：真正原生 iOS 图标库与离线能力 | iOS App + 配对/服务 | 取决于网络架构 | 长期产品体验最佳 |
+| Plain Telegram Bot | Low: text/emoji buttons | Telegram Bot token; Mac long polling | Yes | The fastest prototype for safe actions |
+| Telegram Mini App | High: icon grid, grouping, and status cards are possible | Telegram Bot + static HTTPS web page + minimal session service | Yes | **The recommended restricted route if you insist on a Telegram icon experience** |
+| Native iPhone Companion | Highest: a truly native iOS icon library and offline capability | iOS app + pairing/service | Depends on the network architecture | The best long-term product experience |
 
-## 3. 推荐交互：Mini App 只发“启动意图”，Mac 仍是权威执行者
+## 3. Recommended Interaction: the Mini App Sends Only a “Launch Intent”; the Mac Remains the Authoritative Executor
 
 ```text
-用户在 Telegram 打开 Mini App
+The user opens the Mini App in Telegram
           │
           ▼
-HTTPS 页面显示最小化图标目录
-（图标、短名称、可用/不可用；不含命令）
+The HTTPS page shows the minimized icon catalog
+(icon, short name, available/unavailable; no commands)
           │
           ▼
-点击图标 → 发送短期 opaque action token
+Tap an icon → send a short-lived opaque action token
           │
           ▼
-Telegram Bot / 最小化会话服务验证 Mini App initData
+Telegram Bot / minimal session service validates the Mini App initData
           │
           ▼
-Mac 的长轮询仅接收已验证的“启动意图”
+The Mac's long polling receives only validated “launch intents”
           │
           ▼
-Mac 本地重新验证账号、token、工具 UUID、健康状态与授权
+The Mac locally re-validates account, token, tool UUID, health status, and authorization
           │
           ▼
-Mac 本地确认或短期远程窗口 → TerminalLauncher
+Local confirmation on the Mac or short remote window → TerminalLauncher
 ```
 
-Mini App 不直接连接 Mac，也不接收 Mac 的任何监听地址。Mac 不开放端口，不注册 Webhook，只通过 `getUpdates` 进行向外长轮询。Telegram Bot API 将长轮询与 Webhook 规定为互斥方式；这种设计选择避免为了 Mini App 而暴露 Mac 公网服务。[2]
+The Mini App does not connect to the Mac directly and receives none of the Mac's listening addresses. The Mac opens no port and registers no Webhook; it only does outbound long polling through `getUpdates`. The Telegram Bot API specifies long polling and Webhooks as mutually exclusive; this design choice avoids exposing a public service on the Mac for the sake of the Mini App.[2]
 
-## 4. 图标目录的最小化数据模型
+## 4. Minimized Data Model for the Icon Catalog
 
-Mini App 页面只能取得一份短期、只读的目录快照。每一项只有以下字段：
+The Mini App page can obtain only a short-lived, read-only catalog snapshot. Each item has only the following fields:
 
-| 允许字段 | 禁止字段 |
+| Allowed fields | Forbidden fields |
 |---|---|
-| 随机化的临时 catalog item ID | 完整工具 UUID（如可被枚举） |
-| 本地图标库的 symbol/颜色标识，或经缩放后的受控 PNG 引用 | 图标原始文件路径、EXIF、原始高分辨率文件 |
-| 短名称（用户可选择隐藏或改为别名） | 命令、参数、模板、描述中可能含路径/机密的文字 |
-| 固定类别、固定状态（可用/需要 Mac 确认/离线） | 工作目录、健康检查详情、版本、终端目标、API Key、诊断信息 |
-| 短期 action token | 任何可重放的永续启动标识 |
+| A randomized temporary catalog item ID | The full tool UUID (if it could be enumerated) |
+| A symbol/color identifier from the local icon library, or a reference to a scaled, controlled PNG | The icon's original file path, EXIF, or original high-resolution file |
+| A short name (the user can choose to hide it or change it to an alias) | Commands, arguments, templates, or description text that may contain paths/secrets |
+| Fixed category and fixed status (available/needs Mac confirmation/offline) | Working directory, health check details, version, terminal target, API key, diagnostic information |
+| A short-lived action token | Any replayable permanent launch identifier |
 
-目录快照应由 Mac 在明确启用 Telegram Companion 后生成，生命周期不超过短期会话；Mac 关闭 Companion、休眠、撤销账号、切换 Bot token 或策略变化时立即使目录和所有 token 失效。网页不得存储目录到 analytics、日志、浏览器 local storage、第三方 CDN 或任意跨站脚本。
+The catalog snapshot should be generated by the Mac after Telegram Companion is explicitly enabled, with a lifetime no longer than a short session; when the Mac turns off Companion, sleeps, revokes an account, switches the Bot token, or the policy changes, the catalog and all tokens are invalidated immediately. The web page must not store the catalog in analytics, logs, browser local storage, a third-party CDN, or any cross-site script.
 
-## 5. HTTPS 网页和身份验证边界
+## 5. HTTPS Web Page and Authentication Boundary
 
-Mini App 是网页，因此必须接受“网页源是新的攻击面”这一事实。首发应采用单一、固定、无第三方脚本的 HTTPS 域名，内容安全策略禁止第三方 `script`、`connect`、`frame` 和遥测。网页不使用广告、分析 SDK、像素、远程头像或未经审核的 UI 库。
+A Mini App is a web page, so the fact that “the web origin is a new attack surface” must be accepted. The first release should use a single, fixed HTTPS domain with no third-party scripts, and a content security policy that forbids third-party `script`, `connect`, `frame`, and telemetry. The page uses no ads, analytics SDKs, pixels, remote avatars, or unreviewed UI libraries.
 
-Telegram Mini App 在启动时提供 `initData`。Telegram 官方明确警告，客户端字段不能被直接信任；服务端必须按 Bot token 验证 `initData`，并检查 `auth_date` 的新鲜度。[1] 因此验证只能发生在最小化会话服务中，不能在 JavaScript 前端做“自行验证”。验证成功后服务端才发放短期、绑定 Telegram 用户 ID 与 catalog revision 的会话 cookie/令牌。
+A Telegram Mini App provides `initData` at launch. Telegram officially warns that client-side fields cannot be trusted directly; the server must validate `initData` against the Bot token and check the freshness of `auth_date`.[1] Validation can therefore happen only in the minimal session service, not as “self-validation” in the JavaScript frontend. Only after validation succeeds does the server issue a short-lived session cookie/token bound to the Telegram user ID and catalog revision.
 
-Mini App 不是 Token 的终点：即使网页、浏览器缓存或 Telegram 用户会话被攻破，Mac 仍然在本地执行最后的 account allowlist、action token、nonce、过期、重放、工具健康和授权窗口验证。所有网页请求都应被视为不可信输入。
+The Mini App is not where the token ends: even if the web page, browser cache, or Telegram user session is compromised, the Mac still performs the final account allowlist, action token, nonce, expiry, replay, tool health, and authorization window checks locally. All web requests should be treated as untrusted input.
 
-## 6. 允许的 Mini App 动作与固定回复
+## 6. Allowed Mini App Actions and Fixed Replies
 
-页面只允许：刷新图标目录、点击一个图标请求启动、撤销自己的短期会话、查看固定隐私说明。禁止自由文本框、搜索词上传、参数编辑、变量输入、文件上传、粘贴命令、URL 打开器、Markdown/HTML 远程内容、工具编辑和任何安装/设置入口。
+The page allows only: refreshing the icon catalog, tapping one icon to request a launch, revoking your own short-lived session, and viewing the fixed privacy notice. Free-form text boxes, uploading search terms, argument editing, variable input, file upload, pasting commands, URL openers, remote Markdown/HTML content, tool editing, and any install/settings entry are forbidden.
 
-Bot 和 Mini App 的回复只显示固定状态：`Mac 不在线`、`等待 Mac 确认`、`请求被策略拒绝`、`工具不可用`、`已交给所选终端`、`已复制，需在 Mac 处理`。不得回显命令、stdout/stderr、退出码、路径、版本、错误细节或用户目录。
+Replies from the Bot and the Mini App show only fixed statuses: `Mac offline`, `waiting for Mac confirmation`, `request rejected by policy`, `tool unavailable`, `handed to the selected terminal`, `copied, needs handling on the Mac`. Commands, stdout/stderr, exit codes, paths, versions, error details, and user directories must not be echoed.
 
-## 7. 分阶段试点
+## 7. Staged Pilot
 
-| 阶段 | 范围 | 验收条件 |
+| Stage | Scope | Acceptance criteria |
 |---|---|---|
-| **M0：本地策略层** | 复用 Telegram Companion T0：opaque action、账户允许列表、nonce、过期、重放、工具级授权 | 无网络测试即可拒绝文本、参数、变量工具、安装计划、未知账号、过期和重放 |
-| **M1：静态图标原型** | 固定 HTTPS 页面，只展示非敏感示例图标，不接 Bot/不连 Mac | 页面无第三方脚本/analytics；CSP、子资源完整性和主题适配审查通过 |
-| **M2：已验证目录会话** | 服务端验证 `initData`，向允许用户发短期目录快照 | 不可信 `initData`、过期 `auth_date`、跨用户 token、缓存重放均拒绝 |
-| **M3：Mac 长轮询意图交接** | Bot 仅传不透明启动请求；Mac 二次确认 | 无 Webhook/无入站端口；Mac 不在线时不排队执行；不回传敏感数据 |
-| **M4：短期远程启动窗口** | 对逐项授权的无变量工具生效 | 每项授权、时限、账号撤销、网络重连与工具健康失败均安全拒绝 |
+| **M0: local policy layer** | Reuse Telegram Companion T0: opaque actions, account allowlist, nonce, expiry, replay, per-tool authorization | Offline tests alone can reject text, arguments, tools with variables, install plans, unknown accounts, expiry, and replay |
+| **M1: static icon prototype** | A fixed HTTPS page that shows only non-sensitive sample icons, with no Bot and no Mac connection | The page has no third-party scripts/analytics; CSP, subresource integrity, and theme adaptation reviews pass |
+| **M2: validated catalog session** | The server validates `initData` and issues a short-lived catalog snapshot to allowed users | Untrusted `initData`, an expired `auth_date`, cross-user tokens, and cache replay are all rejected |
+| **M3: Mac long-polling intent handoff** | The Bot passes only opaque launch requests; the Mac confirms a second time | No Webhook/no inbound port; nothing is queued for execution while the Mac is offline; no sensitive data is returned |
+| **M4: short remote launch window** | Applies to individually authorized tools without variables | Per-item authorization, time limit, account revocation, network reconnection, and tool health failures are all rejected safely |
 
-## 8. 重要取舍
+## 8. Key Trade-offs
 
-Mini App 解决的是**图标化交互问题**，不是远程执行授权问题。它可让 Telegram 内的体验接近一个紧凑版 TermiPad，但不能完整复制 macOS 原生 UI，也不应复制所有功能。若未来产品目标是完整图标库、离线浏览、通知、Face ID、本地配对及更低的第三方依赖，原生 iPhone Companion 仍是长期正确方向。
+A Mini App solves the **icon-based interaction problem**, not the remote execution authorization problem. It can bring the experience inside Telegram close to a compact TermiPad, but it cannot fully replicate the native macOS UI and should not replicate every feature. If the future product goal is a full icon library, offline browsing, notifications, Face ID, local pairing, and lower third-party dependence, a native iPhone Companion is still the right long-term direction.
 
-对于个人预览，建议先做 M0，然后 M1；只有你明确愿意维护 HTTPS 域名和最小化会话服务时，再进入 M2。Mini App 不应因为界面好看而绕开“没有 Apple 账号前不做真正 iOS App”的外部条件，也不应因为 Telegram 易用而降低 TermiPad 对命令和终端执行的本地控制权。
+For a personal preview, do M0 first and then M1; move to M2 only when you are explicitly willing to maintain an HTTPS domain and a minimal session service. A Mini App should not bypass the external condition “no real iOS app before there is an Apple account” because the interface looks good, nor should Telegram's ease of use lower TermiPad's local control over commands and terminal execution.
 
 ## References
 

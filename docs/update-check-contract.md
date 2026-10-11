@@ -1,25 +1,25 @@
-# TermiPad 私有更新检查协议
+# TermiPad Private Update Check Contract
 
-**状态：** 私有 beta 的可选辅助能力。该能力默认关闭，且不构成发布、签名、公证或自动更新方案。
+**Status:** An optional auxiliary capability for the private beta. It is off by default and does not constitute a release, signing, notarization, or auto-update solution.
 
-## 用户边界
+## User Boundary
 
-用户需要在 **设置 → 更新检查** 中主动开启手动检查，并填写一个 HTTPS 更新源。TermiPad 不会在启动时自动联网，也不会在未配置更新源时发起请求。每次检查仅在用户点击“检查更新”后发生。
+The user must turn on manual checks themselves in **Settings → Update Checks** and enter an HTTPS update source. TermiPad does not go online automatically at launch and makes no request when no update source is configured. Each check happens only after the user clicks “Check for Updates”.
 
-> 更新检查只读取版本元数据；它不会下载、安装、执行或校验任何应用工件。
+> The update check reads only version metadata; it does not download, install, execute, or verify any app artifact.
 
-| 项目 | 规则 |
+| Item | Rule |
 |---|---|
-| 允许的更新源 | 具备非空主机名的 HTTPS URL。 |
-| 请求方式 | 单次 `URLSession.data(for:)` 读取，10 秒超时，忽略本地缓存。 |
-| 不允许的方案 | HTTP、自动下载、安装器调用、执行下载内容、变更应用签名或隔离属性。 |
-| 更新说明 | 可选 `releaseNotesURL` 也必须为 HTTPS；用户点击后才会在系统默认浏览器中打开。 |
-| 版本格式 | `major[.minor[.patch]]` 的非负整数；其他格式被拒绝。 |
-| 隐私 | 诊断只记录更新检查成功或失败的固定类别，不记录更新源 URL。 |
+| Allowed update sources | An HTTPS URL with a non-empty host name. |
+| Request method | A single `URLSession.data(for:)` read with a 10-second timeout, ignoring the local cache. |
+| Disallowed approaches | HTTP, automatic downloads, installer invocation, executing downloaded content, changing the app signature or quarantine attributes. |
+| Release notes | The optional `releaseNotesURL` must also be HTTPS; it opens in the system default browser only after the user clicks it. |
+| Version format | Non-negative integers in `major[.minor[.patch]]`; other formats are rejected. |
+| Privacy | Diagnostics record only the fixed category of update check success or failure, not the update source URL. |
 
-## JSON 清单格式
+## JSON Manifest Format
 
-更新源返回单个 JSON 对象。当前应用只在清单版本**严格高于**本机版本时提示用户；低版本或同版本不会显示为更新。
+The update source returns a single JSON object. The current app prompts the user only when the manifest version is **strictly higher** than the local version; a lower or equal version is not shown as an update.
 
 ```json
 {
@@ -28,8 +28,8 @@
 }
 ```
 
-当前没有可供配置的正式更新源。仅在未来存在经过审计、由用户可识别的 HTTPS 私有源时，才应填写该地址。即使更新检查发现更高版本，用户仍需自行审查更新说明，并通过明确、独立的分发流程取得软件。
+There is currently no official update source to configure. The address should be filled in only when, in the future, an audited HTTPS private source that the user can identify exists. Even if the update check finds a higher version, the user must still review the release notes themselves and obtain the software through an explicit, separate distribution process.
 
-## 与正式发行的关系
+## Relationship to Official Distribution
 
-Developer ID 签名、Hardened Runtime、公证、票据 stapling 和 Gatekeeper 冷启动验证仍是独立闸门。此功能不绕过、不替代、也不降低任何发行要求。
+Developer ID signing, Hardened Runtime, notarization, ticket stapling, and Gatekeeper cold-start verification remain independent gates. This feature does not bypass, replace, or lower any distribution requirement.

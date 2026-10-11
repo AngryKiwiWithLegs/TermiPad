@@ -1,7 +1,7 @@
 import Foundation
 
-/// P2-B 受控安装计划的唯一受信渠道。当前仅允许静态审核的 Homebrew core formula，
-/// 不支持 tap、cask、URL、Git 仓库、包管理器脚本或由网络元数据拼接的命令。
+/// The only trusted channel for P2-B controlled install plans. Currently only statically reviewed Homebrew core formulae are allowed;
+/// taps, casks, URLs, Git repositories, package-manager scripts, and commands assembled from network metadata are not supported.
 enum ControlledInstallChannel: String, CaseIterable, Codable, Sendable {
     case homebrewCore
 
@@ -13,8 +13,8 @@ enum ControlledInstallChannel: String, CaseIterable, Codable, Sendable {
     }
 }
 
-/// 仅由随应用发布的静态目录构造的安装计划。
-/// `command` 永远不来自 GitHub、README、AI 或用户输入；展示计划本身不会执行任何内容。
+/// An install plan built only from the static catalog shipped with the app.
+/// `command` never comes from GitHub, a README, AI, or user input; showing the plan itself executes nothing.
 struct ControlledInstallPlan: Identifiable, Equatable, Sendable {
     let id: String
     let toolName: String
@@ -43,7 +43,7 @@ struct ControlledInstallPlan: Identifiable, Equatable, Sendable {
     }
 }
 
-/// 静态审核目录。远程候选只能按完整仓库名比对；即使名称相同，也不能回退为动态命令或模糊匹配。
+/// Statically reviewed catalog. Remote candidates can only be compared by full repository name; even if the name is identical, there is no fallback to dynamic commands or fuzzy matching.
 enum ControlledInstallCatalog {
     private struct Definition: Sendable {
         let toolName: String
@@ -67,7 +67,7 @@ enum ControlledInstallCatalog {
         }
     }
 
-    /// 只含已人工核对的交互式 CLI；不包含包管理器、系统命令、后台服务或脚本零件。
+    /// Contains only interactive CLIs that were checked by hand; no package managers, system commands, background services, or script parts.
     private static let definitions: [Definition] = [
         .init(toolName: "bat", formula: "bat", repositoryFullName: "sharkdp/bat", expectedExecutableNames: ["bat"]),
         .init(toolName: "btop", formula: "btop", repositoryFullName: "aristocratos/btop", expectedExecutableNames: ["btop"]),
@@ -93,7 +93,7 @@ enum ControlledInstallCatalog {
         return formula.range(of: pattern, options: .regularExpression) != nil
     }
 
-    /// 仅按 GitHub 完整仓库名精确匹配；任何名称相似、README 建议或远程安装文案均不会产生计划。
+    /// Matches only the exact full GitHub repository name; a similar name, a README suggestion, or remote install copy never produces a plan.
     static func plan(forRepositoryFullName repositoryFullName: String) -> ControlledInstallPlan? {
         definitions.first {
             $0.repositoryFullName.caseInsensitiveCompare(repositoryFullName) == .orderedSame
@@ -107,7 +107,7 @@ enum ControlledInstallCatalog {
     }
 }
 
-/// P2-B 的不可绕过边界，供测试、UI 和静态验证共同引用。
+/// The non-bypassable boundary of P2-B, referenced jointly by tests, the UI, and static verification.
 enum ControlledInstallBoundary {
     static let doesNotRunInApp = true
     static let doesNotAutoCollectResult = true

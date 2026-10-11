@@ -2,7 +2,7 @@ import CoreFoundation
 import Foundation
 import SwiftData
 
-/// 只在同一登录用户的本机进程间传输受限 MCP 请求。它不是网络端口，也不是客户端认证机制。
+/// Transports restricted MCP requests only between local processes of the same logged-in user. It is neither a network port nor a client authentication mechanism.
 enum LocalMCPBridgeOperation: String, Codable {
     case listTaskScopes
     case listFixedTasks
@@ -58,10 +58,10 @@ struct LocalMCPBridgeResponse: Codable {
     }
 }
 
-/// 主应用在持有 SwiftData 容器时安装的本机桥接。stdio 子进程绝不直接打开或竞争应用 store。
+/// The local bridge the main app installs while it holds the SwiftData container. The stdio child process never opens or competes for the app's store directly.
 @MainActor
 final class TaskMCPBridge {
-    /// 字符串字面量不依赖实例状态；显式声明 nonisolated 让 stdio 子进程桥接无需跨 actor 访问。
+    /// String literals do not depend on instance state; declaring them nonisolated explicitly lets the stdio child-process bridge avoid cross-actor access.
     nonisolated static let serviceName = "com.termipad.app.local-mcp-v1"
     private static var shared: TaskMCPBridge?
 
@@ -176,9 +176,9 @@ final class TaskMCPBridge {
         guard let intent = intents.first(where: { $0.id == taskID }) else {
             return .failure(code: "task_unknown", message: "The requested task is not available on this Mac.")
         }
-        // 双层审计：协议层记 MCP 客户端读取次数（mcpTaskStatusRead），
-        // task 域记 task 结果被读取（taskExecutionResultRead）。
-        // 同一次读取产生两个 event 是有意义的：可分别分析 MCP 流量和 task 状态查询频率。
+        // Two-layer audit: the protocol layer records how many times MCP clients read (mcpTaskStatusRead),
+        // and the task domain records that a task result was read (taskExecutionResultRead).
+        // Producing two events for one read is intentional: MCP traffic and task status query frequency can be analyzed separately.
         DiagnosticsStore.shared.record(.mcpTaskStatusRead)
         DiagnosticsStore.shared.record(.taskExecutionResultRead)
         return .success(message: "Minimum task state returned.", task: summary(for: intent))

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// P2-A 发现预览。页面只显示本地缓存或用户手动触发的公开仓库元数据；不会把远程条目写入工具库、候选收件箱或终端命令。
+/// P2-A discovery preview. The page shows only the local cache or public repository metadata the user triggered manually; remote items are never written to the library, the review inbox, or terminal commands.
 struct DiscoveryPreviewView: View {
     let language: AppLanguage
 

@@ -30,7 +30,7 @@ struct TermiPadApplication: App {
             }
         } else if isUITest {
             do {
-                // UI 测试绝不触及用户的持久化 store；这也确保所有冒烟场景从同一份空白数据开始。
+                // UI tests never touch the user's persistent store; this also ensures every smoke scenario starts from the same blank data.
                 sharedModelContainer = try TermiPadDataStore.makeContainer(isStoredInMemoryOnly: true)
                 primaryStoreErrorDescription = nil
             } catch {
@@ -40,8 +40,8 @@ struct TermiPadApplication: App {
             do {
                 sharedModelContainer = try TermiPadDataStore.makeContainer()
                 primaryStoreErrorDescription = nil
-                // M2a：用户上次开启过异地隧道则随 app 启动自动恢复
-                // （UI 测试模式下跳过——绝不碰真实 Keychain/CLI/网络）。
+                // M2a: if the user had the remote tunnel on last time, restore it automatically at app launch
+                // (skipped in UI test mode — never touch the real Keychain / CLI / network).
                 if !isUITest {
                     TailnetTunnelService.shared.restoreIfNeeded()
                 }
@@ -60,9 +60,9 @@ struct TermiPadApplication: App {
             UserDefaults.standard.set(false, forKey: "TermiPad.discoveryPreviewEnabled")
             UserDefaults.standard.set(false, forKey: TaskMCPSettings.localMCPEnabledKey)
             DiscoveryCacheStore.clear()
-            // M0 UI 测试 fixture（track-protocol stage 5.1）：当显式 env var 设了 SEED_TOOL
-            // 时插入一个 pre-seeded TerminalTool。默认不插——保持现有 6 个 UI 测试
-            // 行为不变（它们只检查侧边栏入口存在性）。
+            // M0 UI test fixture (track-protocol stage 5.1): when the explicit env var SEED_TOOL is set,
+            // insert one pre-seeded TerminalTool. Not inserted by default — the existing 6 UI tests keep
+            // their behavior (they only check that the sidebar entries exist).
             if environment["TERMIPAD_UI_TEST_SEED_TOOL"] == "1" {
                 let seedContext = sharedModelContainer.mainContext
                 Self.seedUITestFixtureTool(in: seedContext)
@@ -90,23 +90,23 @@ struct TermiPadApplication: App {
             .frame(minWidth: TermiPadWorkspaceMetrics.minimumSize.width, minHeight: TermiPadWorkspaceMetrics.minimumSize.height)
             .preferredColorScheme(appearance.colorScheme)
             .softMacWindow(appearanceKey: appearanceRawValue)
-            // M2b：手机启动/任务确认弹窗挂载在 app 根内容上——此前只在
-            // PreferencesView，用户不在设置页时弹窗无处显示（2026-09-10
-            // 实测"没反应"）；后改独立零尺寸视图挂载，macOS 上零尺寸视图
-            // 的 alert 不渲染（2026-09-15 实测仍无弹窗）。正确做法：alert
-            // 直接作为根内容 Group 的 modifier——尺寸由 LaunchpadView 决定，
-            // alert 修饰符在真实层级上必然生效。
-            // M2b：确认弹窗挂在根内容真实层级（零尺寸视图的 alert 在
-            // macOS 不渲染）。UI 测试模式跳过——ObservedObject 单例
-            // 订阅在 Runner 连接建立期阻塞 accessibility（2026-09-17
-            // 二分实证：禁用后 UI 测试即全绿），真机路径不受影响。
+            // M2b: the phone launch / task confirmation prompt is mounted on the app's root content — previously it lived only in
+            // PreferencesView, so the prompt had nowhere to appear when the user was not on the Settings page (2026-09-10
+            // test: "nothing happens"); it was then mounted on a separate zero-size view, but on macOS the alert of a zero-size
+            // view is not rendered (2026-09-15 test: still no prompt). The right approach: the alert
+            // is a modifier directly on the root content Group — its size is determined by LaunchpadView,
+            // so the alert modifier is guaranteed to take effect in a real hierarchy.
+            // M2b: the confirmation prompt is attached to the real hierarchy of the root content (the alert of a zero-size view is
+            // not rendered on macOS). Skipped in UI test mode — the ObservedObject singleton
+            // subscription blocks accessibility while the Runner connection is being established (2026-09-17,
+            // confirmed by bisecting: with it disabled the UI tests all pass); the real-device path is unaffected.
             .modifier(MobileLaunchConfirmationAlertModifier(
                 isDisabled: ProcessInfo.processInfo.environment["TERMIPAD_UI_TEST_MODE"] == "1"))
         }
         .defaultSize(
-            // UI 测试用宽窗口：729pt 实际默认宽度下外观分段控件会被挤进
-            // 工具栏溢出弹层，identifier 查找失败（2026-09-09 快照实证）。
-            // 只在 TERMIPAD_UI_TEST_MODE 下加宽，不影响真实窗口默认值。
+            // Wide window for UI tests: at the actual default width of 729pt the appearance segmented control gets squeezed into
+            // the toolbar overflow popover and the identifier lookup fails (confirmed by a snapshot on 2026-09-09).
+            // Widened only under TERMIPAD_UI_TEST_MODE; the real window default is unaffected.
             width: ProcessInfo.processInfo.environment["TERMIPAD_UI_TEST_MODE"] == "1"
                 ? 1_600 : TermiPadWorkspaceMetrics.iPadReferenceSize.width,
             height: TermiPadWorkspaceMetrics.iPadReferenceSize.height
@@ -126,12 +126,12 @@ struct TermiPadApplication: App {
         TermiPadMenuBarExtra()
     }
 
-    /// M0 UI 测试 fixture（track-protocol stage 5.1）：在 in-memory SwiftData
-    /// 容器里插入一个 pre-seeded TerminalTool，让 UI 测试可以打开工具编辑面板
-    /// 断言"手机入口" section 的 5 个 accessibility identifier + revoke 按钮。
+    /// M0 UI test fixture (track-protocol stage 5.1): inserts one pre-seeded TerminalTool into the in-memory SwiftData
+    /// container so UI tests can open the tool edit panel
+    /// and assert the 5 accessibility identifiers + the revoke button of the "Mobile Entry" section.
     ///
-    /// **仅**在 `TERMIPAD_UI_TEST_MODE=1` 且 `TERMIPAD_UI_TEST_SEED_TOOL=1` 时由
-    /// init() 调用。默认不插任何数据——保持现有 6 个 UI 测试行为完全不变。
+    /// Called by init() **only** when `TERMIPAD_UI_TEST_MODE=1` and `TERMIPAD_UI_TEST_SEED_TOOL=1`.
+    /// No data is inserted by default — the behavior of the existing 6 UI tests stays exactly the same.
     private static func seedUITestFixtureTool(in context: ModelContext) {
         let tool = TerminalTool(
             name: "merge-cli",
@@ -140,7 +140,7 @@ struct TermiPadApplication: App {
             category: .development
         )
         tool.toolDescription = "Test fixture tool for M0 UI assertions."
-        // 显式设一个 M0 字段为 true，验证 toggle 在 UI 上能被定位。
+        // Explicitly set one M0 field to true to verify that the toggle can be located in the UI.
         tool.showInMobileEntry = true
         tool.mobileLocalConfirmPolicy = .everyTime
         context.insert(tool)
@@ -152,19 +152,19 @@ struct TermiPadApplication: App {
     }
 }
 
-/// 手机启动/任务确认弹窗的全局挂载（M2b，2026-09-10；2026-09-15 改
-/// ViewModifier 形态）。历史教训：挂在 PreferencesView 时用户不在设置页
-/// 则弹窗无处显示；改成独立零尺寸 view 后 macOS 对零尺寸视图的 alert
-/// 仍不渲染。ViewModifier 直接加在 WindowGroup 根内容（LaunchpadView
-/// 所在的真实层级）上——alert 必然生效。
+/// Global mount for the phone launch / task confirmation prompt (M2b, 2026-09-10; changed to a
+/// ViewModifier on 2026-09-15). Lessons learned: when mounted in PreferencesView the prompt had nowhere to appear if the user was not on the Settings page;
+/// after moving it to a separate zero-size view, macOS still did not render the alert of a zero-size view.
+/// The ViewModifier is applied directly to the WindowGroup's root content (the real hierarchy
+/// LaunchpadView lives in) — the alert is guaranteed to take effect.
 struct MobileLaunchConfirmationAlertModifier: ViewModifier {
-    /// UI 测试模式下不订阅确认中心（见挂载点注释）；真机恒 false。
+    /// In UI test mode the confirmation center is not subscribed to (see the comment at the mount point); always false on a real device.
     let isDisabled: Bool
     @ObservedObject private var launchPrompt = MobileLaunchPromptCenter.shared
-    @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.simplifiedChinese.rawValue
+    @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.defaultLanguage.rawValue
 
     private var language: AppLanguage {
-        AppLanguage(rawValue: languageRawValue) ?? .simplifiedChinese
+        AppLanguage(rawValue: languageRawValue) ?? .defaultLanguage
     }
 
     func body(content: Content) -> some View {

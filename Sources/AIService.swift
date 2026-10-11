@@ -1,13 +1,13 @@
 import Foundation
 
-/// 负责调用兼容 OpenAI Chat Completions 的服务，并将 README 提炼为可启动的工具信息。
+/// Calls an OpenAI Chat Completions-compatible service and distills a README into launchable tool information.
 ///
-/// 配置方式：API Key 保存在 macOS Keychain；服务地址和模型名称属于普通偏好，保存在 UserDefaults。
-/// - Keychain `ai-api-key`：服务 API Key
-/// - `TermiPad.aiBaseURL`：可选，默认 `https://api.openai.com/v1`
-/// - `TermiPad.aiModel`：可选，默认 `gpt-4o-mini`
+/// Configuration: the API key is stored in the macOS Keychain; the service URL and model name are ordinary preferences stored in UserDefaults.
+/// - Keychain `ai-api-key`: the service API key
+/// - `TermiPad.aiBaseURL`: optional, defaults to `https://api.openai.com/v1`
+/// - `TermiPad.aiModel`: optional, defaults to `gpt-4o-mini`
 enum AIService {
-    /// AI 只能补充用途说明与分类；启动命令始终来自本地扫描或用户手动编辑。
+    /// AI may only add a purpose description and a category; the launch command always comes from the local scan or the user's manual edits.
     struct ToolIntelligence: Codable, Sendable {
         let description: String
         let suggestedCategory: String
@@ -42,7 +42,7 @@ enum AIService {
         UserDefaults.standard.removeObject(forKey: legacyAPIKeyDefaultsKey)
     }
 
-    /// 解析 README：如已配置 API Key，则调用大语言模型；否则返回本地说明回退。解析结果从不直接改写启动命令。
+    /// Analyze a README: if an API key is configured, call the LLM; otherwise return the local description fallback. The result never rewrites the launch command directly.
     static func analyzeTool(name: String, readme: String) async throws -> ToolIntelligence {
         guard let apiKey = try storedAPIKey(), !apiKey.isEmpty else {
             return localFallback(name: name, readme: readme)
@@ -59,7 +59,7 @@ enum AIService {
         let payload = ChatCompletionRequest(
             model: model,
             messages: [
-                ChatMessage(role: "system", content: "你是严谨的终端工具文档解析助手。仅根据 README 输出 JSON，不要猜测未出现的命令。"),
+                ChatMessage(role: "system", content: "You are a rigorous assistant that parses terminal tool documentation. Output JSON based only on the README, and do not guess commands that do not appear in it."),
                 ChatMessage(role: "user", content: buildPrompt(name: name, readme: readme))
             ],
             temperature: 0.1,
@@ -94,7 +94,7 @@ enum AIService {
             return keychainValue
         }
 
-        // 仅迁移旧版偏好中的密钥；迁移成功或失败后都不再继续以 UserDefaults 作为运行时凭据来源。
+        // Only migrate the key from legacy preferences; whether the migration succeeds or fails, UserDefaults is no longer used as a runtime credential source.
         guard let legacyValue = UserDefaults.standard.string(forKey: legacyAPIKeyDefaultsKey),
               !legacyValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return nil
@@ -106,17 +106,23 @@ enum AIService {
 
     private static func buildPrompt(name: String, readme: String) -> String {
         let excerpt = String(readme.prefix(8_000))
+        // The description is stored and shown as-is, so ask for it in the language the app is currently using.
+        let language = AppLanguage.current
+        let descriptionLanguage = language == .simplifiedChinese ? "Simplified Chinese" : "English"
+        let descriptionLimit = language == .simplifiedChinese ? "60 Chinese characters" : "120 characters"
+        // Category names are the persisted ToolCategory raw values; decodeIntelligence matches them exactly.
+        let categoryList = ToolCategory.allCases.map(\.rawValue).joined(separator: ", ")
         return """
-        请阅读以下 CLI 工具 README，并只返回一个 JSON 对象；不要添加 Markdown 代码围栏或解释。
+        Read the following CLI tool README and return exactly one JSON object; do not add Markdown code fences or explanations.
 
-        工具名称：\(name)
-        README：
+        Tool name: \(name)
+        README:
         \(excerpt)
 
-        JSON 必须严格符合：
+        The JSON must strictly match:
         {
-          "description": "不超过 60 个中文字符的用途说明。不得把命令、参数、密钥或代码写入此字段。",
-          "category": "仅可取：AI/智能体、开发工具、效率工具、媒体处理、网络与系统、其他/未分类。"
+          "description": "A purpose summary of at most \(descriptionLimit), written in \(descriptionLanguage). Never put commands, arguments, secrets, or code in this field.",
+          "category": "Must be exactly one of: \(categoryList)."
         }
         """
     }
@@ -129,7 +135,7 @@ enum AIService {
 
         let decoded = try JSONDecoder().decode(ToolIntelligence.self, from: Data(cleanedContent.utf8))
         let safeDescription = decoded.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "已由 AI 解析，但 README 未提供简要描述。"
+            ? "Parsed by AI, but the README provides no short description."
             : decoded.description.trimmingCharacters(in: .whitespacesAndNewlines)
         let safeCategory = ToolCategory(rawValue: decoded.suggestedCategory)?.rawValue
             ?? ToolScanner.guessCategory(for: fallbackName).rawValue
@@ -141,7 +147,7 @@ enum AIService {
     }
 
     private static func localFallback(name: String, readme: String) -> ToolIntelligence {
-        let summary = firstReadableLine(in: readme) ?? "已发现本地工具；配置 AI 服务后可自动提炼命令说明。"
+        let summary = firstReadableLine(in: readme) ?? "Local tool discovered; configure the AI service to extract command descriptions automatically."
         return ToolIntelligence(
             description: summary,
             suggestedCategory: ToolScanner.guessCategory(for: name).rawValue
@@ -174,13 +180,13 @@ private enum AIServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidEndpoint:
-            return "AI 服务地址无效。"
+            return "The AI service URL is invalid."
         case .invalidResponse:
-            return "AI 服务返回了无效响应。"
+            return "The AI service returned an invalid response."
         case .httpStatus(let status):
-            return "AI 服务请求失败，HTTP 状态码：\(status)。"
+            return "The AI service request failed with HTTP status \(status)."
         case .missingContent:
-            return "AI 服务响应中没有可解析的内容。"
+            return "The AI service response contained no parsable content."
         }
     }
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 验证已归档、Developer ID 签名的 macOS .app；本脚本不执行签名、公证或网络上传。
-# 用法：./scripts/verify-release-artifact.sh /path/to/TermiPad.app [evidence-directory] [--require-notarization]
+# Verifies an archived, Developer ID-signed macOS .app; this script performs no signing, notarization, or network upload.
+# Usage: ./scripts/verify-release-artifact.sh /path/to/TermiPad.app [evidence-directory] [--require-notarization]
 
 set -euo pipefail
 
@@ -9,7 +9,7 @@ EVIDENCE_DIRECTORY="${2:-}"
 REQUIRE_NOTARIZATION="${3:-}"
 
 if [[ -z "$APP_PATH" || ! -d "$APP_PATH" || "${APP_PATH##*.}" != "app" ]]; then
-    echo "用法：$0 /path/to/TermiPad.app [evidence-directory] [--require-notarization]" >&2
+    echo "Usage: $0 /path/to/TermiPad.app [evidence-directory] [--require-notarization]" >&2
     exit 64
 fi
 
@@ -21,7 +21,7 @@ if [[ -z "$EVIDENCE_DIRECTORY" || "$EVIDENCE_DIRECTORY" == "--require-notarizati
 fi
 
 if [[ -n "$REQUIRE_NOTARIZATION" && "$REQUIRE_NOTARIZATION" != "--require-notarization" ]]; then
-    echo "未知选项：$REQUIRE_NOTARIZATION" >&2
+    echo "Unknown option: $REQUIRE_NOTARIZATION" >&2
     exit 64
 fi
 
@@ -50,52 +50,52 @@ run_check() {
     shift
     local log_file="$EVIDENCE_DIRECTORY/${name}.log"
     if "$@" >"$log_file" 2>&1; then
-        record "PASS" "$name" "日志：$(basename "$log_file")"
+        record "PASS" "$name" "Log: $(basename "$log_file")"
     else
-        record "FAIL" "$name" "检查失败；日志：$(basename "$log_file")"
+        record "FAIL" "$name" "Check failed; log: $(basename "$log_file")"
     fi
 }
 
 cat > "$SUMMARY_FILE" <<EOF
-# TermiPad 发行工件检查摘要
+# TermiPad release artifact check summary
 
-- **工件：** \`$APP_PATH\`
-- **检查时间：** \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`
-- **要求公证：** \`$([[ "$REQUIRE_NOTARIZATION" == "--require-notarization" ]] && echo yes || echo no)\`
+- **Artifact:** \`$APP_PATH\`
+- **Checked at:** \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`
+- **Notarization required:** \`$([[ "$REQUIRE_NOTARIZATION" == "--require-notarization" ]] && echo yes || echo no)\`
 
-| 检查项 | 结果 | 证据 |
+| Check | Result | Evidence |
 |---|---|---|
 EOF
 
 run_check "codesign-verify" codesign --verify --deep --strict --verbose=4 "$APP_PATH"
 
 if codesign -dvvv "$APP_PATH" >"$SIGNATURE_FILE" 2>&1; then
-    record "PASS" "signature-details" "日志：$(basename "$SIGNATURE_FILE")"
+    record "PASS" "signature-details" "Log: $(basename "$SIGNATURE_FILE")"
 else
-    record "FAIL" "signature-details" "无法读取签名详情"
+    record "FAIL" "signature-details" "Could not read the signature details"
 fi
 
 if grep -q '^Authority=Developer ID Application:' "$SIGNATURE_FILE"; then
-    record "PASS" "developer-id" "检测到 Developer ID Application Authority"
+    record "PASS" "developer-id" "Developer ID Application Authority detected"
 else
-    record "FAIL" "developer-id" "未检测到 Developer ID Application Authority；ad hoc 或开发签名不能用于外部分发"
+    record "FAIL" "developer-id" "No Developer ID Application Authority detected; ad hoc or development signatures cannot be used for external distribution"
 fi
 
 if grep -q 'runtime' "$SIGNATURE_FILE"; then
-    record "PASS" "hardened-runtime" "签名 flags 包含 runtime"
+    record "PASS" "hardened-runtime" "Signature flags include runtime"
 else
-    record "FAIL" "hardened-runtime" "签名 flags 未包含 runtime"
+    record "FAIL" "hardened-runtime" "Signature flags do not include runtime"
 fi
 
 if codesign -d --entitlements :- "$APP_PATH" >"$ENTITLEMENTS_FILE" 2>"$EVIDENCE_DIRECTORY/entitlements.stderr.log"; then
     get_task_allow="$(plutil -extract com.apple.security.get-task-allow raw -o - "$ENTITLEMENTS_FILE" 2>/dev/null || true)"
     if [[ "$get_task_allow" == "true" || "$get_task_allow" == "1" ]]; then
-        record "FAIL" "get-task-allow" "发行工件不得包含 com.apple.security.get-task-allow=true"
+        record "FAIL" "get-task-allow" "A release artifact must not contain com.apple.security.get-task-allow=true"
     else
-        record "PASS" "get-task-allow" "未检测到启用的调试 entitlement"
+        record "PASS" "get-task-allow" "No enabled debug entitlement detected"
     fi
 else
-    record "FAIL" "entitlements" "无法导出签名 entitlement"
+    record "FAIL" "entitlements" "Could not export the signing entitlements"
 fi
 
 if [[ "$REQUIRE_NOTARIZATION" == "--require-notarization" ]]; then
@@ -103,7 +103,7 @@ if [[ "$REQUIRE_NOTARIZATION" == "--require-notarization" ]]; then
     run_check "stapler-validate" xcrun stapler validate "$APP_PATH"
 fi
 
-printf '\n## 结果\n\n- 通过：%s\n- 失败：%s\n' "$pass_count" "$fail_count" >> "$SUMMARY_FILE"
+printf '\n## Result\n\n- Passed: %s\n- Failed: %s\n' "$pass_count" "$fail_count" >> "$SUMMARY_FILE"
 
 if [[ "$fail_count" -gt 0 ]]; then
     printf '\n**RESULT: FAILED**\n' >> "$SUMMARY_FILE"

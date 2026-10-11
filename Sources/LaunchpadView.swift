@@ -3,7 +3,7 @@ import SwiftData
 import Combine
 import UniformTypeIdentifiers
 
-/// macOS 原生风格的终端工具启动器主界面。
+/// Main UI of the terminal tool launcher, in native macOS style.
 struct LaunchpadView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
@@ -11,7 +11,7 @@ struct LaunchpadView: View {
     @Query(sort: \TerminalTool.name) private var tools: [TerminalTool]
     @Query(sort: \CandidateTool.discoveredAt, order: .reverse) private var candidates: [CandidateTool]
 
-    @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.simplifiedChinese.rawValue
+    @AppStorage("TermiPad.language") private var languageRawValue = AppLanguage.defaultLanguage.rawValue
     @AppStorage("TermiPad.appearance") private var appearanceRawValue = AppAppearance.system.rawValue
     @AppStorage("TermiPad.terminalTarget") private var terminalTargetRawValue = TerminalTarget.systemTerminal.rawValue
     @AppStorage("TermiPad.autoEnrich") private var autoEnrich = false
@@ -31,7 +31,7 @@ struct LaunchpadView: View {
     private let columns = [GridItem(.adaptive(minimum: 142, maximum: 180), spacing: 18)]
 
     private var language: AppLanguage {
-        AppLanguage(rawValue: languageRawValue) ?? .simplifiedChinese
+        AppLanguage(rawValue: languageRawValue) ?? .defaultLanguage
     }
 
     private var terminalTarget: TerminalTarget {
@@ -414,8 +414,8 @@ struct LaunchpadView: View {
         }
     }
 
-    /// 一键收录收件箱中所有"待收录"候选。仍由用户显式点击触发（不是后台自动跑），
-    /// 每个候选走与单个收录完全相同的 makeToolForAcceptance + 图标归一化路径。
+    /// Accept every "pending" candidate in the inbox with one click. Still triggered by an explicit user click (not run automatically in the background);
+    /// each candidate goes through exactly the same makeToolForAcceptance + icon normalization path as a single acceptance.
     private func acceptAllPending() {
         let pending = candidates.filter { $0.status == .pending }
         guard !pending.isEmpty else { return }
@@ -469,7 +469,7 @@ struct LaunchpadView: View {
     private func enrich(tool: TerminalTool, toolName: String, fallbackCategory: ToolCategory) async {
         guard let repository = try? await GitHubService.findRepository(for: toolName) else { return }
         tool.repositoryFullName = repository.repoFullName
-        // GitHub owner 头像并不等同于工具官方图标；保留本地图标目录以避免错误品牌归属。
+        // A GitHub owner avatar is not the same as a tool's official icon; keep the local icon catalog to avoid wrong brand attribution.
         tool.iconURLString = nil
         tool.metadataProvenance = repository.metadataProvenance
         tool.metadataMatchConfidence = repository.matchConfidence
@@ -588,7 +588,7 @@ struct CandidateInboxView: View {
     let onRestore: (CandidateTool) -> Void
     var onAcceptAll: (() -> Void)? = nil
 
-    /// 只有"待收录"的候选可被批量收录；已忽略的保持原状。
+    /// Only "pending" candidates can be accepted in bulk; ignored ones stay as they are.
     private var pendingCount: Int {
         candidates.filter { $0.status == .pending }.count
     }
@@ -663,7 +663,7 @@ struct CandidateInboxView: View {
     }
 }
 
-/// 单个工具卡片：保持 macOS 控件的克制密度，并允许右键管理。
+/// A single tool card: keeps the restrained density of macOS controls and allows management via the context menu.
 struct ToolTile: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -733,7 +733,7 @@ struct ToolTile: View {
     }
 }
 
-/// 使用中性浅灰连续圆角，避免系统默认黑色 Help 气泡与应用配色脱节。
+/// Uses a neutral light-grey continuous rounded corner so the default black system Help bubble does not clash with the app's palette.
 private struct ToolHoverTooltip: View {
     @Environment(\.colorScheme) private var colorScheme
     let content: ToolHoverContent
@@ -1021,8 +1021,8 @@ struct ToolEditView: View {
                     language: language,
                     onStyleChanged: applyBuiltInIconStyle
                 )
-                // M0 移动端入口（track-protocol stage 4）：6 字段默认全关，用户必须明确开启。
-                // 详见 docs/m0-m1-mobile-entry-design.md §2.4。
+                // M0 mobile entry (track-protocol stage 4): all 6 fields are off by default; the user must turn them on explicitly.
+                // See docs/m0-m1-mobile-entry-design.md §2.4.
                 Section {
                     Text(AppCopy.text("mobileEntryHint", language: language))
                         .font(.caption)
@@ -1047,7 +1047,7 @@ struct ToolEditView: View {
                     Text(AppCopy.text("mobileEntryShowInAppHint", language: language))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                    // allowMobileLaunchRequest 仅在 showInMobileEntry=true 时可勾——勾上才能启动。
+                    // allowMobileLaunchRequest can only be checked when showInMobileEntry=true — it must be checked before launching is possible.
                     Toggle(AppCopy.text("mobileEntryAllowLaunch", language: language), isOn: $tool.allowMobileLaunchRequest)
                         .disabled(!tool.showInMobileEntry)
                         .accessibilityIdentifier("tool-mobile-allow-launch")
@@ -1122,7 +1122,7 @@ struct ToolEditView: View {
         } message: {
             Text(customIconMessage ?? "")
         }
-        // M0 撤销手机权限确认：双撤销（时间戳 + 字段）确保 iPhone 端立即失效。
+        // M0 revoke mobile permission confirmation: double revocation (timestamp + fields) makes it take effect on the iPhone immediately.
         .confirmationDialog(
             AppCopy.text("mobileEntryRevokeConfirm", language: language),
             isPresented: $isConfirmingMobileRevoke,
@@ -1246,12 +1246,12 @@ struct ToolEditView: View {
         }
     }
 
-    /// M0 撤销手机权限：双撤销（写时间戳 + 关 6 字段）。iPhone 端下次心跳会读到新值并立即停用。
+    /// M0 revoke mobile permission: double revocation (write the timestamp + turn off the 6 fields). The iPhone reads the new values on its next heartbeat and deactivates immediately.
     private func performMobileRevoke() {
         tool.revokeMobilePermissionAt = Date()
         tool.showInMobileEntry = false
         tool.allowMobileLaunchRequest = false
-        // 会话白名单立即失效——撤销语义不能被 5 分钟窗拖延。
+        // The session allowlist is invalidated immediately — revocation semantics must not be delayed by the 5-minute window.
         MobileLaunchSession.shared.invalidate(toolID: tool.id)
         do {
             try modelContext.save()
@@ -1263,7 +1263,7 @@ struct ToolEditView: View {
     }
 }
 
-/// 内置图标选择只改变本地 SwiftData 字段；自定义 PNG 仍由 ToolIconStore 单独优先保存。
+/// Choosing a built-in icon only changes local SwiftData fields; a custom PNG is still stored separately by ToolIconStore and takes priority.
 private struct ToolIconSelectionSection: View {
     let toolName: String
     let category: ToolCategory
@@ -1342,7 +1342,7 @@ private struct ToolIconSelectionSection: View {
 }
 
 
-/// 首次启动前说明扫描、数据、网络和终端自动化边界，避免用户在不了解行为时开始发现工具。
+/// Explains the scanning, data, network, and terminal automation boundaries before first launch, so users do not start discovering tools without understanding the behavior.
 private struct OnboardingSheet: View {
     let language: AppLanguage
     @Binding var autoEnrich: Bool

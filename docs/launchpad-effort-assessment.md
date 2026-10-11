@@ -1,110 +1,110 @@
-# Launchpad 独立项目：工程量、难点与人员匹配评估
+# Launchpad standalone project: effort, difficulties, and staffing assessment
 
-**状态：** 决策评估稿，不代表启动开发。本文基于 TermiPad Mendocino 已在真实 Apple Silicon Mac 上验证的原生 macOS 工程、图标体系和集中验证脚本；不创建 Launchpad 仓库，不迁移代码，也不改动 TermiPad。
+**Status:** Decision assessment draft; it does not mean development has started. This document is based on TermiPad Mendocino's native macOS project, icon system, and consolidated verification script, all verified on a real Apple Silicon Mac; it creates no Launchpad repository, migrates no code, and does not change TermiPad.
 
 ---
 
-## 1. 结论
+## 1. Conclusion
 
-> **Launchpad 不是从零开始，但也绝不是“改个名字就完成”。** 若把目标限定为一个可靠的本地图形应用启动器，其可交接的工程方法和界面基础很多；预计可减少约 **35%–45%** 的重复工程工作。剩下的核心工作仍然必须新做：应用目录数据模型、受控收录、Bundle 图标解析、用户点击启动、缺失应用处理、独立持久化、独立测试与独立品牌。
+> **Launchpad does not start from zero, but it is by no means "rename it and you are done".** If the goal is limited to a reliable launcher for local graphical apps, much of the engineering method and UI foundation can be handed over; an estimated **35%–45%** of the repeated engineering work can be saved. The remaining core work must still be done anew: the application catalog data model, controlled collection, bundle icon resolution, launch on user click, missing-app handling, separate persistence, separate tests, and a separate brand.
 
-因此，我的判断是：**值得做，难度中等，风险可控；最适合用“干净新项目 + 有选择地复用 TermiPad 基础层”的方式实施。** 它的 MVP 不是几小时的改名工作，但也不需要重走 TermiPad 从零建立原生 UI、图标系统、XcodeGen、SwiftData 和真实 Mac UI 测试基础设施的整条路。
+My judgment is therefore: **worth doing, moderately difficult, with controllable risk; best implemented as "a clean new project + selective reuse of TermiPad's foundation layer".** Its MVP is not a few hours of renaming, but it also does not need to retrace TermiPad's whole path of building the native UI, icon system, XcodeGen, SwiftData, and real-Mac UI test infrastructure from scratch.
 
-| 判断项 | 评估 |
+| Item | Assessment |
 |---|---|
-| 项目性质 | 结构相近、业务不同的兄弟项目。 |
-| 复用程度 | 约 35%–45% 的工程工作可直接复用或快速移植；不是 80% 以上。 |
-| MVP 难度 | 中等。比 TermiPad 初创容易很多，但比纯静态图标墙复杂。 |
-| 最大技术风险 | 应用收录范围、Bundle/图标变化、沙盒/权限边界、窗口适配和 UI 自动化稳定性。 |
-| 最大产品风险 | 过度追求“替代旧 Launchpad”，导致加入全盘扫描、批量启动、系统劫持或与 TermiPad CLI 逻辑混杂。 |
-| 最优首批范围 | 仅本地 `.app` 目录、搜索、收藏、最近、分组、用户点击启动和一条完整验证脚本。 |
+| Nature of the project | A sibling project with a similar structure and different business. |
+| Degree of reuse | About 35%–45% of the engineering work can be reused directly or ported quickly; not 80% or more. |
+| MVP difficulty | Moderate. Much easier than TermiPad's start, but more complex than a purely static icon wall. |
+| Biggest technical risk | App collection scope, bundle/icon changes, sandbox/permission boundaries, window adaptation, and UI automation stability. |
+| Biggest product risk | Over-pursuing "replacing the old Launchpad", leading to whole-disk scanning, batch launching, system hijacking, or mixing with TermiPad's CLI logic. |
+| Best first-batch scope | Only a local `.app` catalog, search, favorites, recents, grouping, launch on user click, and one complete verification script. |
 
 ---
 
-## 2. 什么能复用，什么必须重做
+## 2. What can be reused and what must be redone
 
-### 2.1 高复用价值资产
+### 2.1 High-reuse-value assets
 
-TermiPad 已经解决了 Launchpad 最容易被低估的一部分工作：原生 macOS 界面骨架、窗口恢复、双语与外观、图标呈现、SwiftData 本地数据恢复、测试启动隔离、失败附件收集和一条集中验证命令。这些能力可以显著降低新项目的“工程底座”成本。
+TermiPad has already solved the part of Launchpad that is easiest to underestimate: the native macOS UI skeleton, window restoration, bilingual UI and appearance, icon presentation, SwiftData local data recovery, test launch isolation, failure attachment collection, and one consolidated verification command. These capabilities can substantially lower the "engineering foundation" cost of the new project.
 
-| 工作层 | 复用方式 | 对工作量的影响 |
+| Work layer | How it is reused | Effect on effort |
 |---|---|---|
-| XcodeGen + macOS 14+/Swift 5.9 项目骨架 | 复制后重命名 targets、Bundle ID、测试目标。 | 省去约 0.5–1 人日的初始工程配置与本地 Runner 排错。 |
-| 原生工作区、侧边栏、工具栏、窗口策略 | 拆分并复用导航壳、搜索状态、空状态和工具栏控制。 | 省去约 1–2 人日的界面结构试错。 |
-| 中英文与系统/浅色/深色外观 | 复用展示层模式，重建 Launchpad 文案表。 | 节约约 0.5–1 人日；仍需新文案和可访问性校对。 |
-| 图标渲染和本地自定义图标机制 | 保留本地受控缓存、手动覆盖和回退思想。 | 节约约 0.5–1 人日；真实 App Bundle 图标解析仍需新做。 |
-| SwiftData、恢复与隐私诊断模式 | 重用容器工厂和恢复思路，换成独立 `LaunchAppEntry` 数据。 | 节约约 1 人日；数据迁移/丢失 App 状态是新逻辑。 |
-| UI 自动化与集中脚本 | 复制启动、窗口恢复、附件导出和汇总结构，重写产品断言与守卫。 | 节约约 1.5–2.5 人日，并明显减少后期定位成本。 |
+| XcodeGen + macOS 14+/Swift 5.9 project skeleton | Copy, then rename the targets, bundle ID, and test targets. | Saves about 0.5–1 person-day of initial project configuration and local Runner troubleshooting. |
+| Native workspace, sidebar, toolbar, window policy | Split out and reuse the navigation shell, search state, empty states, and toolbar controls. | Saves about 1–2 person-days of trial and error on UI structure. |
+| Chinese/English and System/Light/Dark appearance | Reuse the presentation layer pattern and rebuild the Launchpad copy table. | Saves about 0.5–1 person-day; new copy and an accessibility proofread are still needed. |
+| Icon rendering and the local custom icon mechanism | Keep the ideas of a controlled local cache, manual override, and fallback. | Saves about 0.5–1 person-day; resolving real app bundle icons still has to be built. |
+| SwiftData, recovery, and privacy-preserving diagnostics pattern | Reuse the container factory and recovery approach, with separate `LaunchAppEntry` data. | Saves about 1 person-day; data migration / missing-app state is new logic. |
+| UI automation and the consolidated script | Copy the launch, window restoration, attachment export, and summary structure; rewrite the product assertions and guards. | Saves about 1.5–2.5 person-days and clearly lowers later diagnosis cost. |
 
-### 2.2 必须重新实施的产品核心
+### 2.2 The product core that must be implemented anew
 
-Launchpad 的价值不在“画一个网格”，而在可靠地管理用户选中的图形应用。TermiPad 的 `TerminalTool` 包含 executable path、命令模板、变量、终端交接、CLI 来源与任务策略，这些语义不能被直接带到新项目。
+Launchpad's value is not in "drawing a grid" but in reliably managing the graphical apps the user selected. TermiPad's `TerminalTool` contains the executable path, command template, variables, terminal handoff, CLI source, and task policy; those semantics cannot be carried over directly to the new project.
 
-| 新工作项 | 为什么不能直接复制 | 预计复杂度 |
+| New work item | Why it cannot be copied directly | Estimated complexity |
 |---|---|---|
-| `LaunchAppEntry` 数据模型 | `.app` 的 Bundle ID、显示名、来源、bookmark、丢失状态与 CLI 命令对象不同。 | 中等。 |
-| 受控应用收录 | 需要限定标准目录与用户手动选择，去重并处理 App 移动/删除。 | 中等。 |
-| Bundle 元数据和图标解析 | 需要使用本地 Bundle/`NSWorkspace`，而非 CLI 的语义 SF Symbol 图标表。 | 中等。 |
-| 用户点击启动 | 应以 `NSWorkspace` 启动 App，并给出最小失败反馈。 | 低到中等。 |
-| 收藏/最近/分组排序 | 行为简单，但必须可恢复、可测试且不会污染原始应用。 | 中等。 |
-| Launchpad 专属 UI 文案/首次引导 | 需要解释“本地目录、刷新、隐私、手动添加”，不能复用 TermiPad 的终端风险文案。 | 中等。 |
-| 新测试守卫 | 必须禁止 Shell、MCP、网络和远程启动，但不能沿用 TermiPad 的任务/MCP 守卫。 | 中等。 |
+| `LaunchAppEntry` data model | A `.app`'s bundle ID, display name, source, bookmark, and missing state differ from a CLI command object. | Moderate. |
+| Controlled app collection | Needs to be limited to standard directories and manual user selection, with deduplication and handling of moved/deleted apps. | Moderate. |
+| Bundle metadata and icon resolution | Needs the local bundle / `NSWorkspace` rather than the CLI's semantic SF Symbol icon table. | Moderate. |
+| Launch on user click | Should launch the app with `NSWorkspace` and give minimal failure feedback. | Low to moderate. |
+| Favorites / recents / group ordering | Simple behavior, but it must be recoverable, testable, and must not pollute the original apps. | Moderate. |
+| Launchpad-specific UI copy / first-run onboarding | Needs to explain "local catalog, refresh, privacy, manual add" and cannot reuse TermiPad's terminal risk copy. | Moderate. |
+| New test guards | Must forbid shell, MCP, network, and remote launching, but cannot reuse TermiPad's task/MCP guards. | Moderate. |
 
 ---
 
-## 3. 分阶段工程量
+## 3. Effort by phase
 
-下表以**人日**（一名熟练 macOS/SwiftUI 工程师的有效开发日）描述，不是对日历日期、费用或发布结果的承诺。区间已经包括代码审查、静态审计与真实 Mac 验证的合理缓冲；不包括 Developer ID、公证、App Store、商标审查或其他外部账户流程。
+The table below uses **person-days** (effective development days of one skilled macOS/SwiftUI engineer); it is not a commitment to calendar dates, costs, or release outcomes. The ranges already include a reasonable buffer for code review, static audit, and real-Mac verification; they exclude Developer ID, notarization, the App Store, trademark review, and other external account processes.
 
-| 阶段 | 内容 | 中心估算 | 合理区间 | 用户需要做的事 |
+| Phase | Content | Central estimate | Reasonable range | What the user needs to do |
 |---|---|---:|---:|---|
-| **L0：设计冻结** | 产品范围、数据契约、权限边界、信息架构、命名工作名、测试验收。 | 1 人日 | 0.5–2 人日 | 仅确认 4–6 个产品选择。 |
-| **概念验证** | 新工程可启动；手工添加一个 `.app`；本地图标网格；用户点击启动；最小单测。 | 3.5 人日 | 2–5 人日 | 在真实 Mac 上运行一次集中验证。 |
-| **L1：可用 MVP** | 标准目录手动刷新、手动添加、去重、搜索、收藏、最近、分组、中英文、外观、恢复、UI 冒烟与集中脚本。 | 12 人日 | 8–15 人日 | 通常 2–4 次集中验证，每次仅返回末尾摘要。 |
-| **L2：可靠性收口** | 丢失 App 处理、图标刷新、可访问性、窗口/多屏幕适配、菜单栏入口、性能与迁移审计。 | 7 人日 | 5–10 人日 | 2–3 次真实环境回归与体验判断。 |
-| **外部分发准备** | Developer ID、公证、Gatekeeper、隐私声明、网站/支持页等。 | 另计 | 取决于账户与外部流程 | 需要 Apple Developer 账户和人工发布决定。 |
+| **L0: design freeze** | Product scope, data contract, permission boundary, information architecture, working name, test acceptance. | 1 person-day | 0.5–2 person-days | Only confirm 4–6 product choices. |
+| **Proof of concept** | The new project launches; manually add one `.app`; local icon grid; launch on user click; minimal unit tests. | 3.5 person-days | 2–5 person-days | Run one consolidated verification on the real Mac. |
+| **L1: usable MVP** | Manual refresh of standard directories, manual add, deduplication, search, favorites, recents, grouping, Chinese/English, appearance, recovery, UI smoke tests, and the consolidated script. | 12 person-days | 8–15 person-days | Usually 2–4 consolidated verifications, returning only the summary at the end each time. |
+| **L2: reliability hardening** | Missing-app handling, icon refresh, accessibility, window/multi-display adaptation, menu bar entry, performance and migration audit. | 7 person-days | 5–10 person-days | 2–3 real-environment regressions and experience judgments. |
+| **External distribution preparation** | Developer ID, notarization, Gatekeeper, privacy statement, website/support page, etc. | Counted separately | Depends on the account and external processes | Needs an Apple Developer account and a human release decision. |
 
-按照中心估算，概念验证约为 **3.5 人日**；真正可日常使用的 L1 MVP 约为 **12 人日**；包含可靠性收口的 L2 版本约为 **19 人日**。日历时间还取决于需求确认、真实 Mac 验证回合和问题反馈速度：若由熟悉工程的人连续推进，L1 通常应按约 **2–3 周**看待；若由新人边熟悉 SwiftUI/AppKit 边搭测试基础，往往会拉长到 **4–8 周或更久**。
+By the central estimates, the proof of concept is about **3.5 person-days**; an L1 MVP that is really usable day to day is about **12 person-days**; the L2 version including reliability hardening is about **19 person-days**. Calendar time also depends on requirement confirmation, real-Mac verification rounds, and how fast issues are reported back: driven continuously by someone familiar with the project, L1 should usually be thought of as about **2–3 weeks**; with a newcomer building the test foundation while learning SwiftUI/AppKit, it often stretches to **4–8 weeks or longer**.
 
-### 3.1 为什么不是“很容易一下子做出来”
+### 3.1 Why it is not "easy to knock out in one go"
 
-“应用图标网格 + 打开 App”本身并不难，概念验证确实可以很快出现。但“交付能长期使用的启动器”包含大量不显眼的工作：应用重复/移动后如何恢复、Bundle 图标缺失怎么办、怎样避免扫描到用户文件、怎样在不同窗口尺寸与系统外观下稳定呈现、测试 App 为什么会变成只有菜单栏没有窗口、失败时怎样获得可用证据。这些正是 TermiPad 已经积累了部分方法、但新项目仍需重新适配和验证的部分。
+"An app icon grid + opening apps" is not hard in itself, and a proof of concept can indeed appear quickly. But "delivering a launcher that can be used for the long term" includes a lot of inconspicuous work: how to recover after an app is duplicated/moved, what to do when a bundle icon is missing, how to avoid scanning into user files, how to render stably at different window sizes and system appearances, why the test app ends up with only a menu bar and no window, and how to get usable evidence on failure. These are exactly the parts where TermiPad has accumulated some methods but which the new project still has to re-adapt and re-verify.
 
-所以正确表述是：**不是从零，首版可显著加速；但如果要求与 TermiPad 同等稳健，就必须重新做独立的产品核心和验证闭环。**
+So the right way to put it is: **it does not start from zero and the first version can be sped up markedly; but if the same robustness as TermiPad is required, the separate product core and verification loop must be built anew.**
 
 ---
 
-## 4. 应交给谁：我、资深开发者，还是新人
+## 4. Who should do it: me, a senior developer, or a newcomer
 
-### 4.1 结论建议
+### 4.1 Recommendation
 
-如果目标是“尽快得到一个能长期维护、视觉与 TermiPad 一致、且不反复让你手动验证的 Launchpad MVP”，建议由**已经掌握 TermiPad 架构和验证轨迹的人**负责 L0、概念验证和 L1 的核心安全/数据/测试闭环。以当前上下文而言，我能直接利用现有模块划分、已知的 Xcode 26.6/SwiftUI 行为、真实 Mac 验证脚本和此前踩过的 UI 自动化问题，因此更适合主导第一版的架构与收口。
+If the goal is "get, as soon as possible, a Launchpad MVP that can be maintained long term, looks consistent with TermiPad, and does not keep asking you to verify by hand", the recommendation is that **someone who already knows TermiPad's architecture and verification history** owns L0, the proof of concept, and the core security/data/test loop of L1. In the current context I can directly use the existing module split, the known Xcode 26.6 / SwiftUI behavior, the real-Mac verification script, and the UI automation problems already hit, so I am better placed to lead the architecture and hardening of the first version.
 
-新人并非不能做，但不建议让新人从第一天独自“拷贝 TermiPad 改个名字”。他们很可能在看似能运行的早期版本中无意带入 CLI、Terminal、AI/网络或 MCP 逻辑，或者仅完成静态视觉而没有独立验证闭环。新人更适合在 L0 契约、组件清单和测试模板明确后，承担不触碰启动安全边界的任务，例如独立空状态、分组编辑、双语文案校对、测试用例补充或图标排列体验优化。
+A newcomer is not incapable, but having a newcomer "copy TermiPad and rename it" alone from day one is not recommended. They are likely to carry CLI, Terminal, AI/network, or MCP logic unintentionally into an early version that seems to run, or to finish only the static visuals without a separate verification loop. A newcomer is better suited, once the L0 contract, component list, and test templates are clear, to tasks that do not touch the launch security boundary, such as standalone empty states, group editing, bilingual copy proofreading, additional test cases, or polishing the icon arrangement experience.
 
-| 交付模式 | 前期速度 | UI 一致性 | 安全/测试风险 | 推荐位置 |
+| Delivery mode | Early speed | UI consistency | Security/test risk | Recommended role |
 |---|---|---|---|---|
-| **由当前架构熟悉者主导 L0–L1** | 高。无需重新理解既有测试与平台差异。 | 高。可复用既定设计语言。 | 低到中等。仍需真实 Mac 验证。 | **最推荐**：第一版的产品定义、数据层、启动路径、测试脚本和收口。 |
-| 有经验的独立 macOS 开发者接手 | 中等。需要 1–3 人日熟悉与迁移说明。 | 中到高，取决于设计契约执行。 | 中等。应强制使用集中脚本和代码审查。 | 可行：若有明确交接文档和不带 TermiPad 业务逻辑的干净基础包。 |
-| 新人独立从 TermiPad 派生 | 表面快，实际常慢。 | 不稳定，容易退回“网页化卡片”或复制错误业务。 | 高。测试、窗口恢复与隐私边界常被忽略。 | 不推荐负责 MVP 核心；适合 L1 后的受限、可审查子任务。 |
-| 混合模式 | 高。 | 高。 | 低到中等。 | **最实际**：我/资深者冻结架构和测试；新人按小任务补 UI 与文案。 |
+| **Led through L0–L1 by someone familiar with the current architecture** | High. No need to relearn the existing tests and platform differences. | High. The established design language can be reused. | Low to moderate. Real-Mac verification is still needed. | **Most recommended**: the first version's product definition, data layer, launch path, test script, and hardening. |
+| An experienced independent macOS developer takes over | Moderate. Needs 1–3 person-days of familiarization and migration notes. | Moderate to high, depending on how the design contract is followed. | Moderate. The consolidated script and code review should be mandatory. | Feasible: with clear handoff documents and a clean foundation package free of TermiPad business logic. |
+| A newcomer derives from TermiPad alone | Fast on the surface, often slow in practice. | Unstable; easily slides back to "web-style cards" or copies the wrong business logic. | High. Tests, window restoration, and privacy boundaries are often overlooked. | Not recommended for the MVP core; suited to restricted, reviewable subtasks after L1. |
+| Mixed mode | High. | High. | Low to moderate. | **Most practical**: I / a senior developer freeze the architecture and tests; the newcomer fills in UI and copy in small tasks. |
 
-### 4.2 给新人的最低交接门槛
+### 4.2 Minimum handoff bar for a newcomer
 
-如果未来希望让新人参与，应先准备四份清晰材料：Launchpad 产品契约、可复用组件清单、禁止复制模块清单、以及可在真实 Mac 上一键执行的验证脚本。每个任务都需要有可观察的验收语句，而不是“做得高级一点”。例如，应该写成“用户点击已收录的 `.app` 后只能调用系统应用启动接口；测试不允许出现 Shell 或网络代码；失败时生成截图附件”。
+If a newcomer is to take part in the future, four clear materials should be prepared first: the Launchpad product contract, the list of reusable components, the list of modules that must not be copied, and a verification script that runs in one step on a real Mac. Every task needs an observable acceptance statement rather than "make it look more premium". For example, it should read "after the user clicks a collected `.app`, only the system app launch API may be called; no shell or network code may appear in the tests; a screenshot attachment is produced on failure".
 
-这类交接能让新人的贡献可控，也让后续不同协作方式或不同开发者得到更接近的结果；但它仍不能完全替代对 SwiftUI、AppKit、SwiftData 和 macOS UI 自动化的实际经验。
+This kind of handoff keeps a newcomer's contribution controllable and lets different collaboration styles or developers get closer results later; but it still cannot fully replace practical experience with SwiftUI, AppKit, SwiftData, and macOS UI automation.
 
 ---
 
-## 5. 最终建议
+## 5. Final recommendation
 
-我建议**暂不立即开工**，也不需要让新人现在开始复制代码。先把 Launchpad 放入“已评估、待批准”的独立项目队列。等你决定要做时，优先采用以下顺序：
+I recommend **not starting right away**, and there is no need for a newcomer to begin copying code now. Put Launchpad in the standalone project queue as "assessed, awaiting approval". When you decide to do it, prefer the following order:
 
-1. 先由熟悉 TermiPad 的交付者完成 L0，确定新项目工作名、目录范围、数据模型、隐私边界和 L1 验收。
-2. 创建全新私有仓库与 Bundle ID，从干净 XcodeGen 工程选择性移植展示层、图标机制、测试脚手架和集中验证结构。
-3. 先做 3.5 人日量级的概念验证，确认真实 `.app` 图标与用户点击启动在你的 Mac 上按预期工作。
-4. 仅在概念验证通过后投入 L1；到这个阶段可把不涉及启动路径的 UI 子任务分配给新人，并用测试和代码审查守住边界。
-5. L1/L2 都稳定后，再重新讨论 iPhone 伴侣；不要让 Launchpad 预先接入 MCP、手机、网页或远程启动。
+1. Have the deliverer familiar with TermiPad complete L0 first, settling the new project's working name, catalog scope, data model, privacy boundary, and L1 acceptance.
+2. Create a brand-new private repository and bundle ID, and selectively port the presentation layer, icon mechanism, test scaffolding, and consolidated verification structure onto a clean XcodeGen project.
+3. Do a proof of concept of about 3.5 person-days first, confirming that real `.app` icons and launch on user click work as expected on your Mac.
+4. Invest in L1 only after the proof of concept passes; at that point UI subtasks that do not touch the launch path can be assigned to a newcomer, with tests and code review guarding the boundary.
+5. Revisit the iPhone companion only after L1/L2 are both stable; do not let Launchpad connect to MCP, a phone, the web, or remote launching ahead of time.
 
-这条路径既能利用 TermiPad 已有积累，又不会把“相通”误当成“没有独立工程成本”。
+This path uses what TermiPad has already built up without mistaking "related" for "no independent engineering cost".

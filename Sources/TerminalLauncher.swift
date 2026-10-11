@@ -131,7 +131,7 @@ enum TerminalLauncher {
             }
             let detail = (error[NSAppleScript.errorBriefMessage] as? String)
                 ?? (error[NSAppleScript.errorMessage] as? String)
-                ?? "未知 AppleScript 错误"
+                ?? "Unknown AppleScript error"
             throw TerminalLauncherError.appleScriptFailed(detail)
         }
     }
@@ -178,6 +178,6 @@ enum TerminalLauncherError: LocalizedError {
     }
 
     var errorDescription: String? {
-        message(language: .simplifiedChinese)
+        message(language: .current)
     }
 }

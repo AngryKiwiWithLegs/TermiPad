@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# TermiPad 的本机 macOS 验证入口。
-# 默认执行：SwiftPM 清单校验、单元测试、XcodeGen 生成、xcodebuild 构建、UI 冒烟测试。
+# TermiPad's local macOS verification entry point.
+# Runs by default: SwiftPM manifest validation, unit tests, XcodeGen generation, xcodebuild build, UI smoke tests.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -10,13 +10,13 @@ SKIP_UI=0
 if [[ "${1:-}" == "--skip-ui" ]]; then
   SKIP_UI=1
 elif [[ $# -gt 0 ]]; then
-  echo "用法：$0 [--skip-ui]" >&2
+  echo "Usage: $0 [--skip-ui]" >&2
   exit 64
 fi
 
 for command in swift xcodebuild xcodegen; do
   if ! command -v "$command" >/dev/null 2>&1; then
-    echo "缺少 $command。请安装完整 Xcode，并运行：brew install xcodegen" >&2
+    echo "$command is missing. Install the full Xcode and run: brew install xcodegen" >&2
     exit 69
   fi
 done
@@ -35,30 +35,30 @@ run_step() {
   echo
   echo "========== ${name} =========="
   if "$@" 2>&1 | tee "${LOG_DIR}/${name}.log"; then
-    echo "[通过] ${name}"
+    echo "[PASS] ${name}"
   else
     FAILED_STEP="${name}"
-    echo "[失败] ${name}；完整日志：${LOG_DIR}/${name}.log" >&2
+    echo "[FAIL] ${name}; full log: ${LOG_DIR}/${name}.log" >&2
     return 1
   fi
 }
 
 write_summary() {
   {
-    echo "# TermiPad 本机验证摘要"
+    echo "# TermiPad local verification summary"
     echo
-    echo "- 时间：$(date '+%Y-%m-%d %H:%M:%S %Z')"
-    echo "- 提交：$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-    echo "- 日志目录：$LOG_DIR"
+    echo "- Time: $(date '+%Y-%m-%d %H:%M:%S %Z')"
+    echo "- Commit: $(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    echo "- Log directory: $LOG_DIR"
     echo
-    echo "## 结果"
+    echo "## Result"
     if [[ -n "$FAILED_STEP" ]]; then
-      echo "- **失败步骤：$FAILED_STEP**"
+      echo "- **Failed step: $FAILED_STEP**"
     else
-      echo "- **所有请求步骤均通过。**"
+      echo "- **All requested steps passed.**"
     fi
     echo
-    echo "## 关键诊断"
+    echo "## Key diagnostics"
     echo '```text'
     grep -E -i '(^|[[:space:]])(error|warning|fatal error):|BUILD FAILED|TEST FAILED|Assertion' "$LOG_DIR"/*.log 2>/dev/null || true
     echo '```'
@@ -68,213 +68,213 @@ trap write_summary EXIT
 
 swift_source_guard() {
   if grep -RInF '\(AppCopy.text(\"' Sources; then
-    echo '检测到 Swift 字符串插值中被错误转义的 AppCopy 调用。' >&2
+    echo 'Detected an AppCopy call that was wrongly escaped inside a Swift string interpolation.' >&2
     return 1
   fi
   if grep -RInF 'case (.available, .notInspectable,' Sources; then
-    echo '检测到 ToolHealth 二元元组被错误写成三元 case。' >&2
+    echo 'Detected a ToolHealth two-element tuple wrongly written as a three-element case.' >&2
     return 1
   fi
   if grep -RInE 'summary\.(toolsAdded|toolsUpdated|candidatesAdded|candidatesUpdated)' Sources Tests UITests; then
-    echo '检测到 BackupRestoreSummary 已废弃字段名。' >&2
+    echo 'Detected deprecated BackupRestoreSummary field names.' >&2
     return 1
   fi
   if grep -REn 'TerminalLauncher|CommandTemplate|modelContext\.insert|TerminalTool\(|CandidateTool\(|Process\(|NSAppleScript|brew install|npm install|pip install|cargo install' Sources/DiscoveryPreview*.swift Sources/DiscoveryService.swift; then
-    echo '检测到 Discovery Preview 触及命令执行、安装或工具库写入边界。' >&2
+    echo 'Detected Discovery Preview touching the command execution, install, or library write boundary.' >&2
     return 1
   fi
   if grep -RInF 'response.isIncomplete' Sources/DiscoveryService.swift; then
-    echo '检测到 GitHub 搜索 DTO 的错误 isIncomplete 字段引用。' >&2
+    echo 'Detected a wrong isIncomplete field reference in the GitHub search DTO.' >&2
     return 1
   fi
   local controlled_install_code environment_report_code
   controlled_install_code="$(sed '/^[[:space:]]*\/\//d' Sources/ControlledInstallPlan.swift)"
   environment_report_code="$(sed '/^[[:space:]]*\/\//d' Sources/EnvironmentReport.swift)"
   if printf '%s\n' "$controlled_install_code" | grep -En 'URLSession|Process\(|NSAppleScript|TerminalLauncher|modelContext\.insert|tap |cask |npm install|pip install|cargo install|brew upgrade|brew uninstall'; then
-    echo '检测到受控安装目录触及网络、应用内执行、第三方渠道或修改性包管理器命令。' >&2
+    echo 'Detected the controlled install catalog touching the network, in-app execution, third-party channels, or mutating package-manager commands.' >&2
     return 1
   fi
   if ! printf '%s\n' "$controlled_install_code" | grep -qF 'command: "brew install \(formula)"'; then
-    echo '受控安装目录缺少固定 Homebrew core formula 命令模板。' >&2
+    echo 'The controlled install catalog is missing the fixed Homebrew core formula command template.' >&2
     return 1
   fi
   if printf '%s\n' "$environment_report_code" | grep -En 'URLSession|NSAppleScript|/bin/sh|modelContext\.insert|install|upgrade|uninstall|remove'; then
-    echo '检测到环境报告触及网络、shell、持久化或修改性操作。' >&2
+    echo 'Detected the environment report touching the network, a shell, persistence, or mutating operations.' >&2
     return 1
   fi
   if ! printf '%s\n' "$environment_report_code" | grep -qF 'task.arguments = ["--version"]'; then
-    echo '环境报告必须限定为固定 --version 参数。' >&2
+    echo 'The environment report must be limited to the fixed --version argument.' >&2
     return 1
   fi
   if grep -En 'pathLookup \?\? executablePath\(for:\)|versionReader \?\? readVersion\(at:\)' Sources/EnvironmentReport.swift; then
-    echo '检测到 Swift 6.3 无法稳定推断的环境报告默认函数引用合并写法。' >&2
+    echo 'Detected a merged default-function-reference form in the environment report that Swift 6.3 cannot infer reliably.' >&2
     return 1
   fi
   if grep -nF 'TerminalLauncher.launch(command:' Sources/InstallEnvironmentView.swift | grep -vF 'TerminalLauncher.launch(command: plan.command'; then
-    echo '安装审查只能将静态计划命令交给用户选择的终端。' >&2
+    echo 'Install review may only hand static plan commands to the terminal the user chose.' >&2
     return 1
   fi
   local icon_code
   icon_code="$(sed '/^[[:space:]]*\/\//d' Sources/ToolIconView.swift Sources/ToolIconStore.swift)"
   if printf '%s\n' "$icon_code" | grep -En 'URLSession|AsyncImage|https?://|NSImage\(contentsOf: URL\(string:'; then
-    echo '检测到本地图标系统尝试加载网络图像或远程资源。' >&2
+    echo 'Detected the local icon system trying to load network images or remote resources.' >&2
     return 1
   fi
   if ! printf '%s\n' "$icon_code" | grep -qF 'customIconFilename'; then
-    echo '本地图标系统必须保留受控本地 PNG 优先字段。' >&2
+    echo 'The local icon system must keep the controlled-local-PNG-first field.' >&2
     return 1
   fi
   local task_policy_code
   task_policy_code="$(sed '/^[[:space:]]*\/\//d' Sources/TaskIntent.swift Sources/TaskIntentPolicy.swift Sources/TaskPolicyWorkbenchView.swift)"
   if printf '%s\n' "$task_policy_code" | grep -En 'URLSession|URLRequest|NWConnection|NWListener|WebSocket|NSAppleScript|TerminalLauncher|Process\(|forkpty|posix_openpt|/bin/sh|https?://|stdin|stdout|stderr'; then
-    echo '检测到 T0 任务策略触及网络、终端自动化、进程执行、PTY 或远程输入输出边界。' >&2
+    echo 'Detected the T0 task policy touching the network, terminal automation, process execution, PTY, or remote input/output boundary.' >&2
     return 1
   fi
   if ! printf '%s\n' "$task_policy_code" | grep -qF 'static let definitions'; then
-    echo 'T0 任务策略必须保留随应用发布的固定任务目录。' >&2
+    echo 'The T0 task policy must keep the fixed task catalog shipped with the app.' >&2
     return 1
   fi
   local task_execution_code
   task_execution_code="$(sed '/^[[:space:]]*\/\//d' Sources/TaskExecutionService.swift Sources/TaskIntent.swift Sources/TaskPolicyWorkbenchView.swift)"
-  # M2b-2（docs/m2b-remote-task-console-design.md §5.4/§7）：受控放宽——
-  # 输出档位 ≥ restricted 时 T1 用 Pipe 捕获 stdout/stderr 进仅内存
-  # ring buffer（32KB/400 行上限，脱敏后回传末尾片段）。红线不变的部分
-  # 仍然锁死：无网络、无终端自动化、无 PTY、无 Shell、无任意 stdin。
+  # M2b-2 (docs/m2b-remote-task-console-design.md §5.4/§7): controlled relaxation —
+  # when the output visibility is ≥ restricted, T1 captures stdout/stderr with a Pipe into an in-memory only
+  # ring buffer (32KB/400-line cap; the tail snippet is returned after redaction). The parts of the red line that do not change
+  # stay locked down: no network, no terminal automation, no PTY, no shell, no arbitrary stdin.
   if printf '%s\n' "$task_execution_code" | grep -En 'URLSession|URLRequest|NWConnection|NWListener|WebSocket|NSAppleScript|TerminalLauncher|forkpty|posix_openpt|/bin/sh|https?://|stdin'; then
-    echo '检测到 T1 执行器触及网络、终端自动化、PTY、Shell 或进程输入边界。' >&2
+    echo 'Detected the T1 executor touching the network, terminal automation, PTY, shell, or process input boundary.' >&2
     return 1
   fi
-  # Pipe 允许两处（M4-3 修订，docs/m4-interactive-session-design.md §2.2）：
-  # 输出捕获（attachOutputCapture，档位裁决）+ 交互点 stdin 管道
-  # （仅声明 interactionPoints 的任务开放）。防止散落滥用：计数上限 2。
+  # Pipe is allowed in two places (M4-3 revision, docs/m4-interactive-session-design.md §2.2):
+  # output capture (attachOutputCapture, visibility decision) + the interaction point stdin pipe
+  # (opened only for tasks that declare interactionPoints). To prevent scattered abuse: count capped at 2.
   if [ "$(printf '%s\n' "$task_execution_code" | grep -cE 'Pipe\(\)')" -gt 2 ] \
     || ! printf '%s\n' "$task_execution_code" | grep -qF 'if capturesOutput {'; then
-    echo 'T1 的 Pipe 只允许输出捕获与交互点 stdin 两处。' >&2
+    echo 'T1 may use Pipe in only two places: output capture and the interaction point stdin.' >&2
     return 1
   fi
   if ! printf '%s\n' "$task_execution_code" | grep -qF 'process.standardInput = FileHandle.nullDevice'; then
-    echo 'T1 执行器必须使用空输入。' >&2
+    echo 'The T1 executor must use empty input.' >&2
     return 1
   fi
   if ! printf '%s\n' "$task_execution_code" | grep -qF 'process.standardOutput = FileHandle.nullDevice' || ! printf '%s\n' "$task_execution_code" | grep -qF 'process.standardError = FileHandle.nullDevice'; then
-    echo 'T1 执行器 minimal 档位必须维持空输出（nullDevice 分支不得删除）。' >&2
+    echo 'The T1 executor must keep empty output at the minimal level (the nullDevice branch must not be removed).' >&2
     return 1
   fi
   if grep -RInE 'Process\(' Sources | grep -vE 'Sources/(EnvironmentReport|TaskExecutionService|TailnetTunnelService)\.swift'; then
-    echo '检测到 T1 之外新增的进程执行入口（M2a 仅 TailnetTunnelService 允许跑 tailscale CLI）。' >&2
+    echo 'Detected a new process execution entry point outside T1 (for M2a only TailnetTunnelService may run the tailscale CLI).' >&2
     return 1
   fi
-  # 备份与任务域隔离（track-protocol §4.5）：Sources/BackupService.swift 不得引用
-  # 任何 task 实体——它们的字段（路径/nonce/退出码/时间戳）含本地敏感信息，
-  # 永远不应进入可移植的 JSON 备份。
+  # Backup and task domain isolation (track-protocol §4.5): Sources/BackupService.swift must not reference
+  # any task entity — their fields (paths / nonce / exit codes / timestamps) contain locally sensitive information
+  # and should never enter a portable JSON backup.
   local backup_code
   backup_code="$(sed '/^[[:space:]]*\/\//d' Sources/BackupService.swift)"
   if printf '%s\n' "$backup_code" | grep -En 'TaskIntent|TaskProjectScope|TaskReviewWindow|projectScopeID|reviewWindowID'; then
-    echo '检测到 BackupService 引用 task 域实体——备份绝不含任务历史、项目路径或审阅窗口。' >&2
+    echo 'Detected BackupService referencing task-domain entities — a backup never contains task history, project paths, or review windows.' >&2
     return 1
   fi
-  # M0 移动端入口（track-protocol stage 4.1）：6 字段永不出本机，绝不进 JSON 备份。
-  # 字段在 Sources/TerminalTool.swift 内安全（本地数据），但 Sources/BackupService.swift
-  # 任何位置都不得引用——引用即意味着序列化路径中有了该字段。
+  # M0 mobile entry (track-protocol stage 4.1): the 6 fields never leave this Mac and never enter a JSON backup.
+  # The fields are safe inside Sources/TerminalTool.swift (local data), but Sources/BackupService.swift
+  # must not reference them anywhere — a reference means the field is on the serialization path.
   if printf '%s\n' "$backup_code" | grep -En 'mobileDisplayName|mobileDescription|showInMobileEntry|allowMobileLaunchRequest|mobileLocalConfirmPolicy|revokeMobilePermissionAt'; then
-    echo '检测到 BackupService 引用 M0 移动端入口字段——备份不含手机端显示名/说明/开关。' >&2
+    echo 'Detected BackupService referencing M0 mobile entry fields — a backup does not contain the phone display name / description / switches.' >&2
     return 1
   fi
-  # 更新检查只读网络（track-prototol 用户承诺：A 通知式方案）。
-  # UpdateCheckService 必须**不**触发下载、**不**写入 ~/Applications、
-  # **不**启动 NSWorkspace.openApplication 自动更新 .app。任何"自动下载/替换"
-  # commit 都会绕过 Mac Gatekeeper 信任链 + 引入供应链攻击面。
+  # Update checks are read-only network (track-prototol user commitment: option A, notification-style).
+  # UpdateCheckService must **not** trigger downloads, **not** write to ~/Applications, and
+  # **not** start NSWorkspace.openApplication to auto-update the .app. Any "automatic download/replace"
+  # commit would bypass the Mac Gatekeeper trust chain + introduce a supply-chain attack surface.
   local update_check_code
   update_check_code="$(sed '/^[[:space:]]*\/\//d' Sources/UpdateCheckService.swift)"
   if printf '%s\n' "$update_check_code" | grep -En 'NSWorkspace.shared.openApplication|FileManager.default.write|FileManager.default.copy|FileManager.default.move|/bin/sh -c |Process\(|NSAppleScript|TarExtractor|tempDirectory'; then
-    echo '检测到 UpdateCheckService 试图自动下载/解压/替换 .app — 违反项目"通知式"承诺。' >&2
+    echo 'Detected UpdateCheckService trying to automatically download/unpack/replace the .app — violates the project commitment to stay "notification-style".' >&2
     return 1
   fi
   if ! printf '%s\n' "$update_check_code" | grep -qF 'api.github.com/repos/dfdd2001-source/TermiPad'; then
-    echo 'UpdateCheckService 必须固定指向 dfdd2001-source/TermiPad releases endpoint，' >&2
-    echo '不接受运行时配置——攻击者不能改 endpoint 重定向到恶意 server。' >&2
+    echo 'UpdateCheckService must point at the fixed dfdd2001-source/TermiPad releases endpoint' >&2
+    echo 'and accept no runtime configuration — an attacker cannot change the endpoint to redirect to a malicious server.' >&2
     return 1
   fi
   if ! printf '%s\n' "$update_check_code" | grep -qF 'currentAppVersion'; then
-    echo 'UpdateCheckService 必须从 bundle 读 currentAppVersion 用于版本比较——' >&2
-    echo '不能用 UserDefaults 配置攻击者控制的版本号。' >&2
+    echo 'UpdateCheckService must read currentAppVersion from the bundle for version comparison —' >&2
+    echo 'UserDefaults must not be used to configure an attacker-controlled version number.' >&2
     return 1
   fi
 
   mcp_code="$(sed '/^[[:space:]]*\/\//d' Sources/MCPStdIORuntime.swift Sources/TaskMCPBridge.swift Sources/TaskMCPSettings.swift Sources/TaskPolicyWorkbenchView.swift)"
   if printf '%s\n' "$mcp_code" | grep -En 'URLSession|URLRequest|NWConnection|NWListener|WebSocket|NSAppleScript|TerminalLauncher|forkpty|posix_openpt|/bin/sh|https?://|NSXPC|XPCListener|XPCSession|socket|Process\(|Pipe\('; then
-    echo '本机 MCP 目录出现网络、XPC、进程、终端交接、PTY 或输出管道入口。' >&2
+    echo 'A network, XPC, process, terminal handoff, PTY, or output pipe entry point appeared in the local MCP directory.' >&2
     return 1
   fi
   if ! printf '%s\n' "$mcp_code" | grep -qF 'FileHandle.standardOutput.write(data)' || ! printf '%s\n' "$mcp_code" | grep -qE '"additionalProperties": false'; then
-    echo '本机 MCP 缺少 stdio 协议输出或严格工具 schema 防护。' >&2
+    echo 'Local MCP is missing stdio protocol output or the strict tool schema guard.' >&2
     return 1
   fi
   if grep -En 'ModelContainer|ModelContext|FetchDescriptor|TaskIntentPolicy' Sources/MCPStdIORuntime.swift; then
-    echo 'stdio MCP 子进程不得直接打开或操作 TermiPad SwiftData store。' >&2
+    echo 'The stdio MCP child process must not open or operate on the TermiPad SwiftData store directly.' >&2
     return 1
   fi
-  # M0 移动端入口（track-protocol stage 4.1）：6 字段永不出本机，绝不进 MCP 响应。
-  # LocalMCPTaskState 8 字段白名单（docs/task-result-minimal-spec.md §2.3）固定不动。
+  # M0 mobile entry (track-protocol stage 4.1): the 6 fields never leave this Mac and never enter an MCP response.
+  # The 8-field allowlist of LocalMCPTaskState (docs/task-result-minimal-spec.md §2.3) is fixed.
   if printf '%s\n' "$mcp_code" | grep -En 'mobileDisplayName|mobileDescription|showInMobileEntry|allowMobileLaunchRequest|mobileLocalConfirmPolicy|revokeMobilePermissionAt'; then
-    echo '检测到 MCP 引用 M0 移动端入口字段——MCP 响应白名单固定 8 字段，不含手机端字段。' >&2
+    echo 'Detected MCP referencing M0 mobile entry fields — the MCP response allowlist is fixed at 8 fields and contains no phone-side fields.' >&2
     return 1
   fi
   if ! grep -qF 'CFMessagePortCreateRemote' Sources/TaskMCPBridge.swift || ! grep -qF 'CFMessagePortCreateLocal' Sources/TaskMCPBridge.swift; then
-    echo '本机 MCP 必须通过应用内 CFMessagePort 桥接，而非让 stdio 子进程直接竞争 store。' >&2
+    echo 'Local MCP must be bridged through the in-app CFMessagePort instead of letting the stdio child process compete for the store directly.' >&2
     return 1
   fi
-  # M1 同网配对核心（feature/m1-local-network-pairing）：纯密码学 + Keychain。
-  # 这两个文件绝不允许网络、进程、终端自动化入口——网络监听只允许出现在
-  # 未来的 Sources/MobilePairingService.swift 并由专门守卫圈定。
+  # M1 local network pairing core (feature/m1-local-network-pairing): pure cryptography + Keychain.
+  # These two files must never contain network, process, or terminal automation entry points — network listening may only appear in
+  # the future Sources/MobilePairingService.swift, fenced in by a dedicated guard.
   local mobile_pairing_core_code
   mobile_pairing_core_code="$(sed '/^[[:space:]]*\/\//d' Sources/MobilePairingCrypto.swift Sources/PairedDeviceStore.swift)"
   if printf '%s\n' "$mobile_pairing_core_code" | grep -En 'URLSession|URLRequest|NWConnection|NWListener|WebSocket|NSAppleScript|TerminalLauncher|Process\(|Pipe\(|forkpty|posix_openpt|/bin/sh|socket\('; then
-    echo '检测到 M1 配对核心触及网络、进程或终端自动化边界——它必须是纯密码学 + Keychain。' >&2
+    echo 'Detected the M1 pairing core touching the network, process, or terminal automation boundary — it must be pure cryptography + Keychain.' >&2
     return 1
   fi
-  # M1 配对协议层：白名单 + 最小载荷 + AEAD 信封 + 握手状态机，同样零 I/O。
+  # M1 pairing protocol layer: allowlist + minimal payload + AEAD envelope + handshake state machine, likewise zero I/O.
   local mobile_pairing_protocol_code
   mobile_pairing_protocol_code="$(sed '/^[[:space:]]*\/\//d' Sources/MobilePairingProtocol.swift)"
   if printf '%s\n' "$mobile_pairing_protocol_code" | grep -En 'URLSession|URLRequest|NWConnection|NWListener|WebSocket|NSAppleScript|TerminalLauncher|Process\(|Pipe\(|forkpty|posix_openpt|/bin/sh|socket\('; then
-    echo '检测到 M1 配对协议层触及网络、进程或终端自动化边界——网络监听只允许在 MobilePairingService.swift。' >&2
+    echo 'Detected the M1 pairing protocol layer touching the network, process, or terminal automation boundary — network listening is only allowed in MobilePairingService.swift.' >&2
     return 1
   fi
-  # 全局白名单：整个 Sources 里 NWListener/NWConnection 只允许出现在
-  # Sources/MobilePairingService.swift（M1 同网监听，默认关闭）与
-  # Sources/TailnetTunnelService.swift（M2a 回环监听，默认关闭）。
+  # Global allowlist: across all of Sources, NWListener/NWConnection may only appear in
+  # Sources/MobilePairingService.swift (M1 local network listener, off by default) and
+  # Sources/TailnetTunnelService.swift (M2a loopback listener, off by default).
   if grep -RInE 'NWListener|NWConnection' Sources | grep -vE 'Sources/(MobilePairingService|TailnetTunnelService)\.swift'; then
-    echo '检测到 M1/M2a 监听文件之外的网络监听入口。' >&2
+    echo 'Detected a network listening entry point outside the M1/M2a listener files.' >&2
     return 1
   fi
-  # M2a 隧道守卫：tailscale CLI 的可执行路径字面量只允许出现在
-  # TailnetTunnelService.swift（固定绝对路径纪律）；任何其他文件不得拼 CLI。
+  # M2a tunnel guard: the executable path literals of the tailscale CLI may only appear in
+  # TailnetTunnelService.swift (fixed absolute path discipline); no other file may assemble the CLI.
   if grep -RIn 'bin/tailscale' Sources | grep -v 'Sources/TailnetTunnelService\.swift'; then
-    echo '检测到 TailnetTunnelService 之外的 tailscale CLI 调用。' >&2
+    echo 'Detected a tailscale CLI call outside TailnetTunnelService.' >&2
     return 1
   fi
-  # M2a 红线：永久禁用 Funnel（公网暴露入口）。字面量出现即验证失败。
+  # M2a red line: Funnel (the public exposure entry point) is permanently disabled. Any occurrence of the literal fails verification.
   if grep -RInE '"funnel| funnel |--funnel' Sources; then
-    echo '检测到 funnel 子命令引用——公网暴露红线，永久禁止。' >&2
+    echo 'Detected a reference to the funnel subcommand — public exposure red line, permanently forbidden.' >&2
     return 1
   fi
-  # iOS 伴侣 app：NWBrowser 只允许出现在 CompanionApp/ 下；Sources/ 不得使用。
+  # iOS companion app: NWBrowser may only appear under CompanionApp/; Sources/ must not use it.
   if grep -RInE 'NWBrowser' Sources; then
-    echo '检测到 Mac 端引入 NWBrowser——浏览器仅属于 iOS 伴侣 app。' >&2
+    echo 'Detected NWBrowser introduced on the Mac side — the browser belongs to the iOS companion app only.' >&2
     return 1
   fi
-  # M2b 防线 1（设计 §7）+ M3 修订：LocalAuthentication 的 LAContext
-  # 允许 iOS 伴侣 app 与 Mac 端 RemoteAllowWindowSection（每日开窗认证，
-  # docs/m3-remote-allow-window-design.md §3.4）——除此之外不得引入。
+  # M2b defense line 1 (design §7) + M3 revision: LocalAuthentication's LAContext
+  # is allowed in the iOS companion app and the Mac's RemoteAllowWindowSection (daily window authentication,
+  # docs/m3-remote-allow-window-design.md §3.4) — it must not be introduced anywhere else.
   if grep -RInE 'import LocalAuthentication|LAContext' Sources \
     | grep -vE 'PreferencesView\.swift'; then
-    echo '检测到越界的 LocalAuthentication 引入（仅 CompanionApp 与 PreferencesView 允许）。' >&2
+    echo 'Detected an out-of-bounds LocalAuthentication import (only CompanionApp and PreferencesView are allowed).' >&2
     return 1
   fi
-  # iOS Info.plist 必填：缺 NSLocalNetworkUsageDescription 或 NSBonjourServices 则本地发现会被静默杀。
+  # Required in the iOS Info.plist: without NSLocalNetworkUsageDescription or NSBonjourServices, local discovery is silently killed.
   if ! grep -qF 'NSLocalNetworkUsageDescription' CompanionApp/Info.plist \
      || ! grep -qF '_termipad-m1._tcp' CompanionApp/Info.plist; then
-    echo 'iOS 伴侣 Info.plist 必须声明 NSLocalNetworkUsageDescription 和 NSBonjourServices=_termipad-m1._tcp。' >&2
+    echo 'The iOS companion Info.plist must declare NSLocalNetworkUsageDescription and NSBonjourServices=_termipad-m1._tcp.' >&2
     return 1
   fi
 }
@@ -305,7 +305,7 @@ if [[ "$SKIP_UI" -eq 0 ]]; then
   UI_RUNNER="$(find "$UI_DERIVED_DATA/Build/Products" -type d -name 'TermiPadUITests-Runner.app' -print -quit 2>/dev/null || true)"
   if [[ -z "$UI_RUNNER" ]]; then
     FAILED_STEP="ui-runner-discovery"
-    echo "未找到 TermiPadUITests-Runner.app；请查看 $LOG_DIR/ui-build-for-testing.log" >&2
+    echo "TermiPadUITests-Runner.app not found; see $LOG_DIR/ui-build-for-testing.log" >&2
     exit 1
   fi
   run_step ui-runner-signature codesign --verify --deep --strict --verbose=2 "$UI_RUNNER"
@@ -322,7 +322,7 @@ if [[ "$SKIP_UI" -eq 0 ]]; then
       xcrun xcresulttool export attachments \
         --path "$RESULT_BUNDLE" \
         --output-path "$LOG_DIR/ui-attachments" >/dev/null 2>&1 || true
-      echo "UI 失败附件：$LOG_DIR/ui-attachments" >&2
+      echo "UI failure attachments: $LOG_DIR/ui-attachments" >&2
       find "$LOG_DIR/ui-attachments" -maxdepth 1 -type f -print 2>/dev/null || true
     fi
     exit 1
@@ -336,14 +336,14 @@ if [[ "$SKIP_UI" -eq 0 ]]; then
   fi
 fi
 
-# UpdateCheckService 不应让用户配置 feed URL（那是 G6 闸门漏洞：让 social
-# engineering 把受害者引到填 https://evil.com/updates.json）。PreferencesView
-# 不应出现 updateFeedURL UserDefault、URL 输入框,或任何 URL 输入路径。
+# UpdateCheckService should not let the user configure a feed URL (that is a G6 gate hole: it lets social
+# engineering lead a victim into entering https://evil.com/updates.json). PreferencesView
+# should contain no updateFeedURL UserDefault, no URL input field, and no URL input path of any kind.
 if grep -RnE 'updateFeedURL' Sources/PreferencesView.swift Sources/UpdateCheckService.swift 2>/dev/null; then
-  echo '检测到 updateFeedURL — 违反 G6 闸门"用户不配置 feed URL"承诺。' >&2
+  echo 'Detected updateFeedURL — violates the G6 gate commitment "users do not configure a feed URL".' >&2
   return 1
 fi
 
 
 echo
-echo "验证通过。摘要：$LOG_DIR/summary.md"
+echo "Verification passed. Summary: $LOG_DIR/summary.md"

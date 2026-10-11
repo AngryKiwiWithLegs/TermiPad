@@ -1,6 +1,6 @@
 import Foundation
 
-/// 仅用于应用内导航与现有操作的通知；不携带工具名、命令或其他用户内容。
+/// Used only for in-app navigation and notifications of existing actions; carries no tool names, commands, or other user content.
 enum TermiPadAppAction: String {
     case openLibrary
     case showFavorites

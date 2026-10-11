@@ -1,23 +1,23 @@
 import XCTest
 @testable import TermiPad
 
-/// CommandTemplate 单元测试（track-protoid 阶段 6 测试补强）。
+/// CommandTemplate unit tests (track-protoid stage 6 test hardening).
 ///
-/// CommandTemplate 是 TermiPad 启动用户命令前的安全屏障：
-///  1. `variables(in:)` 提取模板里的 `{{var}}` 占位符（用于启动前填表）
-///  2. `render(template:values:)` 强制要求每个占位符都有值，缺失抛错
-///  3. `shellEscape(_:)` 是**唯一**的 shell 注入防御点
-///  4. `loadValues/saveValues` 走 JSON Codable 持久化
+/// CommandTemplate is the safety barrier before TermiPad launches a user command:
+///  1. `variables(in:)` extracts the `{{var}}` placeholders in a template (for the pre-launch form)
+///  2. `render(template:values:)` requires a value for every placeholder and throws when one is missing
+///  3. `shellEscape(_:)` is the **only** shell injection defense point
+///  4. `loadValues/saveValues` persist via JSON Codable
 ///
-/// `shellEscape` 用了 POSIX 唯一安全的"单引号 + 中断 ' + 'X' 替代"模式：
-/// 任何把它简化成双引号或反斜杠的 commit 都会让 `echo "; rm -rf /"` 注入成功。
-/// 这些测试**故意**包含恶意值，验证 shellEscape 不会让它们漏出。
+/// `shellEscape` uses the only safe POSIX pattern, "single quotes + break out ' + 'X' replacement":
+/// any commit that simplifies it to double quotes or backslashes would let the `echo "; rm -rf /"` injection succeed.
+/// These tests **deliberately** include malicious values to verify that shellEscape does not let them through.
 final class CommandTemplateTests: XCTestCase {
 
     // MARK: - variables(in:)
 
     func testVariablesExtractsUniqueOrderedPlaceholders() {
-        // 重复占位符只算一次，保留首次出现顺序
+        // Duplicate placeholders count once, keeping the order of first appearance
         XCTAssertEqual(
             CommandTemplate.variables(in: "swift {{action}} {{target}} {{action}}"),
             ["action", "target"]
@@ -36,18 +36,18 @@ final class CommandTemplateTests: XCTestCase {
     }
 
     func testVariablesAcceptsHyphenAndUnderscoreButNotDigits() {
-        // 正则 [A-Za-z][A-Za-z0-9_-]{0,63} 允许 letter 后跟 alnum / _ / -
+        // The regex [A-Za-z][A-Za-z0-9_-]{0,63} allows a letter followed by alnum / _ / -
         XCTAssertEqual(
             CommandTemplate.variables(in: "{{my-var_1}} {{2invalid}} {{ok_name}}"),
-            ["my-var_1", "ok_name"] // {{2invalid}} 起始是数字，不匹配
+            ["my-var_1", "ok_name"] // {{2invalid}} starts with a digit and does not match
         )
     }
 
     // MARK: - render(template:values:)
 
     func testRenderSubstitutesAllValues() throws {
-        // render 自动对每个值 shellEscape——这是项目核心安全设计：用户不可能
-        // 通过 render 注入未转义内容。测试锁住这个行为。
+        // render automatically shellEscapes every value — this is the project's core safety design: a user cannot
+        // inject unescaped content through render. The test locks down this behavior.
         let out = try CommandTemplate.render(
             template: "{{tool}} --target {{path}}",
             values: ["tool": "ffmpeg", "path": "/tmp/x"]
@@ -67,15 +67,15 @@ final class CommandTemplateTests: XCTestCase {
     func testRenderTrimsWhitespaceAndConsidersEmptyAsMissing() {
         XCTAssertThrowsError(try CommandTemplate.render(
             template: "{{tool}}",
-            values: ["tool": "   "]  // 全空白等价缺失
+            values: ["tool": "   "]  // all-whitespace is equivalent to missing
         )) { error in
             XCTAssertEqual(error as? CommandTemplateError, .missingValues(["tool"]))
         }
     }
 
     func testRenderRendersEmptyStringForEmptyValue() throws {
-        // 故意"trailing" 行为：whitespace 被 trim 算缺失，但纯字符串 "" 走
-        // 不到 trim 路径——其实这里也会被 missingValues 拦截（我们测的就是这个边界）。
+        // Deliberate "trailing" behavior: whitespace is trimmed and counts as missing, but the plain string "" never
+        // reaches the trim path — it is in fact also caught by missingValues here (that boundary is exactly what we test).
         XCTAssertThrowsError(try CommandTemplate.render(
             template: "{{x}}",
             values: ["x": ""]
@@ -84,40 +84,40 @@ final class CommandTemplateTests: XCTestCase {
         }
     }
 
-    // MARK: - shellEscape(_:) — 注入防御核心
+    // MARK: - shellEscape(_:) — core injection defense
 
     func testShellEscapeAlwaysSingleQuoted() {
-        // 安全值：仍被单引号包。看起来"多余"，但**不能**改——一致性是攻击防御的
-        // 关键：值里出现单引号时整个值变 "'a'\\''b'" 等等，任何捷径都会破坏。
+        // A safe value: still wrapped in single quotes. It looks "redundant", but it must **not** change — consistency is the key to
+        // attack defense: when a single quote appears in the value the whole value becomes "'a'\\''b'" and so on, and any shortcut would break it.
         XCTAssertEqual(CommandTemplate.shellEscape("hello"), "'hello'")
         XCTAssertEqual(CommandTemplate.shellEscape(""), "''")
     }
 
     func testShellEscapeNeutralizesSingleQuoteInjection() {
-        // 攻击向量: 输入 "; rm -rf /" 应该被单引号包裹 — shell 把整个串
-        // 当成一个参数，**不会**把它解析成"空命令 + rm -rf /"。
-        // 关键：分号在单引号里是字面字符，不是命令分隔符。
+        // Attack vector: the input "; rm -rf /" should be wrapped in single quotes — the shell treats the whole string
+        // as one argument and does **not** parse it as "empty command + rm -rf /".
+        // Key point: inside single quotes the semicolon is a literal character, not a command separator.
         let escaped = CommandTemplate.shellEscape("; rm -rf /")
         XCTAssertEqual(escaped, "'; rm -rf /'")
         XCTAssertNotEqual(escaped, "; rm -rf /")
     }
 
     func testShellEscapeHandlesBackslashAndDoubleQuote() {
-        // POSIX 单引号里 \ 和 " 都**不**是元字符，所以 shellEscape 不需要处理它们。
-        // 测试锁住"代码里只处理单引号"的简化——这正是 POSIX 安全建议。
+        // Inside POSIX single quotes neither \ nor " is a metacharacter, so shellEscape does not need to handle them.
+        // The test locks down the simplification "the code only handles single quotes" — which is exactly the POSIX safety advice.
         let v = "back\\slash and \"double\""
         let escaped = CommandTemplate.shellEscape(v)
         XCTAssertEqual(escaped, "'\(v)'")
     }
 
     func testRenderWithShellEscapeSurvivesInjectionAttempt() throws {
-        // 端到端：用户值是恶意 payload，模板 + render 自动 escape 整体当参数。
-        // 期望用 shellEscape(同样的值) 算得，避免手算 POSIX 单引号替换出错。
+        // End to end: the user value is a malicious payload, and template + render automatically escape it as a single argument.
+        // The expectation is computed with shellEscape(the same value) to avoid mistakes from hand-computing the POSIX single-quote replacement.
         let payload = "'; touch /tmp/pwned; '"
         let expected = "echo \(CommandTemplate.shellEscape(payload))"
         let actual = try CommandTemplate.render(template: "echo {{msg}}", values: ["msg": payload])
         XCTAssertEqual(actual, expected)
-        // 反向断言: 不应是 echo + touch 的裸形式
+        // Negative assertion: it should not be the bare form echo + touch
         XCTAssertFalse(actual.contains("echo ;"))
         XCTAssertFalse(actual.contains("echo ; touch"))
     }
@@ -135,7 +135,7 @@ final class CommandTemplateTests: XCTestCase {
 
     func testLoadValuesReturnsEmptyWhenNoJSONSet() {
         let tool = makeToolForPersistence()
-        // variableValuesJSON 默认 nil
+        // variableValuesJSON defaults to nil
         let loaded = CommandTemplate.loadValues(from: tool)
         XCTAssertEqual(loaded, [:])
     }
@@ -144,7 +144,7 @@ final class CommandTemplateTests: XCTestCase {
         let tool = makeToolForPersistence()
         CommandTemplate.saveValues(["a": "1", "b": "2"], to: tool)
         let json = try XCTUnwrap(tool.variableValuesJSON)
-        // 必须能被 JSONDecoder 解析
+        // Must be parsable by JSONDecoder
         let decoded = try JSONDecoder().decode([String: String].self, from: Data(json.utf8))
         XCTAssertEqual(decoded, ["a": "1", "b": "2"])
     }

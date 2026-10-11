@@ -1,6 +1,6 @@
 import Foundation
 
-/// P2-A 发现服务。该服务只读取公开 GitHub 仓库元数据；它不会读取用户工具库、README、命令、路径或身份信息，也不会安装或执行任何软件。
+/// P2-A discovery service. It only reads public GitHub repository metadata; it never reads the user's library, READMEs, commands, paths, or identity, and never installs or runs any software.
 enum DiscoveryService {
     static let query = "topic:cli stars:>=50 archived:false fork:false"
     private static let endpoint = URL(string: "https://api.github.com/search/repositories")!
@@ -36,7 +36,7 @@ enum DiscoveryService {
         }
     }
 
-    /// 生成固定的公共发现请求。没有认证头、没有用户命令或路径参数，且仅当查询完全一致时才复用缓存 ETag。
+    /// Builds the fixed public discovery request. No auth header, no user command or path parameters, and the cached ETag is reused only when the query is exactly identical.
     static func makeRequest(cache: DiscoveryCacheSnapshot?) throws -> URLRequest {
         var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)
         components?.queryItems = [
@@ -58,7 +58,7 @@ enum DiscoveryService {
         return request
     }
 
-    /// 只供用户点击“刷新发现”时调用。没有轮询、没有后台任务、没有自动重试。
+    /// Called only when the user clicks "Refresh Discovery". No polling, no background task, no automatic retry.
     static func refresh(
         cache: DiscoveryCacheSnapshot?,
         now: Date = Date(),
@@ -89,7 +89,7 @@ enum DiscoveryService {
         return .refreshed(snapshot)
     }
 
-    /// 公开给单元测试的解码边界：仅接受 DiscoveryItem 所需字段，并立即应用非 fork/非 archived 可见性筛选。
+    /// Decoding boundary exposed to unit tests: accepts only the fields DiscoveryItem needs and immediately applies the non-fork / non-archived visibility filter.
     static func decodeSnapshot(data: Data, entityTag: String?, fetchedAt: Date) throws -> DiscoveryCacheSnapshot {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

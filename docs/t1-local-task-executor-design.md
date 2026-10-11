@@ -1,46 +1,46 @@
-# T1：本机受限任务执行器与工作台
+# T1: local restricted task executor and workbench
 
-**状态：** 实现批次中；本阶段只在用户本机直接启动 T0 已批准的固定任务。它不接入网络、MCP、手机、PWA、Telegram、远程输入或 PTY。
+**Status:** In the implementation batch; this phase only starts fixed tasks approved by T0 directly on the user's Mac. It connects to no network, MCP, phone, PWA, Telegram, remote input, or PTY.
 
-## 目标
+## Goal
 
-T1 将 T0 已批准的 `TaskIntent` 转为一个受项目范围约束的本机进程。它解决的是“在 Mac 上受控地执行已经审阅的固定测试任务”，而不是让用户、智能体或未来手机发送任意 Shell。
+T1 turns a `TaskIntent` approved by T0 into a local process constrained to the project scope. What it solves is "running an already reviewed fixed test task on the Mac in a controlled way", not letting the user, an agent, or a future phone send arbitrary shell.
 
-## 唯一执行路径
+## The single execution path
 
 ```text
-固定任务目录 → T0 审阅并批准 TaskIntent → T1 预检
-       → 固定 executable + 固定 arguments + 项目 currentDirectoryURL
-       → 空 stdin/stdout/stderr → 最小状态与退出码
+Fixed task catalog → T0 reviews and approves the TaskIntent → T1 pre-check
+       → fixed executable + fixed arguments + project currentDirectoryURL
+       → empty stdin/stdout/stderr → minimal status and exit code
 ```
 
-执行器拒绝所有非 `.approved` 的意图、已启动意图、过期意图、已撤销或不可用项目范围、未知任务类型和缺失预检文件。它不通过 Shell 拼接 `cd`、命令文本或参数；也不搜索 `PATH` 来决定可执行文件。
+The executor rejects every intent that is not `.approved`, already started intents, expired intents, revoked or unavailable project scopes, unknown task types, and missing pre-check files. It does not assemble `cd`, command text, or arguments through a shell; nor does it search `PATH` to decide the executable.
 
-## 固定任务定义
+## Fixed task definitions
 
-| 任务 | 固定执行文件和参数 | 项目预检 | 时限 |
+| Task | Fixed executable and arguments | Project pre-check | Time limit |
 |---|---|---|---:|
-| Swift Package 测试 | `/usr/bin/xcrun` + `swift test` | `Package.swift` | 120 秒 |
-| 集中 macOS 验证 | 项目内 `scripts/verify-macos.sh` | `Package.swift`、`project.yml`、脚本可执行 | 300 秒 |
-| XcodeGen 工程生成 | 受控绝对路径的 `xcodegen` + `generate` | `project.yml` | 60 秒 |
+| Swift Package tests | `/usr/bin/xcrun` + `swift test` | `Package.swift` | 120 seconds |
+| Consolidated macOS verification | `scripts/verify-macos.sh` inside the project | `Package.swift`, `project.yml`, the script is executable | 300 seconds |
+| XcodeGen project generation | `xcodegen` at a controlled absolute path + `generate` | `project.yml` | 60 seconds |
 
-目录条目只随应用更新；T1 不从 AI、MCP、网页、聊天、项目 README 或手机请求接受命令、参数、路径或 URL。
+Catalog entries change only with app updates; T1 accepts no commands, arguments, paths, or URLs from AI, MCP, web pages, chat, project READMEs, or phone requests.
 
-## 进程与隐私边界
+## Process and privacy boundary
 
-进程的 `currentDirectoryURL` 被绑定为项目根目录，环境只保留受控 `HOME`、区域设置和固定 `PATH`。标准输入、标准输出和标准错误均指向空设备。因此 T1 不提供交互提示、PTY、终端转录、完整日志或输出回传。
+The process's `currentDirectoryURL` is bound to the project root, and the environment keeps only a controlled `HOME`, locale settings, and a fixed `PATH`. Standard input, standard output, and standard error all point to the null device. T1 therefore offers no interactive prompts, PTY, terminal transcript, full log, or output return.
 
-`TaskIntent` 只保存执行状态、开始/结束时间与退出码；不保存输出内容。用户在工作台可见的结果只包括：未开始、运行中、成功、失败、超时、停止、开始被拒绝或启动失败。
+`TaskIntent` stores only the execution state, start/end time, and exit code; it stores no output content. The results the user can see in the workbench are only: not started, running, succeeded, failed, timed out, stopped, start rejected, or start failed.
 
-## 停止与时限
+## Stop and time limit
 
-工作台可向当前直接任务进程发送停止请求；每种固定任务也有最大时限，到期后同样停止直接任务进程。T1 当前不承诺管理任意子进程树，也不以它替代完整终端或作业系统。任何未来的进程组治理、沙箱权限模型或最小诊断摘要都必须在单独阶段设计、测试和审阅。
+The workbench can send a stop request to the current direct task process; every fixed task also has a maximum time limit, after which the direct task process is likewise stopped. T1 currently does not promise to manage arbitrary child process trees, nor does it replace a full terminal or job system. Any future process group governance, sandbox permission model, or minimal diagnostic summary must be designed, tested, and reviewed in a separate phase.
 
-## 不可绕过的限制
+## Limits that cannot be bypassed
 
-| 不支持的能力 | 原因 |
+| Unsupported capability | Reason |
 |---|---|
-| 自由命令、参数、环境变量、URL 或路径 | 会把任务工作台变成任意 Shell。 |
-| 交互终端、PTY、键盘输入或终端输出 | 会扩大为远程终端能力，并增加敏感数据暴露。 |
-| 网络、MCP、手机或 Telegram 请求 | 这些入口须在本机执行边界稳定后独立接入。 |
-| 自动把临时任务保存为图标工具 | 固化能力必须由用户在 Mac 上单独确认。 |
+| Free-form commands, arguments, environment variables, URLs, or paths | They would turn the task workbench into an arbitrary shell. |
+| Interactive terminal, PTY, keyboard input, or terminal output | They would grow into a remote terminal capability and increase exposure of sensitive data. |
+| Network, MCP, phone, or Telegram requests | These entries must be connected separately after the local execution boundary is stable. |
+| Automatically saving a temporary task as an icon tool | Making a capability permanent must be confirmed separately by the user on the Mac. |

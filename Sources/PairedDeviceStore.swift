@@ -1,9 +1,9 @@
-// M1 已配对设备与配对身份的凭据域存储（docs/m0-m1-mobile-entry-design.md §3.4，
-// 2026-09-06 修订）。设计决定：设备记录与身份私钥只存 Keychain、不建 SwiftData
-// 实体——Keychain 天然不进 JSON 备份（满足 §2.5 契约），公钥指纹与设备身份
-// 属于凭据域，与 API Key 同级。
-// 存储后端可注入：生产走 KeychainMobileSecureStore；测试注入内存实现，
-// 不打真实 SecItem（与 KeychainStoreTests 的既有纪律一致）。
+// Credential-domain storage for M1 paired devices and the pairing identity (docs/m0-m1-mobile-entry-design.md §3.4,
+// revised 2026-09-06). Design decision: device records and the identity private key live only in the Keychain, with no SwiftData
+// entity — the Keychain naturally stays out of JSON backups (satisfying the §2.5 contract), and public-key fingerprints and device identity
+// belong to the credential domain, on the same level as the API key.
+// The storage backend is injectable: production uses KeychainMobileSecureStore; tests inject an in-memory implementation
+// and never hit the real SecItem (consistent with the existing discipline of KeychainStoreTests).
 import Foundation
 
 protocol MobileSecureKeyValueStore: Sendable {
@@ -12,7 +12,7 @@ protocol MobileSecureKeyValueStore: Sendable {
     func remove(account: String) throws
 }
 
-/// 生产后端：全部委托 KeychainStore（kSecAttrService = com.termipad.app）。
+/// Production backend: delegates everything to KeychainStore (kSecAttrService = com.termipad.app).
 struct KeychainMobileSecureStore: MobileSecureKeyValueStore {
     func string(for account: String) throws -> String? {
         try KeychainStore.string(for: account)
@@ -27,8 +27,8 @@ struct KeychainMobileSecureStore: MobileSecureKeyValueStore {
     }
 }
 
-/// 一台已配对 iPhone 的最小本地记录。publicKeyHash 是手机公钥的 SHA-256 指纹，
-/// 不含命令、路径、变量或任何工具数据。
+/// The minimal local record of one paired iPhone. publicKeyHash is the SHA-256 fingerprint of the phone's public key
+/// and contains no commands, paths, variables, or any tool data.
 struct PairedDeviceRecord: Codable, Sendable, Equatable, Identifiable {
     let id: UUID
     let displayName: String
@@ -46,7 +46,7 @@ enum PairedDeviceStore {
         "mobile-pairing.device.\(id.uuidString)"
     }
 
-    // MARK: - 已配对设备记录
+    // MARK: - Paired device records
 
     static func list(store: MobileSecureKeyValueStore = KeychainMobileSecureStore()) -> [PairedDeviceRecord] {
         guard let indexJSON = try? store.string(for: indexAccount),
@@ -66,7 +66,7 @@ enum PairedDeviceStore {
         }
     }
 
-    /// 撤销（revokedAt 非空）的设备立即从活跃集合消失——这是 §7 红线"每个权限可撤销"的数据面。
+    /// A revoked device (revokedAt non-nil) disappears from the active set immediately — this is the data plane of the §7 red line "every permission is revocable".
     static func activeDevices(store: MobileSecureKeyValueStore = KeychainMobileSecureStore()) -> [PairedDeviceRecord] {
         list(store: store).filter { $0.revokedAt == nil }
     }
@@ -84,11 +84,11 @@ enum PairedDeviceStore {
             pairedAt: Date(),
             lastConnectedAt: nil,
             revokedAt: nil)
-        // 孤儿清理（多设备语义保留——用户可同时配 iPhone+iPad）：
-        // (a) 已撤销记录——撤销后 keychain item 永生只会堆积授权弹窗
-        //     （2026-09-10 真机：12 条孤儿 item 让用户连输十几次密码），
-        //     撤销的设备要恢复只能重新配对（信任锚点已断，数据留着无义）；
-        // (b) 同指纹旧记录——同一设备重配对产生的新记录替代旧记录。
+        // Orphan cleanup (multi-device semantics are kept — the user can pair an iPhone and an iPad at the same time):
+        // (a) revoked records — keychain items that live forever after revocation only pile up authorization prompts
+        //     (2026-09-10 real device: 12 orphan items made the user enter the password a dozen times in a row);
+        //     a revoked device can only come back by pairing again (the trust anchor is broken, so keeping the data is pointless);
+        // (b) old records with the same fingerprint — the new record from re-pairing the same device replaces the old one.
         for stale in list(store: store) {
             if stale.revokedAt != nil || stale.publicKeyHash == record.publicKeyHash {
                 try? store.remove(account: deviceAccount(stale.id))
@@ -135,11 +135,11 @@ enum PairedDeviceStore {
         try store.remove(account: indexAccount)
     }
 
-    // MARK: - Mac 端配对身份
+    // MARK: - Mac pairing identity
 
-    /// Mac 端 X25519 身份：首次调用生成并写入 Keychain，之后复用同一私钥。
-    /// 存储内容损坏（base64 解不开）时重新生成并覆盖——身份丢失只意味着重新配对，
-    /// 不是数据丢失。
+    /// The Mac's X25519 identity: generated and written to the Keychain on first call, then the same private key is reused.
+    /// If the stored content is corrupted (base64 cannot be decoded), regenerate and overwrite — losing the identity only means pairing again,
+    /// not losing data.
     enum MobilePairingIdentityStore {
         static func loadOrCreate(
             store: MobileSecureKeyValueStore = KeychainMobileSecureStore()
@@ -154,7 +154,7 @@ enum PairedDeviceStore {
         }
     }
 
-    // MARK: - 私有
+    // MARK: - Private
 
     private static func encode(_ value: some Encodable) throws -> String {
         let encoder = JSONEncoder()

@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// TermiPad 以 11 英寸 iPad Pro 纵向工作区为视觉基准，但始终服从 macOS 的可见屏幕区域与用户窗口调整。
+/// TermiPad uses the 11-inch iPad Pro portrait workspace as its visual baseline, but always defers to macOS's visible screen area and the user's window adjustments.
 enum TermiPadWorkspaceMetrics {
-    /// 11 英寸 iPad Pro 纵向工作区的逻辑点尺寸，用作首次窗口的优选基准而非强制尺寸。
+    /// Logical point size of the 11-inch iPad Pro portrait workspace, used as the preferred baseline for the first window rather than an enforced size.
     static let iPadReferenceSize = CGSize(width: 834, height: 1_194)
     static let minimumSize = CGSize(width: 640, height: 560)
     static let contentPanelCornerRadius: CGFloat = 18
@@ -36,7 +36,7 @@ struct TermiPadWorkspacePanelModifier: ViewModifier {
 }
 
 extension View {
-    /// 为详情区域提供可触达的「终端工具面板」层次，不模拟 iPad 机身、状态栏或触控导航。
+    /// Gives the detail area a reachable "terminal tool panel" layer without imitating an iPad body, status bar, or touch navigation.
     func termiPadWorkspacePanel() -> some View {
         modifier(TermiPadWorkspacePanelModifier())
     }

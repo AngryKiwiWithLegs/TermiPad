@@ -1,74 +1,74 @@
-# TermiPad：地名版本代号体系
+# TermiPad: place-name version codename scheme
 
-**生效日期：** 2026-08-25
-**适用对象：** TermiPad 的内部稳定基线、预览开发线与未来私有 beta 候选。
+**Effective date:** 2026-08-25
+**Applies to:** TermiPad's internal stable baselines, preview development lines, and future private beta candidates.
 
-## 1. 命名原则
+## 1. Naming principles
 
-TermiPad 保留为产品名、私有仓库名、Swift 模块名和当前 bundle 标识。每一代**经过完整验证的稳定版本**另获一个地名代号，采用类似经典 macOS 版本的“产品名 + 地名”表达，而不是为每个开发分支重新起一个独立商品名。
+TermiPad stays the product name, private repository name, Swift module name, and current bundle identifier. Each generation of a **fully verified stable version** additionally gets a place-name codename, in the "product name + place name" style of classic macOS versions, instead of inventing a separate product name for every development branch.
 
-> 稳定版本名的格式为：**TermiPad [地名]**。
+> The format of a stable version name is: **TermiPad [place name]**.
 >
-> 例如，当前基线为 **TermiPad Mendocino**。
+> For example, the current baseline is **TermiPad Mendocino**.
 
-本系列采用**加利福尼亚太平洋海岸城镇与海湾**作为主题。它与“终端工具库”强调的本地、清晰、可探索但不越权的体验相符，同时避免使用苹果已经公开采用过的 macOS 代号，例如 Ventura、Sonoma、Monterey、Mojave、Catalina、Big Sur、Sequoia 或 Yosemite。
+The series uses **towns and bays of California's Pacific coast** as its theme. It fits the local, clear, explorable-but-not-overreaching experience the "terminal tool library" stands for, while avoiding macOS codenames Apple has already used publicly, such as Ventura, Sonoma, Monterey, Mojave, Catalina, Big Sur, Sequoia, or Yosemite.
 
-地名代号不替代语义版本号。它是人可读的代际身份；语义版本、Git commit 和验证证据仍是工程上的事实来源。
+The place-name codename does not replace the semantic version number. It is a human-readable generational identity; the semantic version, Git commit, and verification evidence remain the engineering source of truth.
 
-## 2. 当前稳定版本
+## 2. Current stable version
 
-当前已通过真实 Apple Silicon macOS 集中验证的 P0 + P1 基线命名为：
+The P0 + P1 baseline that has passed consolidated verification on real Apple Silicon macOS is named:
 
 # TermiPad Mendocino
 
-**内部版本标识：** `1.0.0`
+**Internal version identifier:** `1.0.0`
 
-**发布通道：** Stable（私有已验证基线）
+**Release channel:** Stable (private verified baseline)
 
-**代码验证基线：** `6a3bd11`（`Ensure UI tests create a main window`）
+**Code verification baseline:** `6a3bd11` (`Ensure UI tests create a main window`)
 
-**审计记录：** `c361db3`（私有 beta 验证审计更新）
+**Audit record:** `c361db3` (private beta verification audit update)
 
-“Mendocino”代表第一代完整的本地优先工具库：候选收件箱、保守扫描、手动管理、命令模板、受控终端启动、GitHub/AI 信息边界、备份与隔离恢复、健康检查、工作目录、诊断、更新提示，以及真实 macOS 集中验证。
+"Mendocino" stands for the first complete generation of the local-first tool library: the review inbox, conservative scanning, manual management, command templates, controlled terminal launching, GitHub/AI information boundaries, backup and isolated recovery, health checks, working directories, diagnostics, update notices, and consolidated real macOS verification.
 
-**Stable** 仅表示该基线已完成项目内部定义的代码与真实 macOS 验证；它不表示已满足 Developer ID、Hardened Runtime、公证、Gatekeeper 冷启动或外部分发验收。
+**Stable** only means the baseline has completed the code and real macOS verification defined inside the project; it does not mean Developer ID, Hardened Runtime, notarization, Gatekeeper cold start, or external distribution acceptance are satisfied.
 
-## 3. P2 与稳定代号的关系
+## 3. How P2 relates to stable codenames
 
-地名只在一个能力批次完成、代码冻结并通过完整集中验证后升级。P2 的开发过程不能提前消耗下一个稳定地名，避免功能实验与可回退稳定版本混淆。
+A place name is upgraded only after a capability batch is finished, the code is frozen, and the full consolidated verification passes. P2 development must not use up the next stable place name early, so that feature experiments are not confused with a stable version one can fall back to.
 
-| 状态 | 面向用户的写法 | 语义版本建议 | Git/工程标识 | 含义 |
+| State | User-facing wording | Suggested semantic version | Git / engineering identifier | Meaning |
 |---|---|---|---|---|
-| 当前稳定基线 | **TermiPad Mendocino** | `1.0.0` | `termipad-mendocino-1.0.0` | 已验证的 P0 + P1 本地版本；不含 P2 功能 |
-| P2-A 发现开发 | **TermiPad Mendocino — Discovery Preview** | `1.1.0-preview.N` | `p2/discovery-preview` | 仅手动发现、缓存、来源证据和可解释排序；不安装软件 |
-| P2-A 验证后下一稳定版 | **TermiPad Sausalito** | `2.0.0` | `termipad-sausalito-2.0.0` | P2-A 已完成并通过完整验证后的下一稳定代 |
-| P2-B 安装评审开发 | **TermiPad Sausalito — Install Review Preview** | `2.1.0-preview.N` | `p2/install-review-preview` | 仅开发受控安装计划和审查界面；尚不代表通用一键安装 |
-| P2-B 验证后下一稳定版 | **TermiPad Morro Bay** | `3.0.0` | `termipad-morro-bay-3.0.0` | 仅在受限渠道安装协助完成安全验收后使用 |
-| 未来只读环境报告 | **TermiPad Avalon — Environment Preview** | `3.1.0-preview.N` | 未来单独立项 | 仅展示生态与版本状态；不自动升级、不卸载、不解冲突 |
+| Current stable baseline | **TermiPad Mendocino** | `1.0.0` | `termipad-mendocino-1.0.0` | The verified local P0 + P1 version; contains no P2 features |
+| P2-A discovery development | **TermiPad Mendocino — Discovery Preview** | `1.1.0-preview.N` | `p2/discovery-preview` | Only manual discovery, cache, source evidence, and explainable ranking; installs no software |
+| Next stable version after P2-A verification | **TermiPad Sausalito** | `2.0.0` | `termipad-sausalito-2.0.0` | The next stable generation after P2-A is complete and fully verified |
+| P2-B install review development | **TermiPad Sausalito — Install Review Preview** | `2.1.0-preview.N` | `p2/install-review-preview` | Only develops the controlled install plan and review UI; does not yet mean a general one-click install |
+| Next stable version after P2-B verification | **TermiPad Morro Bay** | `3.0.0` | `termipad-morro-bay-3.0.0` | Used only after install assistance through restricted channels completes security acceptance |
+| Future read-only environment report | **TermiPad Avalon — Environment Preview** | `3.1.0-preview.N` | A separate future project | Only shows ecosystem and version state; no automatic upgrade, uninstall, or conflict resolution |
 
-任何预览版本都必须在产品文档和 UI 中清楚标明 **Preview**，并可随时回退到前一个稳定代号。预览不改写稳定版本的备份格式、数据存储路径、Keychain 服务、bundle identifier 或用户命令。
+Every preview version must be clearly marked **Preview** in the product documentation and UI, and must be able to fall back to the previous stable codename at any time. A preview does not rewrite the stable version's backup format, data storage path, Keychain service, bundle identifier, or user commands.
 
-## 4. 保留代号池
+## 4. Reserved codename pool
 
-下列名称用于后续稳定代际的候选池，而非已承诺的功能顺序：
+The following names are a candidate pool for later stable generations, not a committed order of features:
 
-| 顺序 | 地名代号 | 使用条件 |
+| Order | Place-name codename | Condition of use |
 |---|---|---|
-| 1 | **Mendocino** | 当前 P0 + P1 已验证稳定版 |
-| 2 | **Sausalito** | P2-A 发现能力完成、冻结并验证后 |
-| 3 | **Morro Bay** | P2-B 受控安装协助完成独立安全验收后 |
-| 4 | **Avalon** | 后续具备清晰、安全边界的新稳定能力批次 |
-| 5 | **Solvang** | 未来候选；仅在需要下一稳定代时启用 |
-| 6 | **Arcata** | 未来候选；仅在需要下一稳定代时启用 |
+| 1 | **Mendocino** | The current verified stable P0 + P1 version |
+| 2 | **Sausalito** | After the P2-A discovery capability is complete, frozen, and verified |
+| 3 | **Morro Bay** | After P2-B controlled install assistance completes its separate security acceptance |
+| 4 | **Avalon** | A later batch of new stable capabilities with clear, safe boundaries |
+| 5 | **Solvang** | Future candidate; used only when the next stable generation is needed |
+| 6 | **Arcata** | Future candidate; used only when the next stable generation is needed |
 
-名称本身不表示质量、安全等级、地理来源、与当地机构的合作，也不构成商标或域名可用性的法律结论。在将来外部分发前，仍需对最终名称进行商标、域名、App Store 及当地法律层面的正式清查。
+The names themselves do not indicate quality, security level, geographic origin, or cooperation with local institutions, nor are they a legal conclusion about trademark or domain availability. Before any future external distribution, the final name still needs a formal check at the trademark, domain, App Store, and local legal levels.
 
-## 5. 采用规则
+## 5. Adoption rules
 
-从现在起：
+From now on:
 
-1. 已验证稳定基线统一称为 **TermiPad Mendocino**，而不是“Shelldex”或泛称“稳定版”。
-2. P2-A 实施期间使用 **TermiPad Mendocino — Discovery Preview**；它不能被表述为下一稳定版本。
-3. 只有 P2-A 的范围、测试和真实 macOS 集中验证全部完成时，才启用 **TermiPad Sausalito**。
-4. 外部分发仍需单独满足 Developer ID、Hardened Runtime、公证、Gatekeeper 冷启动和真实旧 store 升级验证；地名代号不绕过这些闸门。
-5. `TermiPad` 的技术名称和现有本地数据标识在当前阶段不改动，以保护 Mendocino 已验证基线。
+1. The verified stable baseline is uniformly called **TermiPad Mendocino**, not "Shelldex" or a generic "stable version".
+2. During P2-A implementation use **TermiPad Mendocino — Discovery Preview**; it must not be described as the next stable version.
+3. **TermiPad Sausalito** is used only when P2-A's scope, tests, and consolidated real macOS verification are all complete.
+4. External distribution still needs to separately satisfy Developer ID, Hardened Runtime, notarization, Gatekeeper cold start, and real old-store upgrade verification; place-name codenames do not bypass these gates.
+5. The technical name `TermiPad` and the existing local data identifiers are not changed at this stage, to protect the verified Mendocino baseline.

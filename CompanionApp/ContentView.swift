@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// M5 触觉反馈封装（HIG：关键操作轻冲击，成功通知）。
+/// M5 haptic feedback wrapper (HIG: light impact for key actions, success notification).
 enum Haptics {
     static func light() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -16,11 +16,11 @@ enum Haptics {
 
 struct ContentView: View {
     @EnvironmentObject private var client: CompanionPairingClient
-    // M2b-3 新任务表单的选择状态（本地 UI 状态，不进模型）。
+    // Selection state for the M2b-3 new-task form (local UI state, not part of the model).
     @State private var selectedScopeID: UUID?
     @State private var selectedTaskKind: String?
-    /// 底部功能页签（2026-09-10 用户反馈：搜索后无返回按钮、各功能互斥
-    /// 只能重启 app 切换）——改成显式页签导航，任何状态都可切换。
+    /// Bottom feature tabs (2026-09-10 user feedback: no back button after searching, and the features were mutually exclusive,
+    /// switchable only by restarting the app) — changed to explicit tab navigation that can switch in any state.
     enum Tab: String, CaseIterable, Identifiable {
         case tools
         case console
@@ -28,9 +28,9 @@ struct ContentView: View {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .tools: return "工具目录"
-            case .console: return "任务会话"
-            case .newTask: return "提交新任务"
+            case .tools: return "Tool Catalog"
+            case .console: return "Task Sessions"
+            case .newTask: return "Submit New Task"
             }
         }
         var symbol: String {
@@ -44,15 +44,15 @@ struct ContentView: View {
     @State private var selectedTab: Tab = .tools
 
     var body: some View {
-        // M5：底部 TabView（HIG 首选导航）——每页独立 NavigationStack，
-        // 大标题折叠走系统行为。
+        // M5: bottom TabView (the HIG-preferred navigation) — each tab has its own NavigationStack,
+        // and large-title collapsing uses the system behavior.
         TabView(selection: $selectedTab) {
             NavigationStack {
                 Form {
                     pairingStatusHeader
                     toolsTab
                 }
-                .navigationTitle("TermiPad 伴侣")
+                .navigationTitle("TermiPad Companion")
             }
             .tabItem { Label(Tab.tools.title, systemImage: Tab.tools.symbol) }
             .tag(Tab.tools)
@@ -83,25 +83,25 @@ struct ContentView: View {
         }
     }
 
-    /// 配对状态条：未配对时给引导，已配对时收成一行（设备名 + 解除配对
-    /// 收进菜单避免误触）。
+    /// Pairing status bar: guidance when unpaired; collapses to one line when paired (device name + unpair
+    /// tucked into a menu to avoid accidental taps).
     @ViewBuilder
     private var pairingStatusHeader: some View {
         switch client.phase {
         case .noCredentials:
             VStack(spacing: 6) {
-                Text("尚未配对 Mac。请确认 Mac 端已在『设置 → 手机伴侣 → 启用同网配对』。")
+                Text("No Mac is paired yet. Make sure “Settings → Mobile Companion → Enable Local Network Pairing” is turned on on the Mac.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Button("搜索附近的 Mac") { client.startBrowsing() }
+                Button("Search for Nearby Macs") { client.startBrowsing() }
                     .accessibilityIdentifier("companion-start-browsing")
             }
             .padding(.vertical, 10)
         case .browsing, .connecting, .verifyFingerprint, .awaitingAck, .listingTools, .requestingLaunch:
-            // 目录/会话数据已就绪时隐藏连接进度条（2026-09-10 用户实测：
-            // 提交表单可用的同时顶部"正在获取"一直转，误导为未加载完）。
-            // 进度条只在真正握手/首次拉目录且尚无数据时有意义。
+            // Hide the connection progress bar once catalog/session data is ready (2026-09-10 user test:
+            // the top "fetching" spinner kept turning while the submit form was already usable, suggesting it had not finished loading).
+            // The progress bar only makes sense during a real handshake / first catalog fetch with no data yet.
             let hasData = !client.consoleEntries.isEmpty
                 || (!client.consoleScopes.isEmpty && !client.consoleFixedTasks.isEmpty)
                 || (selectedTab == .tools && client.hasToolSummaries)
@@ -115,7 +115,7 @@ struct ContentView: View {
                 Label(message, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.red)
                     .font(.caption)
-                Button("重新搜索") { client.startBrowsing() }
+                Button("Search Again") { client.startBrowsing() }
             }
             .padding(.vertical, 10)
         default:
@@ -123,7 +123,7 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - 工具目录页
+    // MARK: - Tool catalog page
 
     @ViewBuilder
     private var toolsTab: some View {
@@ -131,40 +131,40 @@ struct ContentView: View {
             switch client.phase {
             case .paired(let credentials):
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("已与 Mac 配对").font(.body.bold())
-                    Text("设备名：\(credentials.deviceName)").font(.caption)
-                    Text("deviceID：\(credentials.deviceID.uuidString.prefix(8))…")
+                    Text("Paired with Mac").font(.body.bold())
+                    Text("Device name: \(credentials.deviceName)").font(.caption)
+                    Text("deviceID: \(credentials.deviceID.uuidString.prefix(8))…")
                         .font(.caption2.monospaced())
                         .foregroundStyle(.secondary)
                 }
-                Button("刷新工具目录") { client.resumeAndFetchTools() }
+                Button("Refresh Tool Catalog") { client.resumeAndFetchTools() }
                     .accessibilityIdentifier("companion-resume-fetch")
             case .toolSummaries(let summaries):
                 toolEntries(summaries: summaries)
             case .launchResult(let accepted, let message):
                 if accepted {
-                    Label("Mac 已确认启动", systemImage: "checkmark.circle.fill")
+                    Label("Mac confirmed the launch", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                         .font(.body.bold())
-                    Text("命令已交给 Mac 上你选择的终端执行。")
+                    Text("The command was handed to the terminal you chose on the Mac.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Label("启动未执行", systemImage: "xmark.circle")
+                    Label("Launch not performed", systemImage: "xmark.circle")
                         .foregroundStyle(.orange)
                         .font(.body.bold())
                     if let message {
                         Text(message).font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                Button("返回工具目录") { client.resumeAndFetchTools() }
+                Button("Back to Tool Catalog") { client.resumeAndFetchTools() }
             case .idle:
                 ProgressView()
             default:
                 EmptyView()
             }
         } footer: {
-            Text("手机端只收到 4 字段（id / 显示名 / 说明 / 图标符号）。命令、路径、变量值不会离开 Mac。")
+            Text("The phone receives only 4 fields (id / display name / description / icon symbol). Commands, paths, and variable values never leave the Mac.")
                 .font(.caption2)
         }
     }
@@ -172,7 +172,7 @@ struct ContentView: View {
     @ViewBuilder
     private func toolEntries(summaries: [MobileToolSummary]) -> some View {
         if summaries.isEmpty {
-            Text("Mac 上没有勾选『在手机入口显示』的工具。在 Mac 端编辑任一工具 → 手机入口 → 打开开关。")
+            Text("No tool on the Mac has “Show in Mobile Entry” turned on. On the Mac, edit any tool → Mobile Entry → turn the switch on.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         } else {
@@ -202,19 +202,19 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - 任务会话页
+    // MARK: - Task sessions page
 
     @ViewBuilder
     private var consoleTab: some View {
         if case .paired = client.phase {
             Section {
-                Button("刷新任务状态") { client.openTaskConsole() }
+                Button("Refresh Task Status") { client.openTaskConsole() }
                     .accessibilityIdentifier("companion-open-console")
             }
         }
         if client.consoleEntries.isEmpty {
             Section {
-                Text("还没有任务记录。启动工具或提交新任务后，Mac 上的运行状态会出现在这里。")
+                Text("No task records yet. After you launch a tool or submit a new task, its run status on the Mac appears here.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -223,65 +223,65 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - 新任务页
+    // MARK: - New task page
 
     @ViewBuilder
     private var newTaskTab: some View {
         if let result = client.lastTaskProposalResult {
             Section {
                 if result.status == .accepted {
-                    Label("任务已提交，运行状态见任务会话页", systemImage: "checkmark.circle.fill")
+                    Label("Task submitted. See the Task Sessions page for its run status", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                 } else {
-                    Label(result.reason ?? "任务被拒绝", systemImage: "xmark.circle")
+                    Label(result.reason ?? "Task rejected", systemImage: "xmark.circle")
                         .foregroundStyle(.orange)
                 }
             } header: {
-                Text("最近一次提交")
+                Text("Most recent submission")
             }
         }
         if client.isFetchingCatalog {
             Section {
                 HStack {
                     ProgressView()
-                    Text("正在获取 Mac 上的项目范围与固定任务目录…")
+                    Text("Fetching project scopes and the fixed task catalog from the Mac…")
                         .foregroundStyle(.secondary)
                 }
             }
         } else if !client.consoleScopes.isEmpty && !client.consoleFixedTasks.isEmpty {
             newTaskSection
         } else if !client.consoleFixedTasks.isEmpty && client.consoleScopes.isEmpty {
-            // 目录拉到了但 Mac 上没有项目范围——说清楚缺什么，而不是
-            // 静默渲染一个无法提交的空表单（2026-09-10 用户实测"没反应"）。
+            // The catalog was fetched but the Mac has no project scopes — say clearly what is missing instead of
+            // silently rendering an empty form that cannot be submitted (2026-09-10 user test: "nothing happens").
             Section {
-                Label("Mac 上还没有已登记的项目范围", systemImage: "folder.badge.questionmark")
+                Label("No project scopes are registered on the Mac yet", systemImage: "folder.badge.questionmark")
                     .foregroundStyle(.orange)
-                Text("在 Mac 端 TermiPad → 任务工作台 → 先登记一个项目目录（选择你的项目文件夹），再开一个审阅窗口，然后回到这里点「获取任务目录」。")
+                Text("On the Mac, open TermiPad → Task Workbench → register a project directory first (choose your project folder), then open a review window, and come back here and tap “Fetch Task Catalog”.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Button("重新获取") { client.openNewTaskForm() }
+                Button("Fetch Again") { client.openNewTaskForm() }
             } header: {
-                Text("缺少项目范围")
+                Text("Project scope missing")
             }
         } else {
             Section {
-                Button("获取任务目录") { client.openNewTaskForm() }
+                Button("Fetch Task Catalog") { client.openNewTaskForm() }
                     .accessibilityIdentifier("companion-open-newtask")
-                Text("提交前需要从 Mac 拉取项目范围与固定任务目录（需 Mac 端隧道/局域网可达）。")
+                Text("Before submitting, project scopes and the fixed task catalog must be fetched from the Mac (the Mac must be reachable over the tunnel or LAN).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
     }
 
-    /// M2b-1 会话条目流（docs/m2b-remote-task-console-design.md §6）：
-    /// 工具启动与固定任务的统一时间线。仅内存渲染——输出片段不落盘。
+    /// M2b-1 session entry feed (docs/m2b-remote-task-console-design.md §6):
+    /// a unified timeline of tool launches and fixed tasks. Rendered from memory only — output snippets are never written to disk.
     @ViewBuilder
     private var consoleSection: some View {
         Section {
             ForEach(client.consoleEntries, id: \.id) { entry in
                 Button {
-                    // M4：固定任务条目点进交互会话详情（流式输出）。
+                    // M4: tapping a fixed-task entry opens the interactive session detail (streamed output).
                     if entry.kind == .fixedTask {
                         selectedStreamEntry = entry
                     }
@@ -293,16 +293,16 @@ struct ContentView: View {
                 .accessibilityIdentifier("companion-console-entry-tap-\(entry.id.uuidString)")
             }
         } header: {
-            Text("任务会话（Mac 实时状态）")
+            Text("Task Sessions (live Mac status)")
         } footer: {
-            Text("显示 Mac 上工具启动与固定任务的运行状态。命令与完整输出不会下发到手机。")
+            Text("Shows the run status of tool launches and fixed tasks on the Mac. Commands and full output are never sent to the phone.")
                 .font(.caption2)
         }
     }
 
     @State private var selectedStreamEntry: MobileSessionEntry?
 
-    /// 单条会话条目渲染（从 ForEach 抽出——详情页复用状态样式）。
+    /// Rendering of a single session entry (extracted from the ForEach — the detail page reuses the status styling).
     @ViewBuilder
     private func consoleEntryRow(_ entry: MobileSessionEntry) -> some View {
                 VStack(alignment: .leading, spacing: 4) {
@@ -315,7 +315,7 @@ struct ContentView: View {
                             Text("exit \(exitCode)")
                                 .font(.caption.monospaced())
                                 .foregroundStyle(exitCode == 0 ? .green : .red)
-                                .accessibilityLabel(exitCode == 0 ? "退出码 0，成功" : "退出码 \(exitCode)，失败")
+                                .accessibilityLabel(exitCode == 0 ? "Exit code 0, succeeded" : "Exit code \(exitCode), failed")
                         }
                     }
                     if let output = entry.outputSnippet, !output.isEmpty {
@@ -330,14 +330,14 @@ struct ContentView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
-                        // M2c：仅手机可见的运行中条目提供停止（固定任务可停，
-                        // 工具启动是终端交接——停止权在终端侧，不放按钮）。
+                        // M2c: only running entries visible to the phone offer Stop (fixed tasks can be stopped;
+                        // tool launches are terminal handoffs — the terminal owns stopping, so no button is shown).
                         if entry.executionState == "running" && entry.kind == .fixedTask {
                             Button {
                                 Haptics.warning()
                                 client.cancelTask(taskIntentID: entry.id, title: entry.title)
                             } label: {
-                                Label("停止", systemImage: "stop.circle.fill")
+                                Label("Stop", systemImage: "stop.circle.fill")
                                     .font(.caption.bold())
                             }
                             .buttonStyle(.borderless)
@@ -355,12 +355,12 @@ struct ContentView: View {
                 .accessibilityIdentifier("companion-console-entry-\(entry.id.uuidString)")
     }
 
-    // MARK: - 会话状态渲染（T1 TaskExecutionState 原样字符串 + 工具启动两态）
+    // MARK: - Session status rendering (T1 TaskExecutionState raw strings + the two tool-launch states)
 
-    /// M2b-3 新任务表单（docs/m2b-remote-task-console-design.md §6）：
-    /// 选范围 → 选固定任务 → 提交。载荷只有 kind + scopeID 引用。
-    /// 提交按钮**固定在表单顶部**（2026-09-10 用户实测：按钮在 5 项任务
-    /// 列表底部被挤出屏幕，用户以为没有提交入口）。
+    /// M2b-3 new-task form (docs/m2b-remote-task-console-design.md §6):
+    /// pick a scope → pick a fixed task → submit. The payload is only kind + a scopeID reference.
+    /// The submit button is **pinned to the top of the form** (2026-09-10 user test: the button sat below the list of 5 tasks,
+    /// was pushed off-screen, and the user thought there was no way to submit).
     @ViewBuilder
     private var newTaskSection: some View {
         Section {
@@ -374,23 +374,23 @@ struct ContentView: View {
                 HStack {
                     Image(systemName: "paperplane.fill")
                     Text(selectedTaskKind == nil
-                        ? "提交任务（先在下方选择）"
-                        : "提交「\(client.consoleFixedTasks.first(where: { $0.kind == selectedTaskKind })?.purpose ?? "")」")
+                        ? "Submit Task (choose below first)"
+                        : "Submit “\(client.consoleFixedTasks.first(where: { $0.kind == selectedTaskKind })?.purpose ?? "")”")
                 }
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .disabled(selectedScopeID == nil || selectedTaskKind == nil)
             .accessibilityIdentifier("companion-newtask-submit")
-            // 范围默认选中第一项：selection=nil 的 Picker 渲染成空选择，
-            // 用户不知道要主动点它（2026-09-10 实测按钮一直灰的根因）。
-            // 数据到达时自动预选；用户仍可改选。
+            // The scope defaults to the first item: a Picker with selection=nil renders as an empty selection,
+            // and the user does not know they have to tap it (root cause of the always-grey button in the 2026-09-10 test).
+            // Preselect automatically when data arrives; the user can still change it.
             .onReceive(client.$consoleScopes) { scopes in
                 if selectedScopeID == nil, let first = scopes.first {
                     selectedScopeID = first.id
                 }
             }
-            Picker("项目范围", selection: $selectedScopeID) {
+            Picker("Project Scope", selection: $selectedScopeID) {
                 ForEach(client.consoleScopes, id: \.id) { scope in
                     Text(scope.displayName).tag(scope.id as UUID?)
                 }
@@ -407,9 +407,9 @@ struct ContentView: View {
                                 .font(.caption.monospaced())
                                 .foregroundStyle(.secondary)
                             if let required = task.requiredRelativePaths, !required.isEmpty {
-                                // M2c：任务对项目目录的固定要求（目录字面量）
-                                // ——用户能对上"范围 × 任务"，不再盲选。
-                                Text("项目目录需包含：\(required.joined(separator: "、"))")
+                                // M2c: the task's fixed requirements for the project directory (directory literals)
+                                // — the user can match "scope × task" instead of choosing blind.
+                                Text("The project directory must contain: \(required.joined(separator: ", "))")
                                     .font(.caption2)
                                     .foregroundStyle(.orange)
                             }
@@ -422,9 +422,9 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("companion-newtask-kind-\(task.kind)")
-                // HIG：可选行尾加 chevron（暗示可点选）——仅未选中时展示。
+                // HIG: add a trailing chevron to selectable rows (hints that they are tappable) — shown only when not selected.
             }
-            Button("提交任务") {
+            Button("Submit Task") {
                 if let scopeID = selectedScopeID, let kind = selectedTaskKind,
                    let task = client.consoleFixedTasks.first(where: { $0.kind == kind }) {
                     client.submitTaskProposal(kind: kind, scopeID: scopeID, title: task.purpose)
@@ -433,9 +433,9 @@ struct ContentView: View {
             .disabled(selectedScopeID == nil || selectedTaskKind == nil)
             .accessibilityIdentifier("companion-newtask-submit")
         } header: {
-            Text("提交新任务（Mac 审阅窗口内执行）")
+            Text("Submit New Task (runs inside the Mac review window)")
         } footer: {
-            Text("只能提交固定任务目录里的任务；Mac 端本地策略核验（范围/风险/审阅窗口）通过后才执行，可能需要在 Mac 上确认。命令与参数不会下发到手机。")
+            Text("Only tasks from the fixed task catalog can be submitted. They run only after the Mac's local policy check (scope / risk / review window) passes, and may need confirmation on the Mac. Commands and arguments are never sent to the phone.")
                 .font(.caption2)
         }
     }
@@ -464,15 +464,15 @@ struct ContentView: View {
 
     static func stateText(for state: String) -> String {
         switch state {
-        case "running": return "运行中"
-        case "succeeded": return "成功"
-        case "failed": return "失败"
-        case "timedOut": return "超时"
-        case "stopped": return "已停止"
-        case "launched": return "已启动（终端交接）"
-        case "launchFailed": return "启动失败"
-        case "startRejected": return "被策略拒绝"
-        case "startFailed": return "启动出错"
+        case "running": return "Running"
+        case "succeeded": return "Succeeded"
+        case "failed": return "Failed"
+        case "timedOut": return "Timed Out"
+        case "stopped": return "Stopped"
+        case "launched": return "Launched (terminal handoff)"
+        case "launchFailed": return "Launch Failed"
+        case "startRejected": return "Rejected by Policy"
+        case "startFailed": return "Start Error"
         default: return state
         }
     }
@@ -482,49 +482,49 @@ struct ContentView: View {
         Section {
             switch client.phase {
             case .noCredentials:
-                Text("尚未配对 Mac。请确认 Mac 端已在『设置 → 手机伴侣 → 启用同网配对』。")
+                Text("No Mac is paired yet. Make sure “Settings → Mobile Companion → Enable Local Network Pairing” is turned on on the Mac.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Button("搜索附近的 Mac") { client.startBrowsing() }
+                Button("Search for Nearby Macs") { client.startBrowsing() }
                     .accessibilityIdentifier("companion-start-browsing")
             case .paired(let credentials):
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("已与 Mac 配对")
+                    Text("Paired with Mac")
                         .font(.body.bold())
-                    Text("设备名：\(credentials.deviceName)")
-                    Text("deviceID：\(credentials.deviceID.uuidString.prefix(8))…")
+                    Text("Device name: \(credentials.deviceName)")
+                    Text("deviceID: \(credentials.deviceID.uuidString.prefix(8))…")
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
                 }
-                Button("搜索并刷新工具目录") { client.startBrowsing() }
+                Button("Search and Refresh Tool Catalog") { client.startBrowsing() }
             case .idle:
                 ProgressView()
             case .browsing:
                 HStack {
                     ProgressView()
                     Text(client.hasTailnetEndpoint
-                        ? "正在搜索同一 Wi-Fi 下的 Mac…（若无结果，约 6 秒后自动改走异地通道）"
-                        : "正在搜索同一 Wi-Fi 下的 Mac…")
+                        ? "Searching for a Mac on the same Wi-Fi… (if nothing is found, it switches to the remote channel automatically after about 6 seconds)"
+                        : "Searching for a Mac on the same Wi-Fi…")
                         .foregroundStyle(.secondary)
                 }
             case .connecting(let mac):
                 HStack {
                     ProgressView()
                     Text(mac.serviceName == CompanionPairingClient.tailnetServiceName
-                        ? "正在通过异地通道连接…"
-                        : "正在连接 \(mac.serviceName)…")
+                        ? "Connecting over the remote channel…"
+                        : "Connecting to \(mac.serviceName)…")
                 }
             case .verifyFingerprint(let mac, let fingerprint, let isResume):
-                Text("已发现 \(mac.serviceName)")
+                Text("Found \(mac.serviceName)")
                     .font(.body.bold())
                 if isResume {
-                    Text("信任锚点不一致——可能同网内有另一台 Mac。请核对下方指纹是否与你在 Mac 屏幕看到的一致。")
+                    Text("Trust anchor mismatch — there may be another Mac on the same network. Check that the fingerprint below matches the one shown on your Mac's screen.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("第 1 步：核对指纹")
+                    Text("Step 1: Verify the fingerprint")
                         .font(.caption.bold())
-                    Text("手机下面的指纹必须与 Mac『设置 → 手机伴侣』屏幕上的完全一致：")
+                    Text("The fingerprint below on the phone must exactly match the one on the Mac's “Settings → Mobile Companion” screen:")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -533,43 +533,43 @@ struct ContentView: View {
                     .textSelection(.enabled)
                     .accessibilityIdentifier("companion-mac-fingerprint")
                 if !isResume {
-                    TextField("设备名（如：我的 iPhone）", text: $client.deviceName)
+                    TextField("Device name (e.g. My iPhone)", text: $client.deviceName)
                         .accessibilityIdentifier("companion-device-name")
-                    TextField("第 2 步：输入 Mac 屏上的 6 位配对码", text: $client.pairingCodeInput)
+                    TextField("Step 2: Enter the 6-digit pairing code shown on the Mac", text: $client.pairingCodeInput)
                         .keyboardType(.numberPad)
                         .accessibilityIdentifier("companion-pairing-code-input")
-                    Button("指纹一致，开始配对") { client.confirmFingerprintAndPair() }
+                    Button("Fingerprints Match, Start Pairing") { client.confirmFingerprintAndPair() }
                         .accessibilityIdentifier("companion-confirm-pairing")
                 }
-                Button("取消", role: .destructive) { client.stopBrowsing() }
+                Button("Cancel", role: .destructive) { client.stopBrowsing() }
             case .awaitingAck(let isResume):
                 HStack {
                     ProgressView()
-                    Text(isResume ? "正在复用配对…" : "正在完成配对…")
+                    Text(isResume ? "Resuming pairing…" : "Completing pairing…")
                 }
             case .listingTools(let mac):
                 HStack {
                     ProgressView()
-                    Text("正在获取 \(mac.serviceName) 的工具目录…")
+                    Text("Fetching the tool catalog from \(mac.serviceName)…")
                 }
             case .toolSummaries:
                 EmptyView()
             case .requestingLaunch(let name):
                 HStack {
                     ProgressView()
-                    Text("已发送「\(name)」启动请求，请在 Mac 上确认…")
+                    Text("Launch request for “\(name)” sent. Please confirm on the Mac…")
                 }
-                Button("取消", role: .destructive) { client.stopBrowsing() }
+                Button("Cancel", role: .destructive) { client.stopBrowsing() }
             case .launchResult(let accepted, let message):
                 if accepted {
-                    Label("Mac 已确认启动", systemImage: "checkmark.circle.fill")
+                    Label("Mac confirmed the launch", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                         .font(.body.bold())
-                    Text("命令已交给 Mac 上你选择的终端执行。")
+                    Text("The command was handed to the terminal you chose on the Mac.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Label("启动未执行", systemImage: "xmark.circle")
+                    Label("Launch not performed", systemImage: "xmark.circle")
                         .foregroundStyle(.orange)
                         .font(.body.bold())
                     if let message {
@@ -578,16 +578,16 @@ struct ContentView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                Button("返回工具目录") { client.startBrowsing() }
+                Button("Back to Tool Catalog") { client.startBrowsing() }
             case .failed(let message):
                 Label(message, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.red)
-                Button("重新搜索") { client.startBrowsing() }
+                Button("Search Again") { client.startBrowsing() }
             }
         } header: {
-            Text("与 Mac 配对")
+            Text("Pair with Mac")
         } footer: {
-            Text("仅在本地 Wi-Fi 内通讯。配对码只出现在 Mac 屏幕上；任何要求你离开本页输入配对码的提示都是攻击。")
+            Text("Communicates only over local Wi-Fi. The pairing code appears only on the Mac's screen; any prompt asking you to leave this page to enter the pairing code is an attack.")
                 .font(.caption2)
         }
     }
@@ -598,9 +598,9 @@ struct ContentView: View {
 }
 
 
-/// M4 交互会话详情页（docs/m4-interactive-session-design.md §3）：
-/// 原生大字流式输出 + 自动滚动/暂停 + 停止。HIG 对齐：系统字体语义色、
-/// NavigationStack、工具栏图标按钮、Dynamic Type 跟随。
+/// M4 interactive session detail page (docs/m4-interactive-session-design.md §3):
+/// native large-type streamed output + auto-scroll/pause + stop. HIG alignment: system fonts and semantic colors,
+/// NavigationStack, toolbar icon buttons, follows Dynamic Type.
 struct TaskStreamDetailView: View {
     let entry: MobileSessionEntry
     @EnvironmentObject private var client: CompanionPairingClient
@@ -621,7 +621,7 @@ struct TaskStreamDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("完成") {
+                    Button("Done") {
                         client.closeStream()
                         dismiss()
                     }
@@ -643,10 +643,10 @@ struct TaskStreamDetailView: View {
         }
     }
 
-    /// 输出流主体：ScrollView + 等宽大字 + 底部自动跟随（暂停时停住）。
+    /// Output stream body: ScrollView + large monospaced type + auto-follow at the bottom (holds still while paused).
     private var streamContent: some View {
         VStack(spacing: 0) {
-            // M4-3 交互选择卡：任务需要决策时置顶弹出（原生 HIG 卡片）。
+            // M4-3 interaction choice card: pinned to the top when the task needs a decision (native HIG card).
             if let interaction = client.pendingInteraction {
                 VStack(alignment: .leading, spacing: 10) {
                     Label(interaction.prompt, systemImage: "questionmark.circle")
@@ -668,17 +668,17 @@ struct TaskStreamDetailView: View {
                 .padding(.horizontal)
                 .padding(.top, 8)
             }
-            // 状态条（原生语义色）。
+            // Status bar (native semantic colors).
             HStack(spacing: 6) {
                 Circle()
                     .fill(ContentView.stateColor(for: client.streamState ?? "running"))
                     .frame(width: 8, height: 8)
-                Text(client.streamState.map(ContentView.stateText) ?? "实时输出中")
+                Text(client.streamState.map(ContentView.stateText) ?? "Live output")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 Spacer()
                 if isPaused {
-                    Label("已暂停", systemImage: "pause.fill")
+                    Label("Paused", systemImage: "pause.fill")
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
@@ -691,7 +691,7 @@ struct TaskStreamDetailView: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    Text(client.streamText.isEmpty ? "等待输出…" : client.streamText)
+                    Text(client.streamText.isEmpty ? "Waiting for output…" : client.streamText)
                         .font(.system(.body, design: .monospaced))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
@@ -708,20 +708,20 @@ struct TaskStreamDetailView: View {
         }
     }
 
-    /// 无法订阅（窗口未开/任务不可流）的空态——原生空态卡片。
+    /// Empty state when subscribing is not possible (window not open / task not streamable) — native empty-state card.
     private var unavailableContent: some View {
         VStack(spacing: 16) {
             Image(systemName: "rectangle.slash")
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
-            Text("会话流不可用")
+            Text("Session stream unavailable")
                 .font(.headline)
-            Text("今日远程窗口未开启，或该任务不支持流式输出。在 Mac 上开启「今日远程窗口」后重试。")
+            Text("Today's remote window is not open, or this task does not support streamed output. Open “Today's Remote Window” on the Mac and try again.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
-            Button("重试") {
+            Button("Retry") {
                 client.openStream(taskID: entry.id)
             }
             .buttonStyle(.borderedProminent)

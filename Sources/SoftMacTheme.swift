@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 比纯白/纯黑更柔和的 macOS 原生语义配色。
+/// Native macOS semantic colors that are softer than pure white / pure black.
 struct SoftMacTheme {
     let colorScheme: ColorScheme
 
@@ -40,7 +40,7 @@ struct SoftMacTheme {
             : Color.white.opacity(0.58)
     }
 
-    /// iPad 式工作区只借用柔和玻璃面板层次，不模拟设备机身、状态栏或触控系统控件。
+    /// The iPad-style workspace only borrows the soft glass-panel layering; it does not imitate a device body, status bar, or touch system controls.
     var workspacePanelSurface: Color {
         colorScheme == .dark
             ? Color(red: 0.178, green: 0.190, blue: 0.224).opacity(0.94)
@@ -59,7 +59,7 @@ struct SoftMacTheme {
             : Color(red: 0.17, green: 0.25, blue: 0.39).opacity(0.14)
     }
 
-    /// 悬浮提示采用 macOS 式中性灰材质；在深色界面中保留足够层次而非反差刺目的浅色块。
+    /// Hover tips use a macOS-style neutral grey material; in dark mode they keep enough layering instead of a harsh, high-contrast light block.
     var hoverSurface: Color {
         colorScheme == .dark
             ? Color(red: 0.285, green: 0.295, blue: 0.325).opacity(0.92)
