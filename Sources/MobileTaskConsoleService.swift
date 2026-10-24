@@ -148,6 +148,8 @@ final class MobileTaskConsoleService: ObservableObject {
     /// getTaskStatus: full snapshot of the entry feed (≤50 entries; output is decided by the visibility level and retention period).
     func sessionEntries(now: Date = Date()) -> [MobileSessionEntry] {
         sweepExpiredOutput(now: now)
+        // One read of the setting for the whole snapshot instead of one per entry.
+        let hidesOutput = currentVisibility == .minimal
         return entries.map { entry in
             MobileSessionEntry(
                 id: entry.id,
@@ -157,7 +159,7 @@ final class MobileTaskConsoleService: ObservableObject {
                 exitCode: entry.exitCode,
                 startedAt: entry.startedAt,
                 finishedAt: entry.finishedAt,
-                outputSnippet: currentVisibility == .minimal ? nil : entry.outputSnippet)
+                outputSnippet: hidesOutput ? nil : entry.outputSnippet)
         }
     }
 

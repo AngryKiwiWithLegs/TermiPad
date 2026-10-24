@@ -24,10 +24,15 @@ final class TaskOutputStreamService: ObservableObject {
     /// Push outlet: registered by the connection layer (one per subscription — a long-lived connection closure).
     typealias PushSink = @MainActor (MobileStreamChunk) -> Void
 
-    /// Task output buffer (complete, memory only, cleared when the window closes).
+    /// Task output buffer (memory only, cleared when the window closes).
     private struct TaskBuffer {
         var text: String = ""
+        /// Bytes already dropped from the front by backpressure. Cursors and chunk offsets count from the start
+        /// of the task's output, so position `p` in the stream is byte `p - droppedByteCount` of `text`.
+        var droppedByteCount = 0
         var byteCount: Int { text.utf8.count }
+        /// Stream offset just past the last buffered byte.
+        var endOffset: Int { droppedByteCount + byteCount }
     }
 
     private var buffers: [UUID: TaskBuffer] = [:]
@@ -35,6 +40,8 @@ final class TaskOutputStreamService: ObservableObject {
     private var subscriptions: [UUID: Subscription] = [:]
     /// Push outlets registered by the connection layer (connectionID → sink).
     private var sinks: [UUID: PushSink] = [:]
+    /// Interaction request outlets registered by the connection layer (connectionID → sink), released with the push outlet.
+    private var interactionSinks: [UUID: (MobileStreamInteraction) -> Void] = [:]
 
     /// Same test pattern as MobileTaskConsoleService/RemoteAllowWindow: the singleton uses
     /// shared state, and tests inject independent instances.
@@ -49,6 +56,7 @@ final class TaskOutputStreamService: ObservableObject {
 
     func removeSink(_ connectionID: UUID) {
         sinks.removeValue(forKey: connectionID)
+        interactionSinks.removeValue(forKey: connectionID)
         // Connection dropped = its subscription naturally lapses (resumed by cursor on reconnect).
         subscriptions.removeValue(forKey: connectionID)
     }
@@ -66,18 +74,19 @@ final class TaskOutputStreamService: ObservableObject {
                    push: @escaping PushSink) -> Int {
         var buffer = buffers[taskID] ?? TaskBuffer()
         buffers[taskID] = buffer
+        // Output the buffer has already dropped cannot be replayed, so no cursor starts before it.
         let start: Int
         if let resumeOffset {
-            start = min(resumeOffset, buffer.byteCount)
+            start = max(buffer.droppedByteCount, min(resumeOffset, buffer.endOffset))
         } else {
             // Brand-new subscription: put the cursor "8KB before the tail" — replay the existing context.
-            start = max(0, buffer.byteCount - Self.contextReplayBytes)
+            start = max(buffer.droppedByteCount, buffer.endOffset - Self.contextReplayBytes)
         }
         subscriptions[connectionID] = Subscription(taskID: taskID, consumedOffset: start)
         // Push the backlog immediately (redaction + framing).
-        let totalBytes = buffer.byteCount
+        let totalBytes = buffer.endOffset
         MobilePairingService.diagMac("Stream subscribe: task=\(taskID) buffer=\(totalBytes)B replay start=\(start) resume=\(resumeOffset.map(String.init) ?? "nil")")
-        let pending = Self.substring(fromUTF8Offset: start, of: buffer.text)
+        let pending = Self.substring(fromUTF8Offset: start - buffer.droppedByteCount, of: buffer.text)
         if !pending.isEmpty {
             let redacted = OutputRedactor.redact(pending)
             MobilePairingService.diagMac("Stream replay: pushing \(redacted.utf8.count)B (start \(start))")
@@ -114,17 +123,22 @@ final class TaskOutputStreamService: ObservableObject {
         }
         var buffer = buffers[taskID] ?? TaskBuffer()
         buffer.text += rawText
-        // Backpressure: drop the oldest data beyond the limit (trim by characters to fit).
+        // Backpressure: drop the oldest data beyond the limit (trim by characters to fit). What was dropped is
+        // remembered, so the cursors keep counting from the start of the output. Without that, a cursor at the
+        // old end of a full buffer would sit at the end of the trimmed buffer too, and nothing after the first
+        // 64 KB would ever be pushed.
         if buffer.byteCount > Self.bufferByteLimit {
+            let byteCountBeforeTrim = buffer.byteCount
             buffer.text = String(buffer.text.suffix(Self.bufferByteLimit))
+            buffer.droppedByteCount += byteCountBeforeTrim - buffer.byteCount
         }
         buffers[taskID] = buffer
 
-        let totalBytes = buffer.byteCount
+        let totalBytes = buffer.endOffset
         for (connectionID, subscription) in subscriptions where subscription.taskID == taskID {
             guard let sink = sinks[connectionID] else { continue }
-            let from = max(0, min(subscription.consumedOffset, totalBytes))
-            let pending = Self.substring(fromUTF8Offset: from, of: buffer.text)
+            let from = max(buffer.droppedByteCount, min(subscription.consumedOffset, totalBytes))
+            let pending = Self.substring(fromUTF8Offset: from - buffer.droppedByteCount, of: buffer.text)
             guard !pending.isEmpty else { continue }
             let redacted = OutputRedactor.redact(pending)
             // Split pushes by the chunk limit (framing: several lines are merged into one chunk).
@@ -158,16 +172,14 @@ final class TaskOutputStreamService: ObservableObject {
         for (connectionID, subscription) in subscriptions where subscription.taskID == taskID {
             guard let sink = sinks[connectionID] else { continue }
             sink(MobileStreamChunk(streamID: taskID, offset: 0, text: ""))  // refresh signal
-            guard let sealed = try? JSONEncoder().encode(interaction) else { continue }
-            _ = sealed
-            interactionHandlers.forEach { $0(connectionID, interaction) }
+            interactionSinks[connectionID]?(interaction)
         }
     }
 
-    /// Interaction request forwarder registered by the connection layer.
-    private var interactionHandlers: [(UUID, MobileStreamInteraction) -> Void] = []
-    func addInteractionHandler(_ handler: @escaping (UUID, MobileStreamInteraction) -> Void) {
-        interactionHandlers.append(handler)
+    /// Interaction request outlet registered by the connection layer (one per stream connection).
+    /// Keyed by connection so it is released together with the push outlet in `removeSink`.
+    func registerInteractionSink(_ connectionID: UUID, sink: @escaping (MobileStreamInteraction) -> Void) {
+        interactionSinks[connectionID] = sink
     }
 
     /// State change forwarder registered by the connection layer (decoupling: the service knows no connection details).
@@ -184,16 +196,23 @@ final class TaskOutputStreamService: ObservableObject {
 
     // MARK: - Text utilities (UTF-8 byte offset ↔ String)
 
+    /// The text from the first character that starts at or after `offset` UTF-8 bytes.
+    /// Jumps straight to the byte offset; walking the buffer character by character on every piece of output
+    /// cost time proportional to the whole buffer.
     static func substring(fromUTF8Offset offset: Int, of text: String) -> String {
         guard offset > 0 else { return text }
-        var byteIndex = text.startIndex
-        var consumed = 0
-        while consumed < offset, byteIndex < text.endIndex {
-            let next = text.index(after: byteIndex)
-            consumed += text[byteIndex..<next].utf8.count
-            byteIndex = next
+        let utf8 = text.utf8
+        guard let target = utf8.index(utf8.startIndex, offsetBy: offset, limitedBy: utf8.endIndex),
+              target < utf8.endIndex else {
+            return ""
         }
-        return String(text[byteIndex...])
+        // String index arithmetic rounds an index inside a character down to that character's start, so these
+        // two steps find the character containing `target`. An offset inside a character moves forward to the
+        // next character, as the character walk did.
+        let characterEnd = text.index(after: target)
+        let characterStart = text.index(before: characterEnd)
+        let start = characterStart == target ? target : characterEnd
+        return String(text[start...])
     }
 
     static func splitIntoChunks(_ text: String, limit: Int) -> [String] {

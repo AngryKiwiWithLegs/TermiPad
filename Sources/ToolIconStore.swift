@@ -19,6 +19,10 @@ struct ToolIconStore {
     static let shared = ToolIconStore()
     static let supportedContentTypes: [UTType] = [.png, .jpeg, .heic, .tiff]
 
+    /// Decoded icons by file URL, so a tile does not read and decode its PNG again every time it is rebuilt.
+    /// A stored file never changes (every import gets a new UUID name); an entry is dropped once its file is gone.
+    private static let imageCache = NSCache<NSURL, NSImage>()
+
     let directoryURL: URL
     private let fileManager: FileManager
 
@@ -45,11 +49,21 @@ struct ToolIconStore {
 
     func image(named filename: String?) -> NSImage? {
         guard let url = url(for: filename) else { return nil }
-        return NSImage(contentsOf: url)
+        let cacheKey = url as NSURL
+        if let cached = Self.imageCache.object(forKey: cacheKey) {
+            // Still answer from the file system: a file deleted behind the app's back must stop showing, as before.
+            if fileManager.fileExists(atPath: url.path) { return cached }
+            Self.imageCache.removeObject(forKey: cacheKey)
+            return nil
+        }
+        guard let image = NSImage(contentsOf: url) else { return nil }
+        Self.imageCache.setObject(image, forKey: cacheKey)
+        return image
     }
 
     func removeImage(named filename: String?) {
         guard let url = url(for: filename) else { return }
+        Self.imageCache.removeObject(forKey: url as NSURL)
         try? fileManager.removeItem(at: url)
     }
 
